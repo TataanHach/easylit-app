@@ -1,0 +1,22 @@
+/* EasyLit · Tokens de diseño (compartidos con el prototipo original) */
+:root {
+  --brand-50:#E6F1FB; --brand-100:#C0D9F0; --brand-300:#B5D4F4;
+  --brand-500:#378ADD; --brand-600:#185FA5; --brand-700:#124B85; --brand-900:#0C447C;
+  --dest-50:#EAF3DE; --dest-100:#C5DDA0; --dest-600:#3B6D11; --dest-700:#27500A;
+  --ok-600:#1D9E75; --ok-700:#167A5B;
+  --warn-50:#FAEEDA; --warn-100:#F0DAA0; --warn-500:#EF9F27; --warn-600:#BA7517; --warn-700:#854F0B;
+  --danger-50:#FCEBEB; --danger-500:#E24B4A; --danger-600:#A32D2D; --danger-700:#791F1F;
+  --ai-50:#EEEDFE; --ai-100:#D5D2F5; --ai-600:#534AB7;
+  --pdf-bg:#FAECE7; --pdf-fg:#993C1D; --xls-bg:#EAF3DE; --xls-fg:#3B6D11; --doc-bg:#E6F1FB; --doc-fg:#185FA5;
+  --bg:#F7F6F2; --surface:#FFFFFF; --surface-2:#FAFAF7;
+  --line:#E8E6DE; --line-soft:#F0EEE8; --line-strong:#D8D5CC;
+  --text:#1A1A1A; --text-2:#555555; --text-3:#888888;
+  --font:'Arimo',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  --font-num:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  --fs-xs:10px; --fs-sm:11px; --fs-md:12px; --fs-base:13px; --fs-lg:15px; --fs-xl:22px; --fs-num:26px;
+  --s-1:4px; --s-2:8px; --s-3:12px; --s-4:16px; --s-5:20px; --s-6:24px; --s-7:28px; --s-8:32px;
+  --r-xs:4px; --r-sm:6px; --r-md:8px; --r-lg:12px; --r-pill:999px;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.08); --shadow-md:0 4px 12px rgba(24,95,165,.10);
+  --focus-ring:0 0 0 3px rgba(24,95,165,.35);
+  --sidebar-w:224px; --topbar-h:56px;
+}

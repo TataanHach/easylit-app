@@ -1,0 +1,122 @@
+# =============================================================
+# EasyLit · Infraestructura en Render (Blueprint)
+#
+# Un solo archivo define los cinco servicios. Al conectar el repo
+# a Render, este blueprint los levanta todos y los cablea entre sí.
+#
+#   1. easylit-db      · PostgreSQL   (base de datos)
+#   2. easylit-redis   · Key Value    (cola de Celery)
+#   3. easylit-api     · Web Service  (Django + Gunicorn)
+#   4. easylit-worker  · Worker       (Celery)
+#   5. easylit-web     · Static Site  (React compilado)
+#
+# Las variables marcadas sync:false se rellenan a mano en el panel
+# de Render (son secretas: la clave de Gemini, sobre todo).
+# =============================================================
+
+databases:
+  - name: easylit-db
+    databaseName: easylit
+    plan: free            # subir a starter cuando haya datos reales
+    region: oregon
+
+services:
+  # ---- Redis (cola de tareas) ----
+  - type: keyvalue
+    name: easylit-redis
+    plan: free
+    region: oregon
+    ipAllowList: []        # solo accesible desde dentro de Render
+
+  # ---- Backend Django ----
+  - type: web
+    name: easylit-api
+    runtime: python
+    plan: free             # se duerme tras inactividad; subir a starter para uso real
+    region: oregon
+    rootDir: backend
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT"
+    healthCheckPath: /api/health/
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.prod
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: SECRET_KEY
+        generateValue: true          # Render genera un secreto fuerte
+      - key: DATABASE_URL
+        fromDatabase:
+          name: easylit-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: easylit-redis
+          property: connectionString
+      - key: GEMINI_API_KEY
+        sync: false                  # se pega a mano en el panel (secreto)
+      - key: IA_MODEL
+        value: gemini-flash-latest   # modelo vigente de Gemini
+      - key: FRONTEND_URL
+        sync: false                  # URL del static site, para CORS
+      - key: ALLOWED_HOSTS
+        sync: false                  # el dominio de la api en Render
+    disk:
+      # Disco persistente para los archivos subidos (plantillas, orígenes) y
+      # los documentos generados. Sin esto, Render los borra al reiniciar.
+      # Para producción a gran escala, migrar a almacenamiento en la nube (S3/R2).
+      name: easylit-media
+      mountPath: /opt/render/project/src/media
+      sizeGB: 1
+
+  # ---- Worker Celery ----
+  - type: worker
+    name: easylit-worker
+    runtime: python
+    plan: free
+    region: oregon
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery -A config worker --loglevel=info --concurrency=2"
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.prod
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: SECRET_KEY
+        fromService:
+          type: web
+          name: easylit-api
+          envVarKey: SECRET_KEY       # comparte el mismo secreto que la api
+      - key: DATABASE_URL
+        fromDatabase:
+          name: easylit-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: easylit-redis
+          property: connectionString
+      - key: GEMINI_API_KEY
+        sync: false
+
+  # ---- Frontend React ----
+  - type: web
+    name: easylit-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: "npm ci && npm run build"
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false                   # la URL pública de easylit-api
+    routes:
+      # SPA: cualquier ruta desconocida cae en index.html (React Router)
+      - type: rewrite
+        source: "/*"
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY

@@ -1,0 +1,33 @@
+# ---- Python / Django ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+*.sqlite3
+db.sqlite3
+backend/media/
+backend/staticfiles/
+.coverage
+htmlcov/
+
+# ---- Node / React ----
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.local
+
+# ---- Entornos ----
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env
+
+# ---- Editores / SO ----
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log

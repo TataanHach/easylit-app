@@ -1,0 +1,140 @@
+/* Wizard de transformar · carga, plantilla, estado de procesamiento. */
+
+.wizard-header { margin-bottom: var(--s-5); }
+.wizard-header h1 { font-size: var(--fs-xl); font-weight: 600; }
+.wizard-header p { font-size: var(--fs-base); color: var(--text-2); margin-top: 4px; }
+
+/* Stepper */
+.stepper {
+  display: flex; align-items: center; gap: var(--s-2);
+  margin-bottom: var(--s-5); padding: 12px 16px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); overflow-x: auto;
+}
+.step {
+  display: flex; align-items: center; gap: var(--s-2);
+  padding: 4px 10px; border-radius: var(--r-pill);
+  font-size: var(--fs-md); color: var(--text-2); white-space: nowrap;
+}
+.step-num {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--line); color: var(--text-2);
+  font-size: var(--fs-sm); font-weight: 600;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.step.activo { background: var(--brand-50); color: var(--brand-900); font-weight: 600; }
+.step.activo .step-num { background: var(--brand-600); color: #fff; }
+.step.hecho { color: var(--dest-600); }
+.step.hecho .step-num { background: var(--ok-600); color: #fff; }
+.step-linea { flex: 1; height: 1px; background: var(--line); min-width: 16px; }
+
+/* Zona de carga */
+.carga-grid { display: grid; grid-template-columns: 1fr 40px 1fr; gap: 0; margin-bottom: var(--s-5); }
+.slot {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: 18px;
+}
+.slot.origen.lleno { border-color: var(--brand-100); background: linear-gradient(180deg, #F5FAFF 0%, #fff 60%); }
+.slot.destino.lleno { border-color: var(--dest-100); background: linear-gradient(180deg, #F5FBEC 0%, #fff 60%); }
+.slot-label {
+  font-size: var(--fs-sm); font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--text-2); margin-bottom: 14px;
+}
+
+.dropzone {
+  display: block; width: 100%; border: 2px dashed var(--line-strong);
+  border-radius: var(--r-lg); padding: 26px 16px; text-align: center;
+  cursor: pointer; background: var(--surface-2);
+}
+.dropzone:hover { border-color: var(--brand-600); background: #F5FAFF; }
+.drop-icon {
+  width: 44px; height: 44px; border-radius: var(--r-lg); background: #fff;
+  border: 1px solid var(--line); margin: 0 auto 10px;
+  display: flex; align-items: center; justify-content: center;
+}
+.drop-icon i { font-size: 22px; color: var(--brand-600); }
+.drop-title { font-weight: 600; margin-bottom: 3px; }
+.drop-sub { font-size: var(--fs-md); color: var(--text-2); }
+
+.archivo-card {
+  display: flex; align-items: center; gap: 10px; padding: 12px;
+  background: #fff; border: 1px solid var(--line); border-radius: var(--r-md);
+}
+.archivo-icon {
+  width: 36px; height: 36px; border-radius: var(--r-md); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--xls-bg);
+}
+.archivo-icon i { color: var(--xls-fg); font-size: 18px; }
+.archivo-info { flex: 1; min-width: 0; }
+.archivo-nombre {
+  font-size: var(--fs-md); font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.archivo-meta { font-size: var(--fs-sm); color: var(--text-3); }
+.quitar-btn {
+  border: none; background: none; cursor: pointer; color: var(--text-3);
+  padding: 4px; border-radius: var(--r-sm);
+}
+.quitar-btn:hover { background: var(--bg); color: var(--danger-500); }
+
+.flecha-col { display: flex; align-items: center; justify-content: center; }
+.flecha-circulo {
+  width: 36px; height: 36px; border-radius: 50%; background: #fff;
+  border: 1px solid var(--line); display: flex; align-items: center;
+  justify-content: center; color: var(--text-3);
+}
+
+/* Selector de plantilla */
+.select-plantilla {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--line-strong);
+  border-radius: var(--r-md); font-size: var(--fs-base); background: #fff; cursor: pointer;
+}
+.select-plantilla:focus { border-color: var(--brand-600); box-shadow: var(--focus-ring); outline: none; }
+
+.campo { margin-bottom: 14px; }
+.campo label { display: block; font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); margin-bottom: 6px; }
+.campo input {
+  width: 100%; padding: 9px 12px; border: 1px solid var(--line-strong);
+  border-radius: var(--r-md); font-size: var(--fs-base);
+}
+.campo input:focus { border-color: var(--brand-600); box-shadow: var(--focus-ring); outline: none; }
+
+/* Barra de acción */
+.acciones {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s-3); padding: var(--s-4) var(--s-5);
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); flex-wrap: wrap;
+}
+.acciones-info { font-size: var(--fs-md); color: var(--text-2); }
+.btn-lg { padding: 10px 20px; font-size: var(--fs-base); }
+
+/* Estado de procesamiento */
+.proceso {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: 40px; text-align: center;
+}
+.proceso-pasos { display: flex; flex-direction: column; gap: 14px; max-width: 380px; margin: 24px auto 0; text-align: left; }
+.proceso-paso { display: flex; align-items: center; gap: 12px; font-size: var(--fs-base); color: var(--text-2); }
+.paso-check {
+  width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--line-soft);
+}
+.proceso-paso.hecho .paso-check { background: var(--dest-50); }
+.proceso-paso.hecho .paso-check i { color: var(--ok-600); }
+.proceso-paso.activo .paso-check { background: var(--brand-50); }
+.proceso-paso.activo .paso-check i { color: var(--brand-600); }
+.proceso-paso.hecho { color: var(--text); font-weight: 500; }
+
+.error-caja {
+  background: var(--danger-50); border: 1px solid #f2c9c9; color: var(--danger-700);
+  padding: 14px 16px; border-radius: var(--r-md); font-size: var(--fs-base);
+  display: flex; gap: 10px; align-items: flex-start;
+}
+
+@media (max-width: 800px) {
+  .carga-grid { grid-template-columns: 1fr; gap: var(--s-3); }
+  .flecha-col { transform: rotate(90deg); height: 32px; }
+}

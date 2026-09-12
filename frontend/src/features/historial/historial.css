@@ -1,0 +1,100 @@
+/* Historial · tabla de transformaciones con filtro por alcance. */
+
+.page-header { margin-bottom: var(--s-5); }
+.page-header h1 { font-size: var(--fs-xl); font-weight: 600; }
+.page-header p { font-size: var(--fs-base); color: var(--text-2); margin-top: 4px; }
+
+/* Tabs de alcance */
+.scope-tabs {
+  display: inline-flex; background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: 3px; gap: 2px; margin-bottom: var(--s-5);
+}
+.scope-tab {
+  border: none; background: transparent; cursor: pointer;
+  padding: 7px 16px; border-radius: var(--r-sm);
+  font-size: var(--fs-md); color: var(--text-2);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.scope-tab:hover { background: var(--surface-2); }
+.scope-tab.activo { background: var(--brand-600); color: #fff; font-weight: 600; }
+.scope-tab i { font-size: 14px; }
+
+/* Panel de tabla */
+.panel {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); overflow: hidden;
+}
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--s-4) var(--s-5); border-bottom: 1px solid var(--line);
+}
+.panel-title { font-size: var(--fs-base); font-weight: 600; }
+.panel-count { font-size: var(--fs-md); color: var(--text-3); margin-left: 8px; font-weight: 400; }
+
+.table-scroll { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; min-width: 760px; }
+.data-table th {
+  font-size: var(--fs-sm); color: var(--text-2); font-weight: 600;
+  padding: 10px 16px; text-align: left; background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;
+}
+.data-table td {
+  font-size: var(--fs-base); padding: 14px 16px;
+  border-bottom: 1px solid var(--line-soft); vertical-align: middle;
+}
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody tr:hover td { background: var(--surface-2); }
+
+.doc-cell { display: flex; align-items: center; gap: 10px; }
+.doc-icon {
+  width: 30px; height: 30px; border-radius: var(--r-sm); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--pdf-bg);
+}
+.doc-icon i { color: var(--pdf-fg); font-size: 15px; }
+.doc-icon.xlsx { background: var(--xls-bg); }
+.doc-icon.xlsx i { color: var(--xls-fg); }
+.doc-name { font-weight: 500; }
+
+.owner-cell { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-md); }
+.owner-cell.yo { font-weight: 600; }
+.avatar-mini {
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--fs-xs); font-weight: 700;
+  background: var(--brand-300); color: var(--brand-900);
+}
+.you-tag {
+  font-size: var(--fs-xs); padding: 1px 5px; border-radius: var(--r-xs);
+  background: var(--brand-50); color: var(--brand-900); font-weight: 700;
+}
+
+/* Confianza */
+.conf { display: inline-flex; align-items: center; gap: 6px; }
+.conf-bar { width: 44px; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.conf-fill { display: block; height: 100%; border-radius: 3px; }
+.conf-num { font-size: var(--fs-sm); font-weight: 600; }
+.conf.alta .conf-fill { background: var(--ok-600); } .conf.alta .conf-num { color: var(--dest-600); }
+.conf.media .conf-fill { background: var(--warn-500); } .conf.media .conf-num { color: var(--warn-700); }
+.conf.baja .conf-fill { background: var(--danger-500); } .conf.baja .conf-num { color: var(--danger-600); }
+
+/* Píldoras de estado */
+.pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: var(--fs-sm); padding: 3px 10px;
+  border-radius: var(--r-pill); font-weight: 600; white-space: nowrap;
+}
+.pill i { font-size: 11px; }
+.pill.done { background: var(--dest-50); color: var(--dest-700); }
+.pill.review { background: var(--warn-50); color: var(--warn-700); }
+.pill.error { background: var(--danger-50); color: var(--danger-700); }
+.pill.processing { background: var(--brand-50); color: var(--brand-900); }
+.pill.draft { background: var(--line-soft); color: var(--text-2); }
+
+/* Estados de carga y vacío */
+.estado-caja { padding: 48px 24px; text-align: center; color: var(--text-3); }
+.estado-caja i { font-size: 32px; }
+.estado-caja h3 { font-size: var(--fs-lg); font-weight: 600; margin: 12px 0 4px; color: var(--text); }
+.estado-caja p { font-size: var(--fs-base); }

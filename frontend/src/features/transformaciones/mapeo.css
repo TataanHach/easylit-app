@@ -1,0 +1,78 @@
+/* Editor de mapeo · revisar, aprobar, generar, descargar. */
+
+.mapeo-header { margin-bottom: var(--s-5); }
+.mapeo-header h1 { font-size: var(--fs-xl); font-weight: 600; }
+.mapeo-header p { font-size: var(--fs-base); color: var(--text-2); margin-top: 4px; }
+
+.mapeo-panel {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); overflow: hidden; margin-bottom: var(--s-4);
+}
+.mapeo-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--s-4) var(--s-5); border-bottom: 1px solid var(--line);
+  background: var(--ai-50);
+}
+.mapeo-panel-head .titulo { display: flex; align-items: center; gap: 10px; }
+.mapeo-ia-icon {
+  width: 32px; height: 32px; border-radius: var(--r-md);
+  background: #fff; display: flex; align-items: center; justify-content: center;
+}
+.mapeo-ia-icon i { color: var(--ai-600); font-size: 16px; }
+.mapeo-panel-head h2 { font-size: var(--fs-base); font-weight: 600; }
+.mapeo-panel-head p { font-size: var(--fs-sm); color: var(--text-2); }
+.privacy-tag {
+  font-size: var(--fs-sm); padding: 4px 10px; background: var(--dest-50);
+  border: 1px solid var(--dest-100); border-radius: var(--r-pill);
+  color: var(--dest-700); font-weight: 600; display: inline-flex; align-items: center; gap: 5px;
+}
+
+.mapeo-fila {
+  display: grid; grid-template-columns: 1fr 40px 1fr 120px;
+  gap: 14px; align-items: center; padding: 14px 20px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.mapeo-fila:last-child { border-bottom: none; }
+.mapeo-origen {
+  padding: 9px 12px; border-radius: var(--r-md);
+  background: var(--brand-50); border: 1px solid var(--brand-100);
+  color: var(--brand-900); font-weight: 600; font-size: var(--fs-md);
+}
+.mapeo-flecha { text-align: center; color: var(--text-3); }
+.mapeo-select {
+  width: 100%; padding: 9px 12px; border-radius: var(--r-md);
+  border: 1px solid var(--dest-100); background: var(--dest-50);
+  color: var(--dest-700); font-weight: 600; font-size: var(--fs-md); cursor: pointer;
+}
+.mapeo-select:focus { outline: none; box-shadow: var(--focus-ring); }
+.mapeo-select.sin-asignar { border-color: var(--danger-500); background: var(--danger-50); color: var(--danger-700); }
+
+.mapeo-conf { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.mapeo-conf-bar { width: 40px; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.mapeo-conf-fill { display: block; height: 100%; }
+.mapeo-conf-num { font-size: var(--fs-sm); font-weight: 600; min-width: 32px; }
+.mapeo-conf.alta .mapeo-conf-fill { background: var(--ok-600); } .mapeo-conf.alta .mapeo-conf-num { color: var(--dest-600); }
+.mapeo-conf.media .mapeo-conf-fill { background: var(--warn-500); } .mapeo-conf.media .mapeo-conf-num { color: var(--warn-700); }
+.mapeo-conf.baja .mapeo-conf-fill { background: var(--danger-500); } .mapeo-conf.baja .mapeo-conf-num { color: var(--danger-600); }
+
+.mapeo-acciones {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s-3); padding: var(--s-4) var(--s-5);
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); flex-wrap: wrap;
+}
+.mapeo-acciones-info { font-size: var(--fs-md); color: var(--text-2); }
+
+.exito-caja {
+  background: var(--dest-50); border: 1px solid var(--dest-100);
+  border-radius: var(--r-lg); padding: 32px; text-align: center;
+}
+.exito-caja i { font-size: 40px; color: var(--ok-600); }
+.exito-caja h2 { font-size: var(--fs-lg); font-weight: 600; margin: 12px 0 4px; }
+.exito-caja p { font-size: var(--fs-base); color: var(--text-2); margin-bottom: 20px; }
+
+@media (max-width: 700px) {
+  .mapeo-fila { grid-template-columns: 1fr; gap: 8px; }
+  .mapeo-flecha { transform: rotate(90deg); }
+  .mapeo-conf { justify-content: flex-start; }
+}

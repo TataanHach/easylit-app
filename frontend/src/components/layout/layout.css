@@ -1,0 +1,121 @@
+/* Layout de la aplicación · sidebar + topbar + contenido.
+   Reutiliza tokens.css. Es el marco de todas las pantallas internas. */
+
+.app-shell {
+  display: flex;
+  min-height: 100dvh;
+  background: var(--bg);
+}
+
+/* ---------- Sidebar ---------- */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+}
+.sidebar-logo {
+  padding: 18px 18px 16px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.logo-icon {
+  width: 32px; height: 32px; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--brand-600), var(--brand-500));
+  border-radius: var(--r-md);
+  display: flex; align-items: center; justify-content: center;
+}
+.logo-icon i { color: #fff; font-size: 17px; }
+.logo-text { font-size: var(--fs-base); font-weight: 600; line-height: 1.2; }
+.logo-sub { font-size: var(--fs-xs); color: var(--text-3); margin-top: 1px; }
+
+.sidebar-nav { padding: 14px 10px; flex: 1; overflow-y: auto; }
+.nav-section {
+  padding: 10px 10px 6px;
+  font-size: var(--fs-xs); color: var(--text-3);
+  letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; margin-bottom: 2px;
+  font-size: var(--fs-base); color: var(--text-2);
+  border-radius: var(--r-md); cursor: pointer;
+  text-decoration: none;
+}
+.nav-item:hover { background: var(--surface-2); }
+.nav-item.activo {
+  color: var(--brand-600); background: var(--brand-50); font-weight: 600;
+}
+.nav-item i { font-size: 16px; flex-shrink: 0; }
+
+.sidebar-bottom {
+  padding: 12px 16px; border-top: 1px solid var(--line);
+  display: flex; align-items: center; gap: 10px;
+  text-decoration: none; color: inherit;
+}
+.sidebar-bottom:hover { background: var(--surface-2); }
+.avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--brand-300); color: var(--brand-900);
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--fs-md); font-weight: 600; flex-shrink: 0;
+}
+.avatar-info { flex: 1; min-width: 0; }
+.avatar-info p {
+  font-size: var(--fs-md); font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.avatar-info span { font-size: var(--fs-sm); color: var(--text-3); }
+.logout-icon { color: var(--text-3); font-size: 16px; }
+
+/* ---------- Main ---------- */
+.main-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.topbar {
+  background: var(--surface); border-bottom: 1px solid var(--line);
+  padding: 0 var(--s-6); height: var(--topbar-h);
+  display: flex; align-items: center; justify-content: space-between;
+  flex-shrink: 0; position: sticky; top: 0; z-index: 20;
+}
+.topbar-title { font-size: var(--fs-lg); font-weight: 600; }
+.topbar-right { display: flex; align-items: center; gap: var(--s-2); }
+
+.content { flex: 1; padding: var(--s-6) var(--s-7); }
+
+/* Botón genérico para la topbar */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: var(--r-md);
+  font-size: var(--fs-base); cursor: pointer;
+  border: 1px solid var(--line-strong);
+  background: var(--surface); color: var(--text);
+  white-space: nowrap; text-decoration: none;
+}
+.btn:hover { background: var(--bg); }
+.btn i { font-size: 14px; }
+.btn-primary { background: var(--brand-600); color: #fff; border-color: var(--brand-600); font-weight: 600; }
+.btn-primary:hover { background: var(--brand-700); }
+
+/* Botón hamburguesa (solo móvil) */
+.nav-toggle { display: none; }
+
+@media (max-width: 900px) {
+  .sidebar {
+    position: fixed; z-index: 40; left: 0; top: 0;
+    transform: translateX(-100%); transition: transform 0.18s ease;
+    box-shadow: var(--shadow-md);
+  }
+  .app-shell.nav-open .sidebar { transform: translateX(0); }
+  .nav-toggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; border: 1px solid var(--line);
+    background: var(--surface); border-radius: var(--r-md); cursor: pointer;
+  }
+  .content { padding: var(--s-4); }
+}
