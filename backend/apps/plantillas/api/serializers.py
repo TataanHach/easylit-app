@@ -17,6 +17,7 @@ class CampoPlantillaSerializer(serializers.ModelSerializer):
             "id", "plantilla", "nombre", "columna_excel", "orden",
             "tipo", "obligatorio", "moneda_destino", "descripcion",
             "celda_destino", "etiqueta_busqueda", "hoja_destino",
+            "formato_numero",
         )
         read_only_fields = ("id",)
 

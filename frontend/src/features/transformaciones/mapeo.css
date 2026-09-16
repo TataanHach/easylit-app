@@ -76,3 +76,73 @@
   .mapeo-flecha { transform: rotate(90deg); }
   .mapeo-conf { justify-content: flex-start; }
 }
+
+.ia-proceso {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: 32px 28px;
+  display: flex; flex-direction: column; align-items: center;
+}
+
+/* Orbe animado de la IA */
+.ia-proceso-orbe {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--ai-600), var(--brand-500));
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 28px; position: relative;
+  animation: orbe-pulso 2s ease-in-out infinite;
+}
+.ia-proceso-orbe i { color: #fff; font-size: 32px; }
+.ia-proceso-orbe::after {
+  content: ""; position: absolute; inset: -8px; border-radius: 50%;
+  border: 2px solid var(--ai-600); opacity: .3;
+  animation: orbe-halo 2s ease-in-out infinite;
+}
+@keyframes orbe-pulso {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+@keyframes orbe-halo {
+  0%, 100% { transform: scale(1); opacity: .3; }
+  50% { transform: scale(1.15); opacity: 0; }
+}
+
+/* Lista de pasos */
+.ia-pasos { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 6px; }
+.ia-paso {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 14px; border-radius: var(--r-md);
+  opacity: .45; transition: opacity .3s, background .3s;
+}
+.ia-paso.hecho { opacity: 1; }
+.ia-paso.activo { opacity: 1; background: var(--ai-50); }
+
+.ia-paso-icono {
+  width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--line-soft); color: var(--text-3);
+  transition: background .3s, color .3s;
+}
+.ia-paso.hecho .ia-paso-icono { background: var(--dest-50); color: var(--ok-600); }
+.ia-paso.activo .ia-paso-icono { background: var(--ai-600); color: #fff; }
+.ia-paso-icono i { font-size: 17px; }
+
+.ia-paso-texto { flex: 1; min-width: 0; }
+.ia-paso-titulo { font-size: var(--fs-base); font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.ia-paso-desc { font-size: var(--fs-sm); color: var(--text-3); margin-top: 1px; }
+
+.ia-badge {
+  font-size: var(--fs-xs); font-weight: 700; padding: 1px 7px;
+  background: var(--ai-600); color: #fff; border-radius: var(--r-pill);
+  letter-spacing: .04em;
+}
+
+.ia-paso-spinner i {
+  font-size: 18px; color: var(--ai-600);
+  animation: girar 1s linear infinite;
+}
+@keyframes girar { to { transform: rotate(360deg); } }
+
+.ia-nota {
+  margin-top: 24px; font-size: var(--fs-sm); color: var(--text-3);
+  display: flex; align-items: center; gap: 6px;
+}

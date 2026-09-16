@@ -63,8 +63,8 @@ export interface CampoInput {
   etiqueta_busqueda?: string;
   obligatorio?: boolean;
   orden?: number;
+  formato_numero?: string;
 }
-
 export const campoService = {
   async listar(plantillaId: string) {
     const { data } = await api.get(`/campos/?plantilla=${plantillaId}`);

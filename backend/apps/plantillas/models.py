@@ -28,9 +28,6 @@ class UnidadCanonica(models.Model):
     )
     simbolo = models.CharField(max_length=20)          # "m²"
     nombre = models.CharField(max_length=100)          # "metro cuadrado"
-    # Alias que deben normalizarse a esta unidad. Lista de strings en minúscula.
-    # Ej: ["m2", "mt2", "metros cuadrados", "metro2"]. La normalización real la
-    # hace el worker; esto es el diccionario que consulta.
     alias = models.JSONField(default=list, blank=True)
 
     class Meta:
@@ -53,7 +50,6 @@ class Plantilla(models.Model):
     class Formato(models.TextChoices):
         XLSX = "XLSX", "Excel"
         CSV = "CSV", "CSV"
-        # PDF/DOCX quedan declarados para fase 2; el MVP procesa XLSX/CSV.
         PDF = "PDF", "PDF"
         DOCX = "DOCX", "Word"
 
@@ -64,16 +60,13 @@ class Plantilla(models.Model):
         related_name="plantillas",
     )
 
-    nombre = models.CharField(max_length=200)          # "Formato Codelco 2024"
-    mandante = models.CharField(max_length=200, blank=True)  # "Codelco"
-    sector = models.CharField(max_length=100, blank=True)    # "Minería"
+    nombre = models.CharField(max_length=200)
+    mandante = models.CharField(max_length=200, blank=True)
+    sector = models.CharField(max_length=100, blank=True)
     formato = models.CharField(max_length=8, choices=Formato.choices, default=Formato.XLSX)
 
-    # El archivo modelo, que se rellena preservando su estructura.
     archivo = models.FileField(upload_to="plantillas/%Y/%m/")
 
-    # Metadatos de escritura: en qué hoja y fila empieza el itemizado, para que
-    # openpyxl escriba en el lugar correcto sin romper cabeceras ni fórmulas.
     hoja_datos = models.CharField(max_length=100, blank=True, default="")
     fila_encabezado = models.PositiveIntegerField(default=1)
     fila_primer_dato = models.PositiveIntegerField(default=2)
@@ -89,7 +82,6 @@ class Plantilla(models.Model):
     )
     creada = models.DateTimeField(default=timezone.now)
     actualizada = models.DateTimeField(auto_now=True)
-    # Contador de uso, para el orden "más usadas" de la biblioteca.
     usos = models.PositiveIntegerField(default=0)
 
     class Meta:
@@ -120,33 +112,43 @@ class CampoPlantilla(models.Model):
         FECHA = "FECHA", "Fecha"
         UNIDAD = "UNIDAD", "Unidad de medida"
 
+    class Formato(models.TextChoices):
+        """
+        Cómo se muestra el valor en la celda del Excel generado. Controla el
+        'number_format' de openpyxl, así el número queda como número real (no
+        texto) con su símbolo. NINGUNO deja el valor tal cual.
+        """
+        NINGUNO = "NINGUNO", "Sin formato (tal cual)"
+        ENTERO = "ENTERO", "Número entero (1.234)"
+        DECIMAL = "DECIMAL", "Decimal (1.234,56)"
+        PESOS = "PESOS", "Pesos chilenos ($ 1.234)"
+        PESOS_DEC = "PESOS_DEC", "Pesos con decimales ($ 1.234,56)"
+        PORCENTAJE = "PORCENTAJE", "Porcentaje (12,5%)"
+        UF = "UF", "UF (1.234,56 UF)"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     plantilla = models.ForeignKey(
         Plantilla, on_delete=models.CASCADE, related_name="campos"
     )
 
-    # Nombre técnico en la plantilla (ej. "Presupuesto_CLP") y su columna Excel.
     nombre = models.CharField(max_length=150)
-    columna_excel = models.CharField(max_length=10, blank=True)  # "D"
+    columna_excel = models.CharField(max_length=10, blank=True)
     orden = models.PositiveIntegerField(default=0)
 
-    # Para FORMULARIOS verticales (etiqueta | casilla), el generador puede:
-    #  (a) escribir en una celda exacta si se define celda_destino (ej. "B2"), o
-    #  (b) buscar la etiqueta en la hoja y escribir en la celda de al lado,
-    #      usando etiqueta_busqueda como texto a localizar (ej. "RUT:").
-    # Si ambos están vacíos, intenta buscar por el nombre del campo.
-    celda_destino = models.CharField(max_length=10, blank=True)      # "B2"
-    etiqueta_busqueda = models.CharField(max_length=150, blank=True)  # "RUT:"
-    hoja_destino = models.CharField(max_length=100, blank=True)       # nombre de la hoja
+    celda_destino = models.CharField(max_length=10, blank=True)
+    etiqueta_busqueda = models.CharField(max_length=150, blank=True)
+    hoja_destino = models.CharField(max_length=100, blank=True)
 
     tipo = models.CharField(max_length=10, choices=Tipo.choices, default=Tipo.TEXTO)
     obligatorio = models.BooleanField(default=False)
 
-    # Para campos de moneda: la moneda que exige el destino (ej. "CLP"). Si el
-    # origen trae otra (UF), el sistema pedirá confirmar la tasa de conversión.
-    moneda_destino = models.CharField(max_length=10, blank=True)
+    # NUEVO: cómo se formatea el número al escribirlo en la celda del Excel.
+    # Solo aplica a valores numéricos; para TEXTO/FECHA se ignora.
+    formato_numero = models.CharField(
+        max_length=12, choices=Formato.choices, default=Formato.NINGUNO, blank=True
+    )
 
-    # Descripción en lenguaje natural que ayuda a la IA a desambiguar.
+    moneda_destino = models.CharField(max_length=10, blank=True)
     descripcion = models.CharField(max_length=300, blank=True)
 
     class Meta:

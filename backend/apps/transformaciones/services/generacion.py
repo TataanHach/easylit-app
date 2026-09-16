@@ -2,59 +2,70 @@
 Servicio de generación del documento final.
 
 Toma el archivo Excel de la plantilla (con su formato: colores, celdas amarillas,
-título) y escribe los datos mapeados DENTRO de él, sin romper el diseño. Es el
-paso que convierte el mapeo aprobado en un archivo entregable.
+título) y escribe los datos mapeados DENTRO de él, sin romper el diseño.
 
-Preserva el formato porque abre el archivo original de la plantilla con openpyxl
-y solo escribe en las celdas de destino; no reconstruye nada. Las fórmulas,
-estilos y demás hojas quedan intactos.
-
-Tres formas de ubicar dónde escribir cada valor, en orden de prioridad:
-  1. celda_destino explícita (ej. "B2") → escribe ahí directo.
-  2. etiqueta_busqueda (ej. "RUT:") → busca ese texto y escribe en la celda de
-     al lado (a la derecha).
-  3. Si no hay ninguna, busca el nombre del campo como etiqueta.
-
-Esto hace que funcione con formularios verticales (etiqueta | casilla) sin tener
-que configurar celda por celda a mano.
+Además del valor, aplica el FORMATO NUMÉRICO del campo (pesos, porcentaje, etc.),
+convirtiendo el texto a número real cuando corresponde, para que Excel lo trate
+como número y lo muestre con su símbolo.
 """
 import io
+import re
 import unicodedata
 
 from openpyxl import load_workbook
-from openpyxl.utils import get_column_letter, column_index_from_string, coordinate_to_tuple
+from openpyxl.utils import coordinate_to_tuple
+
+
+# Mapa: formato del campo -> (number_format de Excel, ¿es porcentaje?)
+# El number_format es el código que Excel entiende para mostrar el número.
+FORMATOS_EXCEL = {
+    "ENTERO":     ("#,##0", False),
+    "DECIMAL":    ("#,##0.00", False),
+    "PESOS":      ('"$"#,##0', False),
+    "PESOS_DEC":  ('"$"#,##0.00', False),
+    "PORCENTAJE": ("0.0%", True),      # Excel multiplica x100 al mostrar %
+    "UF":         ('#,##0.00" UF"', False),
+}
 
 
 def _normalizar(texto):
-    """
-    Normaliza para comparar etiquetas de forma tolerante: minúsculas, sin
-    tildes, sin puntuación ni espacios extra. Así "Teléfono:", "telefono" y
-    "TELEFONO" se consideran iguales.
-    """
     if texto is None:
         return ""
     s = str(texto).strip().lower()
-    # Quitar tildes.
     s = "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
-    # Quitar todo lo que no sea letra o número.
     s = "".join(c if c.isalnum() else " " for c in s)
-    return " ".join(s.split())  # colapsar espacios
+    return " ".join(s.split())
+
+
+def _a_numero(valor):
+    """Convierte un valor a número (float) entendiendo formato chileno. None si no puede."""
+    if valor is None:
+        return None
+    if isinstance(valor, (int, float)):
+        return float(valor)
+    s = str(valor).strip()
+    if not s:
+        return None
+    s = re.sub(r"[^\d.,\-]", "", s)   # quitar $, %, espacios, letras
+    if not s:
+        return None
+    if "." in s and "," in s:
+        s = s.replace(".", "").replace(",", ".")
+    elif "," in s:
+        s = s.replace(",", ".")
+    elif "." in s:
+        partes = s.split(".")
+        if len(partes) > 2:
+            s = s.replace(".", "")
+        elif len(partes[1]) == 3:
+            s = s.replace(".", "")
+    try:
+        return float(s)
+    except ValueError:
+        return None
 
 
 def _buscar_etiqueta(ws, texto):
-    """
-    Busca una celda cuyo texto coincida (de forma tolerante) con `texto` y
-    devuelve la coordenada de la celda de al lado (a la derecha), donde va el
-    valor en un formulario vertical. Devuelve None si no la encuentra.
-
-    Estrategia en cascada, de más estricta a más flexible:
-      1. Igualdad exacta (normalizada).
-      2. Una contiene a la otra.
-      3. Comparten las palabras "importantes" (ignorando conectores como
-         "de", "del", "la"). Así "Persona_Contacto" coincide con
-         "Persona de Contacto".
-    """
-    # Palabras de relleno que no aportan al significado de la etiqueta.
     RELLENO = {"de", "del", "la", "el", "los", "las", "y", "o", "a", "nombre"}
 
     def palabras_clave(s):
@@ -75,17 +86,10 @@ def _buscar_etiqueta(ws, texto):
             valor_norm = _normalizar(celda.value)
             if not valor_norm:
                 continue
-
-            # 1. Exacta.
             if valor_norm == objetivo_norm:
                 return celda.row, celda.column + 1
-
-            # 2. Contención.
             if candidato_contiene is None and (objetivo_norm in valor_norm or valor_norm in objetivo_norm):
                 candidato_contiene = (celda.row, celda.column + 1)
-
-            # 3. Palabras clave compartidas: todas las del objetivo están en la
-            #    etiqueta (o viceversa), ignorando relleno.
             if candidato_palabras is None:
                 valor_clave = palabras_clave(celda.value)
                 if objetivo_clave and valor_clave and (
@@ -93,18 +97,38 @@ def _buscar_etiqueta(ws, texto):
                 ):
                     candidato_palabras = (celda.row, celda.column + 1)
 
-    # Devolver el mejor candidato disponible, en orden de prioridad.
     return candidato_contiene or candidato_palabras
+
+
+def _escribir_valor(celda, valor, campo):
+    """
+    Escribe el valor en la celda, aplicando el formato numérico del campo si lo
+    tiene. Si el formato es numérico, convierte el texto a número real para que
+    Excel lo trate como número (no como texto) y muestre el símbolo.
+    """
+    formato = getattr(campo, "formato_numero", "") or "NINGUNO"
+
+    if formato in FORMATOS_EXCEL:
+        code, es_pct = FORMATOS_EXCEL[formato]
+        num = _a_numero(valor)
+        if num is not None:
+            # Para porcentaje: si viene "12.5" (o 12,5), Excel con formato 0.0%
+            # espera 0.125. Convertimos dividiendo por 100.
+            if es_pct:
+                num = num / 100.0
+            celda.value = num
+            celda.number_format = code
+            return
+
+    # Sin formato numérico (o valor no numérico): escribir tal cual.
+    celda.value = valor
 
 
 def generar_documento(ruta_plantilla, mapeos_con_valor):
     """
     ruta_plantilla: ruta al .xlsx de la plantilla (formato destino).
-    mapeos_con_valor: lista de dicts con:
-        - campo: el CampoPlantilla (para saber dónde escribir)
-        - valor: el dato a escribir (ya tomado del origen)
-
-    Devuelve los bytes del Excel generado, listo para guardar/descargar.
+    mapeos_con_valor: lista de dicts con 'campo' (CampoPlantilla) y 'valor'.
+    Devuelve los bytes del Excel generado.
     """
     wb = load_workbook(ruta_plantilla)
 
@@ -114,35 +138,26 @@ def generar_documento(ruta_plantilla, mapeos_con_valor):
         if valor is None:
             continue
 
-        # Elegir la hoja: la del campo si se indicó, si no la activa.
         if campo.hoja_destino and campo.hoja_destino in wb.sheetnames:
             ws = wb[campo.hoja_destino]
         else:
             ws = wb.active
 
         destino = None
-
-        # 1. Celda exacta.
         if campo.celda_destino:
-            destino = coordinate_to_tuple(campo.celda_destino)  # (fila, col)
-
-        # 2. Buscar por etiqueta explícita.
+            destino = coordinate_to_tuple(campo.celda_destino)
         if destino is None and campo.etiqueta_busqueda:
             destino = _buscar_etiqueta(ws, campo.etiqueta_busqueda)
-
-        # 3. Buscar por el nombre del campo (reemplazando _ por espacio).
         if destino is None:
             destino = _buscar_etiqueta(ws, campo.nombre.replace("_", " "))
 
         if destino is None:
-            # No se encontró dónde escribir este campo; se omite en silencio.
-            # (En una versión futura, esto podría reportarse al usuario.)
             continue
 
         fila, col = destino
-        ws.cell(row=fila, column=col, value=valor)
+        celda = ws.cell(row=fila, column=col)
+        _escribir_valor(celda, valor, campo)
 
-    # Guardar en memoria y devolver los bytes.
     buffer = io.BytesIO()
     wb.save(buffer)
     buffer.seek(0)

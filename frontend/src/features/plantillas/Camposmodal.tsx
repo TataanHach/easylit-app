@@ -2,11 +2,11 @@
  * Editor de campos de una plantilla.
  *
  * Permite añadir, editar y quitar los campos que definen qué datos espera la
- * plantilla y dónde escribirlos (la "etiqueta de búsqueda"). Sin campos, una
- * plantilla no puede mapear ni generar bien.
+ * plantilla, dónde escribirlos (etiqueta de búsqueda) y con qué FORMATO numérico
+ * (pesos, porcentaje, UF...). Sin campos, una plantilla no puede mapear ni
+ * generar bien.
  *
- * Guarda cada cambio contra el backend inmediatamente (crear/editar/borrar),
- * así el usuario ve el estado real siempre.
+ * Guarda cada cambio contra el backend inmediatamente (crear/editar/borrar).
  */
 import { useEffect, useState } from "react";
 import { campoService } from "./plantillaService";
@@ -18,6 +18,17 @@ const TIPOS = [
   { v: "MONEDA", t: "Moneda" },
   { v: "FECHA", t: "Fecha" },
   { v: "UNIDAD", t: "Unidad" },
+];
+
+// Opciones de formato numérico. Coinciden con las del modelo en el backend.
+const FORMATOS = [
+  { v: "NINGUNO", t: "Sin formato" },
+  { v: "ENTERO", t: "Número entero" },
+  { v: "DECIMAL", t: "Decimal" },
+  { v: "PESOS", t: "Pesos $" },
+  { v: "PESOS_DEC", t: "Pesos con decimales" },
+  { v: "PORCENTAJE", t: "Porcentaje %" },
+  { v: "UF", t: "UF" },
 ];
 
 interface Props { plantilla: Plantilla; onCerrar: () => void; }
@@ -45,7 +56,6 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
   }
 
   async function actualizar(id: string, cambios: any) {
-    // Optimista: actualizar en pantalla, luego guardar.
     setCampos(campos.map((c) => (c.id === id ? { ...c, ...cambios } : c)));
     await campoService.editar(id, cambios);
   }
@@ -54,6 +64,9 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
     setCampos(campos.filter((c) => c.id !== id));
     await campoService.eliminar(id);
   }
+
+  // ¿El campo es numérico? Solo entonces tiene sentido elegir formato.
+  const esNumerico = (tipo: string) => tipo === "NUMERO" || tipo === "MONEDA";
 
   return (
     <div className="modal-overlay" onClick={onCerrar}>
@@ -65,8 +78,8 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
         <div className="modal-body">
           <p className="campos-hint">
             Cada campo es un dato que la plantilla espera. La <strong>etiqueta de búsqueda</strong> es
-            el texto exacto de la casilla en tu formulario (ej. "RUT" o "Razón Social"), para saber
-            dónde escribir el valor. Los cambios se guardan al momento.
+            el texto de la casilla en tu formulario (ej. "RUT"). El <strong>formato</strong> aplica solo
+            a campos numéricos o de moneda (pesos, porcentaje, UF). Los cambios se guardan al momento.
           </p>
 
           {cargando ? (
@@ -74,19 +87,36 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
           ) : (
             <>
               <div className="campo-fila head">
-                <span>Nombre</span><span>Tipo</span><span>Etiqueta de búsqueda</span><span></span>
+                <span>Nombre</span>
+                <span>Tipo</span>
+                <span>Formato</span>
+                <span>Etiqueta de búsqueda</span>
+                <span></span>
               </div>
               {campos.map((c) => (
                 <div className="campo-fila" key={c.id}>
                   <input value={c.nombre}
                     onChange={(e) => setCampos(campos.map((x) => x.id === c.id ? { ...x, nombre: e.target.value } : x))}
                     onBlur={(e) => actualizar(c.id, { nombre: e.target.value })} />
+
                   <select value={c.tipo} onChange={(e) => actualizar(c.id, { tipo: e.target.value })}>
                     {TIPOS.map((t) => <option key={t.v} value={t.v}>{t.t}</option>)}
                   </select>
+
+                  {/* Formato: solo activo si el campo es numérico o moneda */}
+                  <select
+                    value={c.formato_numero ?? "NINGUNO"}
+                    disabled={!esNumerico(c.tipo)}
+                    title={esNumerico(c.tipo) ? "Formato del número" : "Solo para campos Número o Moneda"}
+                    onChange={(e) => actualizar(c.id, { formato_numero: e.target.value })}
+                  >
+                    {FORMATOS.map((f) => <option key={f.v} value={f.v}>{f.t}</option>)}
+                  </select>
+
                   <input value={c.etiqueta_busqueda ?? ""} placeholder="Ej. RUT"
                     onChange={(e) => setCampos(campos.map((x) => x.id === c.id ? { ...x, etiqueta_busqueda: e.target.value } : x))}
                     onBlur={(e) => actualizar(c.id, { etiqueta_busqueda: e.target.value })} />
+
                   <button className="campo-del" title="Quitar" onClick={() => quitar(c.id)}>
                     <i className="ti ti-trash" />
                   </button>

@@ -3,8 +3,7 @@
  *
  * Carga el detalle de una transformación, muestra cada correspondencia
  * origen→destino que propuso la IA con su confianza, permite corregir el campo
- * destino, y ofrece aprobar → generar → descargar. Todo desde el frontend, sin
- * pasar por el admin de Django.
+ * destino, y ofrece aprobar → generar → descargar.
  */
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
@@ -23,7 +22,6 @@ export default function MapeoPage() {
     queryKey: ["transformacion", id],
     queryFn: () => transformacionService.detalle(id!),
     enabled: !!id,
-    // Mientras el worker procesa (estados intermedios), reconsultar cada 2s.
     refetchInterval: (query) => {
       const estado = query.state.data?.estado;
       const enProceso = estado === "BORRADOR" || estado === "LIMPIEZA" || estado === "MAPEO_PROPUESTO";
@@ -31,7 +29,6 @@ export default function MapeoPage() {
     },
   });
 
-  // Cargar los campos de la plantilla para el desplegable de destino.
   const { data: plantilla } = useQuery({
     queryKey: ["plantilla", t?.plantilla],
     queryFn: () => plantillaService.detalle(t!.plantilla),
@@ -68,29 +65,12 @@ export default function MapeoPage() {
     return <div style={{ padding: 40, textAlign: "center" }}>No se encontró la transformación.</div>;
   }
 
-  // Si el worker todavía está procesando, mostrar el estado de espera.
+  // ── Pantalla "la IA está trabajando" con pasos animados ──
   if (t.estado === "BORRADOR" || t.estado === "LIMPIEZA" || t.estado === "MAPEO_PROPUESTO") {
-    return (
-      <div style={{ maxWidth: 640 }}>
-        <div className="mapeo-header">
-          <h1>Procesando tu licitación</h1>
-          <p>{t.nombre_origen}. El worker está limpiando y proponiendo el mapeo con IA.</p>
-        </div>
-        <div style={{
-          background: "var(--surface)", border: "1px solid var(--line)",
-          borderRadius: "var(--r-lg)", padding: 40, textAlign: "center",
-        }}>
-          <i className="ti ti-loader-2" style={{ fontSize: 32, color: "var(--brand-500)" }} />
-          <p style={{ marginTop: 12, color: "var(--text-2)" }}>Esto puede tardar un momento…</p>
-          <p style={{ marginTop: 4, fontSize: "var(--fs-sm)", color: "var(--text-3)" }}>
-            Puedes ir a otras secciones; la transformación seguirá en tu historial.
-          </p>
-        </div>
-      </div>
-    );
+    return <ProcesandoIA estado={t.estado} nombre={t.nombre_origen} />;
   }
 
-  // Si hubo error de procesamiento.
+  // Error de procesamiento.
   if (t.estado === "ERROR") {
     return (
       <div style={{ maxWidth: 640 }}>
@@ -110,13 +90,11 @@ export default function MapeoPage() {
     );
   }
 
-  // Pantalla de éxito tras generar.
+  // Éxito tras generar.
   if (generado || t.estado === "GENERADO") {
     return (
       <div style={{ maxWidth: 640 }}>
-        <div className="mapeo-header">
-          <h1>Documento generado</h1>
-        </div>
+        <div className="mapeo-header"><h1>Documento generado</h1></div>
         <div className="exito-caja">
           <i className="ti ti-circle-check" />
           <h2>¡Tu documento está listo!</h2>
@@ -197,6 +175,69 @@ export default function MapeoPage() {
             {generando ? "Generando…" : <><i className="ti ti-file-export" /> Generar documento</>}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Pantalla animada de procesamiento. Los pasos se van marcando según el estado
+ * real que reporta el backend:
+ *   BORRADOR        -> empezando (paso 1 activo)
+ *   LIMPIEZA        -> limpieza hecha, IA trabajando (paso 2 activo)
+ *   MAPEO_PROPUESTO -> mapeo casi listo (paso 3 activo)
+ */
+function ProcesandoIA({ estado, nombre }: { estado: string; nombre: string }) {
+  // A qué paso corresponde cada estado (0-indexed): cuáles están hechos y cuál activo.
+  const pasoActual =
+    estado === "BORRADOR" ? 0 :
+    estado === "LIMPIEZA" ? 1 :
+    estado === "MAPEO_PROPUESTO" ? 2 : 3;
+
+  const pasos = [
+    { icono: "ti ti-file-search",    titulo: "Leyendo el documento",        desc: "Extrayendo las columnas y datos del Excel" },
+    { icono: "ti ti-wash",           titulo: "Limpiando los datos",         desc: "Duplicados, unidades y formatos numéricos" },
+    { icono: "ti ti-brain",          titulo: "La IA está trabajando",       desc: "Gemini analiza y propone el mapeo de campos", ia: true },
+    { icono: "ti ti-checks",         titulo: "Preparando la revisión",      desc: "Dejando todo listo para que revises" },
+  ];
+
+  return (
+    <div style={{ maxWidth: 620 }}>
+      <div className="mapeo-header">
+        <h1>Procesando tu licitación</h1>
+        <p>{nombre}</p>
+      </div>
+
+      <div className="ia-proceso">
+        <div className="ia-proceso-orbe">
+          <i className="ti ti-sparkles" />
+        </div>
+
+        <div className="ia-pasos">
+          {pasos.map((p, i) => {
+            const hecho = i < pasoActual;
+            const activo = i === pasoActual;
+            return (
+              <div key={i} className={`ia-paso ${hecho ? "hecho" : ""} ${activo ? "activo" : ""}`}>
+                <span className="ia-paso-icono">
+                  {hecho ? <i className="ti ti-check" /> : <i className={p.icono} />}
+                </span>
+                <div className="ia-paso-texto">
+                  <p className="ia-paso-titulo">
+                    {p.titulo}
+                    {p.ia && activo && <span className="ia-badge">IA</span>}
+                  </p>
+                  <p className="ia-paso-desc">{p.desc}</p>
+                </div>
+                {activo && <span className="ia-paso-spinner"><i className="ti ti-loader-2" /></span>}
+              </div>
+            );
+          })}
+        </div>
+
+        <p className="ia-nota">
+          <i className="ti ti-info-circle" /> Puedes ir a otras secciones; la transformación seguirá en tu historial.
+        </p>
       </div>
     </div>
   );
