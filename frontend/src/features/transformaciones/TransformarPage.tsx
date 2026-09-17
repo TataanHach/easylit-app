@@ -1,11 +1,11 @@
 /**
  * Wizard de transformar.
  *
- * Paso 1: el usuario sube el Excel de la licitación y elige la plantilla destino.
- * Al crear, el backend dispara el worker (limpieza + IA) y devuelve la
- * transformación. Entonces hacemos polling del estado hasta EN_REVISION o ERROR.
+ * Paso 1: el usuario sube el Excel de la licitación, elige la EMPRESA/mandante,
+ * y luego la plantilla (filtrada por esa empresa). Al crear, el backend dispara
+ * el worker (limpieza + IA) y se navega a la pantalla de mapeo.
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { plantillaService } from "@/features/plantillas/plantillaService";
@@ -15,8 +15,8 @@ import "./transformar.css";
 export default function TransformarPage() {
   const navigate = useNavigate();
   const [archivo, setArchivo] = useState<File | null>(null);
+  const [empresa, setEmpresa] = useState("");        // mandante elegido
   const [plantillaId, setPlantillaId] = useState("");
-  const [mandante, setMandante] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState("");
 
@@ -25,18 +25,38 @@ export default function TransformarPage() {
     queryFn: plantillaService.listar,
   });
 
+  // Lista de empresas (mandantes) únicos, sacada de las plantillas.
+  const empresas = useMemo(() => {
+    if (!plantillas) return [];
+    const set = new Set<string>();
+    plantillas.forEach((p) => { if (p.mandante) set.add(p.mandante); });
+    return Array.from(set).sort();
+  }, [plantillas]);
+
+  // Plantillas filtradas por la empresa elegida.
+  const plantillasFiltradas = useMemo(() => {
+    if (!plantillas) return [];
+    if (!empresa) return plantillas;              // "Todas" hasta que elija
+    if (empresa === "__sin__") return plantillas.filter((p) => !p.mandante);
+    return plantillas.filter((p) => p.mandante === empresa);
+  }, [plantillas, empresa]);
+
+  // Al cambiar de empresa, si la plantilla elegida ya no está en la lista, se limpia.
+  function cambiarEmpresa(nueva: string) {
+    setEmpresa(nueva);
+    setPlantillaId("");
+  }
+
   async function transformar() {
     if (!archivo || !plantillaId) return;
     setError("");
     setEnviando(true);
     try {
       const t = await transformacionService.crear({
-        archivo, plantilla: plantillaId, mandante: mandante || undefined,
+        archivo,
+        plantilla: plantillaId,
+        mandante: empresa && empresa !== "__sin__" ? empresa : undefined,
       });
-      // Navegar a la URL propia de la transformación. Así el estado vive en el
-      // backend (no en la memoria de esta pantalla): si el usuario se va y
-      // vuelve, la transformación sigue en el historial y Transformar queda
-      // limpio para empezar otra.
       navigate(`/transformar/${t.id}/mapeo`);
     } catch (e: any) {
       const detalle = e?.response?.data;
@@ -55,7 +75,7 @@ export default function TransformarPage() {
     <div style={{ maxWidth: 860 }}>
       <div className="wizard-header">
         <h1>Nueva transformación</h1>
-        <p>Sube la licitación en Excel y elige el formato del mandante al que transformarla.</p>
+        <p>Sube la licitación, elige la empresa y su formato destino.</p>
       </div>
 
       <div className="stepper">
@@ -105,31 +125,48 @@ export default function TransformarPage() {
 
         <div className={`slot destino ${plantillaId ? "lleno" : ""}`}>
           <p className="slot-label">Formato destino</p>
+
+          {/* Paso A: elegir empresa/mandante */}
           <div className="campo">
-            <label>Plantilla del mandante</label>
+            <label>Empresa / mandante</label>
+            <select className="select-plantilla" value={empresa}
+              onChange={(e) => cambiarEmpresa(e.target.value)}>
+              <option value="">Todas las empresas</option>
+              {empresas.map((m) => {
+                const n = plantillas?.filter((p) => p.mandante === m).length ?? 0;
+                return <option key={m} value={m}>{m} ({n})</option>;
+              })}
+              {plantillas?.some((p) => !p.mandante) && (
+                <option value="__sin__">Sin mandante</option>
+              )}
+            </select>
+          </div>
+
+          {/* Paso B: elegir plantilla (filtrada por empresa) */}
+          <div className="campo">
+            <label>Plantilla</label>
             {cargandoPlantillas ? (
               <p className="drop-sub">Cargando plantillas…</p>
-            ) : plantillas && plantillas.length > 0 ? (
+            ) : plantillasFiltradas.length > 0 ? (
               <select className="select-plantilla" value={plantillaId}
                 onChange={(e) => setPlantillaId(e.target.value)}>
                 <option value="">Elige una plantilla…</option>
-                {plantillas.map((p) => (
+                {plantillasFiltradas.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.nombre}{p.mandante ? ` · ${p.mandante}` : ""}
+                    {p.nombre}{!empresa && p.mandante ? ` · ${p.mandante}` : ""}
                   </option>
                 ))}
               </select>
             ) : (
               <div className="error-caja">
                 <i className="ti ti-info-circle" />
-                <span>No hay plantillas. Crea una primero desde el admin.</span>
+                <span>
+                  {empresa
+                    ? "Esta empresa no tiene plantillas. Elige otra o créala."
+                    : "No hay plantillas. Créala en la sección Plantillas."}
+                </span>
               </div>
             )}
-          </div>
-          <div className="campo">
-            <label>Mandante (opcional)</label>
-            <input type="text" placeholder="Ej. Codelco, MOP…"
-              value={mandante} onChange={(e) => setMandante(e.target.value)} />
           </div>
         </div>
       </div>
@@ -137,7 +174,7 @@ export default function TransformarPage() {
       <div className="acciones">
         <span className="acciones-info">
           {!archivo && "Sube un archivo para empezar."}
-          {archivo && !plantillaId && "Ahora elige la plantilla destino."}
+          {archivo && !plantillaId && "Elige la empresa y su plantilla."}
           {archivo && plantillaId && "Todo listo para transformar."}
         </span>
         <button className="btn btn-primary btn-lg" disabled={!listo} onClick={transformar}

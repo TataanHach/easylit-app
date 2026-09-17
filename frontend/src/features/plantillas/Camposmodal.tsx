@@ -1,15 +1,17 @@
 /**
- * Editor de campos de una plantilla.
+ * Editor de campos de una plantilla, ORGANIZADO POR HOJAS.
  *
- * Permite añadir, editar y quitar los campos que definen qué datos espera la
- * plantilla, dónde escribirlos (etiqueta de búsqueda) y con qué FORMATO numérico
- * (pesos, porcentaje, UF...). Sin campos, una plantilla no puede mapear ni
- * generar bien.
+ * Arriba muestra las hojas del Excel (pestañas). Al elegir una hoja, se ven y
+ * editan solo los campos de esa hoja. Cada campo nuevo se asocia a la hoja
+ * activa (hoja_destino), y al generar el documento se escribe en esa hoja.
  *
- * Guarda cada cambio contra el backend inmediatamente (crear/editar/borrar).
+ * Si el Excel tiene una sola hoja (o no se pudieron leer), funciona como antes:
+ * una sola lista, sin pestañas.
+ *
+ * Guarda cada cambio contra el backend inmediatamente.
  */
 import { useEffect, useState } from "react";
-import { campoService } from "./plantillaService";
+import { campoService, plantillaService } from "./plantillaService";
 import type { Plantilla } from "@/types";
 
 const TIPOS = [
@@ -20,7 +22,6 @@ const TIPOS = [
   { v: "UNIDAD", t: "Unidad" },
 ];
 
-// Opciones de formato numérico. Coinciden con las del modelo en el backend.
 const FORMATOS = [
   { v: "NINGUNO", t: "Sin formato" },
   { v: "ENTERO", t: "Número entero" },
@@ -35,21 +36,42 @@ interface Props { plantilla: Plantilla; onCerrar: () => void; }
 
 export default function CamposModal({ plantilla, onCerrar }: Props) {
   const [campos, setCampos] = useState<any[]>([]);
+  const [hojas, setHojas] = useState<string[]>([]);
+  const [hojaActiva, setHojaActiva] = useState<string>("");
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
-    campoService.listar(plantilla.id)
-      .then((d) => setCampos(d))
+    // Cargar campos y hojas en paralelo.
+    Promise.all([
+      campoService.listar(plantilla.id),
+      plantillaService.hojas(plantilla.id).catch(() => ({ hojas: [] })),
+    ])
+      .then(([listaCampos, resp]) => {
+        setCampos(listaCampos);
+        const hs: string[] = resp?.hojas ?? [];
+        setHojas(hs);
+        // Hoja activa inicial: la primera del Excel, o "" si no hay hojas.
+        setHojaActiva(hs.length > 0 ? hs[0] : "");
+      })
       .finally(() => setCargando(false));
   }, [plantilla.id]);
+
+  // Campos de la hoja activa. Si no hay hojas (Excel de 1 hoja o ilegible),
+  // mostramos todos (comportamiento antiguo).
+  const hayHojas = hojas.length > 1;
+  const camposVisibles = hayHojas
+    ? campos.filter((c) => (c.hoja_destino || "") === hojaActiva)
+    : campos;
 
   async function agregar() {
     setGuardando(true);
     try {
       const nuevo = await campoService.crear({
         plantilla: plantilla.id, nombre: "Nuevo_Campo", tipo: "TEXTO",
-        etiqueta_busqueda: "", orden: campos.length,
+        etiqueta_busqueda: "", orden: camposVisibles.length,
+        // Asociar el campo a la hoja activa (si hay hojas).
+        hoja_destino: hayHojas ? hojaActiva : "",
       });
       setCampos([...campos, nuevo]);
     } finally { setGuardando(false); }
@@ -65,8 +87,10 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
     await campoService.eliminar(id);
   }
 
-  // ¿El campo es numérico? Solo entonces tiene sentido elegir formato.
   const esNumerico = (tipo: string) => tipo === "NUMERO" || tipo === "MONEDA";
+
+  // Cuántos campos tiene cada hoja, para mostrarlo en las pestañas.
+  const contarHoja = (h: string) => campos.filter((c) => (c.hoja_destino || "") === h).length;
 
   return (
     <div className="modal-overlay" onClick={onCerrar}>
@@ -79,13 +103,29 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
           <p className="campos-hint">
             Cada campo es un dato que la plantilla espera. La <strong>etiqueta de búsqueda</strong> es
             el texto de la casilla en tu formulario (ej. "RUT"). El <strong>formato</strong> aplica solo
-            a campos numéricos o de moneda (pesos, porcentaje, UF). Los cambios se guardan al momento.
+            a campos numéricos o de moneda. Los cambios se guardan al momento.
           </p>
 
           {cargando ? (
             <p style={{ color: "var(--text-3)" }}>Cargando…</p>
           ) : (
             <>
+              {/* Pestañas por hoja (solo si el Excel tiene varias hojas) */}
+              {hayHojas && (
+                <div className="hoja-tabs">
+                  {hojas.map((h) => (
+                    <button
+                      key={h}
+                      className={`hoja-tab ${h === hojaActiva ? "activa" : ""}`}
+                      onClick={() => setHojaActiva(h)}
+                    >
+                      <i className="ti ti-file-spreadsheet" /> {h}
+                      <span className="hoja-tab-count">{contarHoja(h)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <div className="campo-fila head">
                 <span>Nombre</span>
                 <span>Tipo</span>
@@ -93,7 +133,7 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
                 <span>Etiqueta de búsqueda</span>
                 <span></span>
               </div>
-              {campos.map((c) => (
+              {camposVisibles.map((c) => (
                 <div className="campo-fila" key={c.id}>
                   <input value={c.nombre}
                     onChange={(e) => setCampos(campos.map((x) => x.id === c.id ? { ...x, nombre: e.target.value } : x))}
@@ -103,7 +143,6 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
                     {TIPOS.map((t) => <option key={t.v} value={t.v}>{t.t}</option>)}
                   </select>
 
-                  {/* Formato: solo activo si el campo es numérico o moneda */}
                   <select
                     value={c.formato_numero ?? "NINGUNO"}
                     disabled={!esNumerico(c.tipo)}
@@ -122,13 +161,15 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
                   </button>
                 </div>
               ))}
-              {campos.length === 0 && (
+              {camposVisibles.length === 0 && (
                 <p style={{ color: "var(--text-3)", padding: "16px 0", fontSize: "var(--fs-md)" }}>
-                  Aún no hay campos. Añade el primero abajo.
+                  {hayHojas
+                    ? `La hoja "${hojaActiva}" aún no tiene campos. Añade el primero abajo.`
+                    : "Aún no hay campos. Añade el primero abajo."}
                 </p>
               )}
               <button className="add-campo" onClick={agregar} disabled={guardando}>
-                <i className="ti ti-plus" /> Añadir campo
+                <i className="ti ti-plus" /> Añadir campo{hayHojas ? ` a "${hojaActiva}"` : ""}
               </button>
             </>
           )}

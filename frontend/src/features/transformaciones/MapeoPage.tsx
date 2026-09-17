@@ -1,11 +1,11 @@
 /**
  * Editor de mapeo (paso 3-4 en una pantalla).
  *
- * Carga el detalle de una transformación, muestra cada correspondencia
- * origen→destino que propuso la IA con su confianza, permite corregir el campo
- * destino, y ofrece aprobar → generar → descargar.
+ * Muestra cada correspondencia origen→destino que propuso la IA. Ahora, al
+ * corregir el campo destino en el desplegable, el cambio SE GUARDA en el backend
+ * al instante (antes no se guardaba y las correcciones se perdían).
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { plantillaService } from "@/features/plantillas/plantillaService";
@@ -17,6 +17,9 @@ export default function MapeoPage() {
   const navigate = useNavigate();
   const [generando, setGenerando] = useState(false);
   const [generado, setGenerado] = useState(false);
+  // Estado local de los mapeos, para reflejar los cambios al instante.
+  const [mapeosLocal, setMapeosLocal] = useState<any[]>([]);
+  const [guardandoId, setGuardandoId] = useState<string | null>(null);
 
   const { data: t, isLoading, refetch } = useQuery({
     queryKey: ["transformacion", id],
@@ -34,6 +37,27 @@ export default function MapeoPage() {
     queryFn: () => plantillaService.detalle(t!.plantilla),
     enabled: !!t?.plantilla,
   });
+
+  // Cuando llegan los mapeos del backend, copiarlos al estado local.
+  useEffect(() => {
+    if (t?.mapeos) setMapeosLocal(t.mapeos);
+  }, [t?.mapeos]);
+
+  // Guardar el cambio de destino de un mapeo.
+  async function cambiarDestino(mapeoId: string, destinoCampoId: string) {
+    // Actualizar en pantalla al instante.
+    setMapeosLocal((prev) =>
+      prev.map((m) => (m.id === mapeoId ? { ...m, destino_campo: destinoCampoId || null } : m))
+    );
+    setGuardandoId(mapeoId);
+    try {
+      await transformacionService.editarMapeo(mapeoId, destinoCampoId || null);
+    } catch {
+      alert("No se pudo guardar el cambio. Intenta de nuevo.");
+    } finally {
+      setGuardandoId(null);
+    }
+  }
 
   async function generar() {
     if (!id) return;
@@ -65,12 +89,10 @@ export default function MapeoPage() {
     return <div style={{ padding: 40, textAlign: "center" }}>No se encontró la transformación.</div>;
   }
 
-  // ── Pantalla "la IA está trabajando" con pasos animados ──
   if (t.estado === "BORRADOR" || t.estado === "LIMPIEZA" || t.estado === "MAPEO_PROPUESTO") {
     return <ProcesandoIA estado={t.estado} nombre={t.nombre_origen} />;
   }
 
-  // Error de procesamiento.
   if (t.estado === "ERROR") {
     return (
       <div style={{ maxWidth: 640 }}>
@@ -90,7 +112,6 @@ export default function MapeoPage() {
     );
   }
 
-  // Éxito tras generar.
   if (generado || t.estado === "GENERADO") {
     return (
       <div style={{ maxWidth: 640 }}>
@@ -112,14 +133,14 @@ export default function MapeoPage() {
     );
   }
 
-  const mapeos = t.mapeos ?? [];
+  const mapeos = mapeosLocal;
   const campos = plantilla?.campos ?? [];
 
   return (
     <div style={{ maxWidth: 980 }}>
       <div className="mapeo-header">
         <h1>Revisar mapeo</h1>
-        <p>{t.nombre_origen} → {t.plantilla_nombre}. Revisa lo que propuso la IA y genera el documento.</p>
+        <p>{t.nombre_origen} → {t.plantilla_nombre}. Corrige lo que haga falta; los cambios se guardan solos.</p>
       </div>
 
       <div className="mapeo-panel">
@@ -128,7 +149,7 @@ export default function MapeoPage() {
             <span className="mapeo-ia-icon"><i className="ti ti-brain" /></span>
             <div>
               <h2>Mapeo propuesto</h2>
-              <p>Nada se aplica hasta que generes el documento.</p>
+              <p>Puedes corregir cada destino. Se guarda al instante.</p>
             </div>
           </div>
           <span className="privacy-tag"><i className="ti ti-lock" /> Montos ocultos a la IA</span>
@@ -147,16 +168,25 @@ export default function MapeoPage() {
                 <span className="mapeo-flecha"><i className="ti ti-arrow-right" /></span>
                 <select
                   className={`mapeo-select ${!m.destino_campo ? "sin-asignar" : ""}`}
-                  defaultValue={m.destino_campo ?? ""}
+                  value={m.destino_campo ?? ""}
+                  onChange={(e) => cambiarDestino(m.id, e.target.value)}
                 >
                   <option value="">— Sin asignar —</option>
                   {campos.map((c) => (
-                    <option key={c.id} value={c.id}>{c.nombre}</option>
+                    <option key={c.id} value={c.id}>
+                      {c.hoja_destino ? `[${c.hoja_destino}] ` : ""}{c.nombre}
+                    </option>
                   ))}
                 </select>
                 <span className={`mapeo-conf ${clase}`}>
-                  <span className="mapeo-conf-bar"><span className="mapeo-conf-fill" style={{ width: `${m.confianza}%` }} /></span>
-                  <span className="mapeo-conf-num">{m.confianza}%</span>
+                  {guardandoId === m.id ? (
+                    <i className="ti ti-loader-2" style={{ animation: "girar 1s linear infinite", color: "var(--brand-500)" }} />
+                  ) : (
+                    <>
+                      <span className="mapeo-conf-bar"><span className="mapeo-conf-fill" style={{ width: `${m.confianza}%` }} /></span>
+                      <span className="mapeo-conf-num">{m.confianza}%</span>
+                    </>
+                  )}
                 </span>
               </div>
             );
@@ -166,8 +196,8 @@ export default function MapeoPage() {
 
       <div className="mapeo-acciones">
         <span className="mapeo-acciones-info">
-          <i className="ti ti-info-circle" style={{ verticalAlign: "-2px" }} /> {mapeos.length} campos mapeados.
-          Al generar, se rellenará la plantilla con estos datos.
+          <i className="ti ti-info-circle" style={{ verticalAlign: "-2px" }} /> {mapeos.length} campos.
+          Corrige los que estén mal y luego genera.
         </span>
         <div style={{ display: "flex", gap: 10 }}>
           <button className="btn btn-lg" onClick={() => navigate("/historial")}>Volver</button>
@@ -180,25 +210,17 @@ export default function MapeoPage() {
   );
 }
 
-/**
- * Pantalla animada de procesamiento. Los pasos se van marcando según el estado
- * real que reporta el backend:
- *   BORRADOR        -> empezando (paso 1 activo)
- *   LIMPIEZA        -> limpieza hecha, IA trabajando (paso 2 activo)
- *   MAPEO_PROPUESTO -> mapeo casi listo (paso 3 activo)
- */
 function ProcesandoIA({ estado, nombre }: { estado: string; nombre: string }) {
-  // A qué paso corresponde cada estado (0-indexed): cuáles están hechos y cuál activo.
   const pasoActual =
     estado === "BORRADOR" ? 0 :
     estado === "LIMPIEZA" ? 1 :
     estado === "MAPEO_PROPUESTO" ? 2 : 3;
 
   const pasos = [
-    { icono: "ti ti-file-search",    titulo: "Leyendo el documento",        desc: "Extrayendo las columnas y datos del Excel" },
-    { icono: "ti ti-wash",           titulo: "Limpiando los datos",         desc: "Duplicados, unidades y formatos numéricos" },
-    { icono: "ti ti-brain",          titulo: "La IA está trabajando",       desc: "Gemini analiza y propone el mapeo de campos", ia: true },
-    { icono: "ti ti-checks",         titulo: "Preparando la revisión",      desc: "Dejando todo listo para que revises" },
+    { icono: "ti ti-file-search", titulo: "Leyendo el documento", desc: "Extrayendo las columnas y datos del Excel" },
+    { icono: "ti ti-wash", titulo: "Limpiando los datos", desc: "Duplicados, unidades y formatos numéricos" },
+    { icono: "ti ti-brain", titulo: "La IA está trabajando", desc: "Gemini analiza y propone el mapeo de campos", ia: true },
+    { icono: "ti ti-checks", titulo: "Preparando la revisión", desc: "Dejando todo listo para que revises" },
   ];
 
   return (
@@ -207,12 +229,8 @@ function ProcesandoIA({ estado, nombre }: { estado: string; nombre: string }) {
         <h1>Procesando tu licitación</h1>
         <p>{nombre}</p>
       </div>
-
       <div className="ia-proceso">
-        <div className="ia-proceso-orbe">
-          <i className="ti ti-sparkles" />
-        </div>
-
+        <div className="ia-proceso-orbe"><i className="ti ti-sparkles" /></div>
         <div className="ia-pasos">
           {pasos.map((p, i) => {
             const hecho = i < pasoActual;
@@ -234,7 +252,6 @@ function ProcesandoIA({ estado, nombre }: { estado: string; nombre: string }) {
             );
           })}
         </div>
-
         <p className="ia-nota">
           <i className="ti ti-info-circle" /> Puedes ir a otras secciones; la transformación seguirá en tu historial.
         </p>

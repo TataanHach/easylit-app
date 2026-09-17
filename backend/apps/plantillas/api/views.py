@@ -5,6 +5,8 @@ Mismo aislamiento por organización que las transformaciones. La galería usa el
 serializer ligero; el detalle trae los campos anidados para el editor de mapeo.
 """
 from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
 
 from apps.plantillas.models import Plantilla, UnidadCanonica
 
@@ -17,9 +19,10 @@ from .serializers import (
 
 class PlantillaViewSet(viewsets.ModelViewSet):
     """
-    GET    /api/plantillas/          galería (ligera)
-    POST   /api/plantillas/          crear
-    GET    /api/plantillas/{id}/     detalle con campos
+    GET    /api/plantillas/            galería (ligera)
+    POST   /api/plantillas/            crear
+    GET    /api/plantillas/{id}/       detalle con campos
+    GET    /api/plantillas/{id}/hojas/ hojas del Excel de la plantilla
     """
 
     def get_queryset(self):
@@ -45,6 +48,27 @@ class PlantillaViewSet(viewsets.ModelViewSet):
             organizacion=self.request.user.organizacion,
             creada_por=self.request.user,
         )
+
+    @action(detail=True, methods=["get"])
+    def hojas(self, request, pk=None):
+        """
+        Devuelve la lista de hojas del Excel de la plantilla, para que el editor
+        de campos pueda asignar cada campo a su hoja. Ej: ["Identificación",
+        "Experiencia", "Oferta"].
+
+        Si el archivo no es un Excel legible, devuelve lista vacía (no rompe: el
+        editor simplemente no mostrará hojas y el campo irá a la hoja activa).
+        """
+        plantilla = self.get_object()
+        hojas = []
+        try:
+            from openpyxl import load_workbook
+            wb = load_workbook(plantilla.archivo.path, read_only=True)
+            hojas = wb.sheetnames
+            wb.close()
+        except Exception:
+            hojas = []
+        return Response({"hojas": hojas})
 
 
 class UnidadCanonicaViewSet(viewsets.ModelViewSet):

@@ -4,14 +4,7 @@ Vistas de transformaciones.
 Dos reglas de oro que se aplican en TODAS las consultas:
 
   1. Aislamiento por organización: un usuario solo ve datos de SU organización.
-     Nunca se devuelve nada de otra empresa. Esto se hace en get_queryset(),
-     el único lugar por el que pasan todas las lecturas.
-
-  2. Alcance por autor: el parámetro ?alcance= filtra entre lo propio, lo del
-     equipo o todo, que es el filtro "Mías / De mi equipo / Todas" del historial.
-
-Aquí NO va la lógica de procesamiento (limpieza, IA, validación). Eso vive en el
-worker (bloque 4). Estas vistas solo crean, listan, muestran y disparan.
+  2. Alcance por autor: el parámetro ?alcance= filtra Mías / Equipo / Todas.
 """
 from django.db.models import Q
 from rest_framework import status, viewsets
@@ -19,10 +12,11 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
-from apps.transformaciones.models import Bitacora, Transformacion
+from apps.transformaciones.models import Bitacora, MapeoCampo, Transformacion
 
 from .serializers import (
     CrearTransformacionSerializer,
+    MapeoCampoSerializer,
     TransformacionDetalleSerializer,
     TransformacionListaSerializer,
 )
@@ -31,34 +25,21 @@ from .serializers import (
 class TransformacionViewSet(viewsets.ModelViewSet):
     """
     CRUD de transformaciones + acciones del flujo.
-
-    Rutas que genera automáticamente:
-      GET    /api/transformaciones/           lista (con ?alcance=)
-      POST   /api/transformaciones/           crear (subir Excel + plantilla)
-      GET    /api/transformaciones/{id}/      detalle
-      DELETE /api/transformaciones/{id}/      borrar
-      POST   /api/transformaciones/{id}/aprobar/    aprobar mapeo
     """
 
     def get_queryset(self):
         usuario = self.request.user
-
-        # Superadmin ve todo; el resto solo su organización. Este filtro es la
-        # frontera de seguridad entre empresas.
         if usuario.es_superadmin:
             qs = Transformacion.objects.all()
         else:
             qs = Transformacion.objects.filter(organizacion=usuario.organizacion)
 
-        # Alcance: mine (por defecto) / team / all.
         alcance = self.request.query_params.get("alcance", "mine")
         if alcance == "mine":
             qs = qs.filter(autor=usuario)
         elif alcance == "team":
             qs = qs.exclude(autor=usuario)
-        # "all" no filtra más: todo lo de la organización.
 
-        # Filtro opcional por estado, para las pestañas del historial.
         estado = self.request.query_params.get("estado")
         if estado:
             qs = qs.filter(estado=estado)
@@ -73,14 +54,11 @@ class TransformacionViewSet(viewsets.ModelViewSet):
         return TransformacionListaSerializer
 
     def perform_create(self, serializer):
-        # El autor y la organización se fijan desde el usuario autenticado,
-        # nunca desde la petición. Así nadie crea a nombre de otro.
         usuario = self.request.user
         transformacion = serializer.save(
             autor=usuario,
             organizacion=usuario.organizacion,
         )
-        # Registrar la carga en la bitácora.
         Bitacora.objects.create(
             transformacion=transformacion,
             evento=Bitacora.Evento.CARGA,
@@ -90,20 +68,13 @@ class TransformacionViewSet(viewsets.ModelViewSet):
                 "plantilla": transformacion.plantilla.nombre,
             },
         )
-        # Disparar el procesamiento asíncrono (limpieza + IA) en el worker.
-        # Si Celery/Redis no están corriendo (p. ej. en desarrollo local sin
-        # worker), .delay() falla silenciosamente; para pruebas se puede llamar
-        # a la tarea de forma síncrona. En producción, el worker la toma.
         try:
             from apps.transformaciones.tasks import procesar_transformacion
             procesar_transformacion.delay(str(transformacion.id))
         except Exception:
-            # Sin broker disponible no interrumpimos la creación; el estado
-            # queda en BORRADOR y se puede reprocesar.
             pass
 
     def perform_destroy(self, instance):
-        # Solo el autor o un gerente/superadmin pueden borrar.
         usuario = self.request.user
         if instance.autor_id != usuario.id and not usuario.puede_gestionar_usuarios:
             raise PermissionDenied("No puedes borrar transformaciones de otra persona.")
@@ -111,16 +82,10 @@ class TransformacionViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def aprobar(self, request, pk=None):
-        """
-        Aprueba el mapeo propuesto. Marca la transformación como APROBADA y deja
-        constancia en la bitácora de quién aprobó. La generación del archivo la
-        hará el worker (bloque 4); aquí solo se registra la decisión humana.
-        """
         transformacion = self.get_object()
         from apps.transformaciones.models import EstadoTransformacion
         transformacion.estado = EstadoTransformacion.APROBADO
         transformacion.save(update_fields=["estado"])
-
         Bitacora.objects.create(
             transformacion=transformacion,
             evento=Bitacora.Evento.APROBACION,
@@ -132,31 +97,19 @@ class TransformacionViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def generar(self, request, pk=None):
-        """
-        Genera el documento final de forma síncrona y devuelve el resultado.
-
-        Lo hacemos síncrono (no en el worker) porque la generación es rápida
-        (escribir celdas en un Excel) y así el frontend recibe de inmediato el
-        estado GENERADO y puede ofrecer la descarga, sin tener que hacer polling.
-        """
         from apps.transformaciones.models import EstadoTransformacion
         from apps.transformaciones.tasks import generar_documento_tarea
 
         transformacion = self.get_object()
         transformacion.estado = EstadoTransformacion.APROBADO
         transformacion.save(update_fields=["estado"])
-
-        # Ejecutar directamente (no .delay()): la generación es corta y así
-        # devolvemos el resultado real en la misma respuesta.
         generar_documento_tarea(str(transformacion.id))
-
         transformacion.refresh_from_db()
         serializer = self.get_serializer(transformacion)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["get"])
     def descargar(self, request, pk=None):
-        """Devuelve el archivo generado para descarga."""
         from django.http import FileResponse, Http404
 
         transformacion = self.get_object()
@@ -166,4 +119,43 @@ class TransformacionViewSet(viewsets.ModelViewSet):
             transformacion.archivo_generado.open("rb"),
             as_attachment=True,
             filename=f"{transformacion.nombre_origen}_transformado.xlsx",
+        )
+
+
+class MapeoCampoViewSet(viewsets.ModelViewSet):
+    """
+    Editar los mapeos de una transformación (correcciones humanas).
+      PATCH /api/mapeos/{id}/   cambiar el destino_campo de un mapeo
+
+    Con esto, cuando el usuario corrige a qué campo va una columna en el editor
+    de mapeo, el cambio se guarda y se usa al generar el documento.
+    """
+    serializer_class = MapeoCampoSerializer
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def get_queryset(self):
+        # Solo mapeos de transformaciones de la organización del usuario.
+        usuario = self.request.user
+        if usuario.es_superadmin:
+            qs = MapeoCampo.objects.all()
+        else:
+            qs = MapeoCampo.objects.filter(
+                transformacion__organizacion=usuario.organizacion
+            )
+        transformacion_id = self.request.query_params.get("transformacion")
+        if transformacion_id:
+            qs = qs.filter(transformacion_id=transformacion_id)
+        return qs.select_related("destino_campo", "transformacion")
+
+    def perform_update(self, serializer):
+        # Al corregir a mano, marcar que fue ajuste humano y dejar constancia.
+        mapeo = serializer.save(ajustado_por_humano=True)
+        Bitacora.objects.create(
+            transformacion=mapeo.transformacion,
+            evento=Bitacora.Evento.AJUSTE_HUMANO,
+            autor=self.request.user,
+            detalle={
+                "columna_origen": mapeo.origen_columna,
+                "nuevo_destino": mapeo.destino_campo.nombre if mapeo.destino_campo else None,
+            },
         )

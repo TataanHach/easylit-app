@@ -1,60 +1,44 @@
 """
 Servicio de limpieza de datos (determinista, sin IA).
 
-Lee el Excel origen y lo normaliza: quita espacios, arregla números con formato
-chileno (1.240,50 → 1240.50), normaliza unidades contra el catálogo canónico y
-elimina duplicados. Devuelve un DataFrame limpio y un resumen con cifras reales
-de lo que hizo, para mostrarle al usuario "7 duplicados eliminados", no un vago
-"limpieza completada".
+Lee el Excel origen y lo normaliza. Detecta el formato automáticamente:
+  - TABLA: encabezados arriba, datos en filas.
+  - VERTICAL: formulario "etiqueta | dato".
 
-Todo aquí es reproducible: mismos datos de entrada → mismo resultado. Eso es lo
-que hace que la transformación sea auditable.
+Y puede leer UNA hoja o TODAS las hojas del origen combinándolas (multi-hoja),
+para orígenes con la información repartida en varias pestañas.
+
+Todo aquí es reproducible: mismos datos de entrada → mismo resultado.
 """
 import re
 from decimal import Decimal, InvalidOperation
 
 import pandas as pd
+from openpyxl import load_workbook
 
 
 def _a_numero(valor):
-    """
-    Convierte un valor de celda a número, entendiendo el formato chileno:
-    punto como separador de miles y coma como decimal (1.240,50 → 1240.50).
-    Devuelve None si no se puede interpretar.
-    """
+    """Convierte a número entendiendo formato chileno (1.240,50 → 1240.50)."""
     if valor is None:
         return None
     if isinstance(valor, (int, float)):
         return float(valor)
-
     s = str(valor).strip()
     if not s:
         return None
-
-    # Quitar símbolos de moneda y espacios.
     s = re.sub(r"[^\d.,\-]", "", s)
     if not s:
         return None
-
-    # Formato chileno: si hay punto y coma, el punto es miles y la coma decimal.
     if "." in s and "," in s:
         s = s.replace(".", "").replace(",", ".")
-    # Solo coma: es el decimal.
     elif "," in s:
         s = s.replace(",", ".")
-    # Solo puntos: hay que decidir si son miles o decimal.
     elif "." in s:
         partes = s.split(".")
-        # Si hay más de un punto (1.240.000), todos son separadores de miles.
         if len(partes) > 2:
             s = s.replace(".", "")
-        # Un solo punto: si lo que sigue son exactamente 3 dígitos, es separador
-        # de miles chileno (42.900 = 42900). Si son 1, 2 o 4+, es decimal (9.5).
         elif len(partes[1]) == 3:
             s = s.replace(".", "")
-        # else: se deja como decimal (9.500 no ocurre en la práctica chilena;
-        # los decimales llevan coma). El punto con 1-2 dígitos se respeta.
-
     try:
         return float(s)
     except ValueError:
@@ -62,15 +46,10 @@ def _a_numero(valor):
 
 
 def normalizar_unidad(texto, catalogo):
-    """
-    Dado el texto de una unidad ('M3', 'mt2', 'metros cúbicos') y el catálogo de
-    unidades canónicas (lista de dicts con 'simbolo' y 'alias'), devuelve el
-    símbolo canónico o None si no se reconoce.
-    """
+    """Resuelve el texto de una unidad ('M3', 'mt2') a su símbolo canónico."""
     if not texto:
         return None
     t = str(texto).strip().lower()
-
     for unidad in catalogo:
         if t == unidad["simbolo"].lower():
             return unidad["simbolo"]
@@ -79,14 +58,98 @@ def normalizar_unidad(texto, catalogo):
     return None
 
 
-def limpiar_excel(ruta_archivo, opciones, catalogo_unidades=None):
+# ─────────────────────────────────────────────────────────────
+# DETECCIÓN Y LECTURA DE FORMATO (tabla vs vertical, 1 hoja o todas)
+# ─────────────────────────────────────────────────────────────
+
+def _texto(c):
+    return "" if c is None else str(c).strip()
+
+
+def _detectar_formato(ws):
+    """Decide si una hoja es TABLA o VERTICAL."""
+    filas = [f for f in ws.iter_rows(values_only=True) if any(_texto(c) for c in f)]
+    if not filas:
+        return "vacia"
+    ancho = max(sum(1 for c in f if _texto(c)) for f in filas)
+    filas_par = sum(1 for f in filas if len([c for c in f if _texto(c)]) == 2)
+    if ancho <= 3 and filas_par >= max(3, len(filas) * 0.6):
+        return "vertical"
+    return "tabla"
+
+
+def _leer_vertical(ws):
+    """Convierte una hoja vertical (etiqueta | dato) en un DataFrame de 1 fila."""
+    datos = {}
+    for fila in ws.iter_rows(values_only=True):
+        celdas = [_texto(c) for c in fila if _texto(c)]
+        if len(celdas) >= 2:
+            etiqueta = celdas[0].rstrip(":").strip()
+            valor = celdas[1]
+            if etiqueta and etiqueta not in datos:
+                datos[etiqueta] = valor
+    return pd.DataFrame([datos]) if datos else pd.DataFrame()
+
+
+def _leer_una_hoja(ruta_archivo, hoja):
+    """Lee una hoja concreta detectando su formato. Devuelve (df, tipo)."""
+    try:
+        wb = load_workbook(ruta_archivo, data_only=True)
+        ws = wb[hoja] if (hoja and hoja in wb.sheetnames) else wb.active
+        tipo = _detectar_formato(ws)
+        if tipo == "vertical":
+            df = _leer_vertical(ws)
+            wb.close()
+            if not df.empty:
+                return df, "vertical"
+        wb.close()
+    except Exception:
+        pass
+    df = pd.read_excel(ruta_archivo, sheet_name=hoja if hoja else 0, dtype=str)
+    return df, "tabla"
+
+
+def _leer_todas_las_hojas(ruta_archivo):
     """
-    Lee y limpia el Excel. `opciones` es un dict que dice qué operaciones aplicar
-    (duplicados, espacios, unidades, etc.). Devuelve (dataframe_limpio, resumen).
+    Lee TODAS las hojas y combina sus campos en un DataFrame de una fila.
+    Si dos hojas tienen un campo con el mismo nombre, la segunda se prefija con
+    el nombre de la hoja para no pisar a la primera.
+    Solo tiene sentido cuando las hojas son verticales (formularios); si alguna
+    es una tabla de varias filas, toma su primera fila.
+    """
+    wb = load_workbook(ruta_archivo, read_only=True)
+    nombres = wb.sheetnames
+    wb.close()
+
+    combinado = {}
+    for hoja in nombres:
+        df, _tipo = _leer_una_hoja(ruta_archivo, hoja)
+        if df.empty:
+            continue
+        fila = df.iloc[0]
+        for col in df.columns:
+            clave = str(col)
+            if clave in combinado:
+                clave = f"{hoja} · {col}"
+            combinado[clave] = fila[col]
+
+    return pd.DataFrame([combinado]) if combinado else pd.DataFrame()
+
+
+def limpiar_excel(ruta_archivo, opciones, catalogo_unidades=None, hoja=None,
+                  todas_las_hojas=False):
+    """
+    Lee y limpia el Excel.
+      - Si todas_las_hojas=True: combina los campos de TODAS las hojas.
+      - Si hoja se indica: lee esa hoja.
+      - Si no: lee la hoja activa.
+    Detecta tabla vs vertical automáticamente. Devuelve (dataframe, resumen).
     """
     catalogo_unidades = catalogo_unidades or []
     resumen = {
         "filas_originales": 0,
+        "formato_detectado": "tabla",
+        "hojas_leidas": 1,
         "duplicados_eliminados": 0,
         "espacios_corregidos": 0,
         "unidades_normalizadas": 0,
@@ -94,10 +157,25 @@ def limpiar_excel(ruta_archivo, opciones, catalogo_unidades=None):
         "celdas_sin_interpretar": 0,
     }
 
-    df = pd.read_excel(ruta_archivo, dtype=str)
+    if todas_las_hojas:
+        df = _leer_todas_las_hojas(ruta_archivo)
+        resumen["formato_detectado"] = "multi-hoja"
+        try:
+            wb = load_workbook(ruta_archivo, read_only=True)
+            resumen["hojas_leidas"] = len(wb.sheetnames)
+            wb.close()
+        except Exception:
+            pass
+    else:
+        df, tipo = _leer_una_hoja(ruta_archivo, hoja=hoja)
+        resumen["formato_detectado"] = tipo
+
     resumen["filas_originales"] = len(df)
 
-    # 1. Espacios sobrantes en encabezados y celdas de texto.
+    if df.empty:
+        return df, resumen
+
+    # 1. Espacios sobrantes.
     if opciones.get("espacios", True):
         df.columns = [str(c).strip() for c in df.columns]
         for col in df.select_dtypes(include="object").columns:
@@ -105,13 +183,13 @@ def limpiar_excel(ruta_archivo, opciones, catalogo_unidades=None):
             df[col] = df[col].apply(lambda x: str(x).strip() if pd.notna(x) else x)
             resumen["espacios_corregidos"] += int((antes != df[col]).sum())
 
-    # 2. Duplicados: filas idénticas.
+    # 2. Duplicados.
     if opciones.get("duplicados", True):
         n_antes = len(df)
         df = df.drop_duplicates().reset_index(drop=True)
         resumen["duplicados_eliminados"] = n_antes - len(df)
 
-    # 3. Filas completamente vacías.
+    # 3. Filas vacías.
     if opciones.get("vacias", False):
         df = df.dropna(how="all").reset_index(drop=True)
 
@@ -119,10 +197,7 @@ def limpiar_excel(ruta_archivo, opciones, catalogo_unidades=None):
 
 
 def detectar_columnas_numericas(df):
-    """
-    Indica qué columnas parecen numéricas (cantidad, precio, total), para saber
-    cuáles anonimizar antes de enviar a la IA y cuáles convertir a número.
-    """
+    """Indica qué columnas parecen numéricas."""
     columnas = []
     for col in df.columns:
         muestra = df[col].dropna().head(20)

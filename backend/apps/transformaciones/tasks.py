@@ -29,7 +29,8 @@ def procesar_transformacion(transformacion_id):
     try:
         # 1. Limpieza determinista con pandas.
         df, resumen = limpieza.limpiar_excel(
-            t.archivo_origen.path, t.opciones_limpieza or {}
+            t.archivo_origen.path, t.opciones_limpieza or {},
+            todas_las_hojas=True,
         )
         columnas_num = limpieza.detectar_columnas_numericas(df)
         t.resultado_limpieza = resumen
@@ -134,7 +135,10 @@ def generar_documento_tarea(transformacion_id):
 
     try:
         # Leer el origen ya limpio para obtener los valores.
-        df, _ = limpieza.limpiar_excel(t.archivo_origen.path, t.opciones_limpieza or {})
+        df, _ = limpieza.limpiar_excel(
+            t.archivo_origen.path, t.opciones_limpieza or {},
+            todas_las_hojas=True,
+        )
         primera_fila = df.iloc[0] if len(df) > 0 else None
 
         # Construir la lista campo→valor a partir de los mapeos aprobados.

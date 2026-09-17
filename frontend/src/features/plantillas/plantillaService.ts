@@ -18,6 +18,10 @@ export const plantillaService = {
     const { data } = await api.get<Plantilla>(`/plantillas/${id}/`);
     return data;
   },
+  async hojas(id: string): Promise<{ hojas: string[] }> {
+      const { data } = await api.get(`/plantillas/${id}/hojas/`);
+      return data;
+    },
 
   /** Crea una plantilla. Incluye el archivo, así que va como multipart. */
   async crear(payload: {
@@ -64,6 +68,7 @@ export interface CampoInput {
   obligatorio?: boolean;
   orden?: number;
   formato_numero?: string;
+  hoja_destino?: string;
 }
 export const campoService = {
   async listar(plantillaId: string) {

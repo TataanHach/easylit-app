@@ -79,4 +79,11 @@ export const transformacionService = {
     });
     return data;
   },
+      /** Cambia el campo destino de un mapeo (corrección humana). */
+  async editarMapeo(mapeoId: string, destinoCampoId: string | null) {
+      const { data } = await api.patch(`/mapeos/${mapeoId}/`, {
+        destino_campo: destinoCampoId,
+      });
+      return data;
+    },
 };

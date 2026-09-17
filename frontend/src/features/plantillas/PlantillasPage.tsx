@@ -1,12 +1,10 @@
 /**
  * Biblioteca de plantillas.
  *
- * Muestra las plantillas como tarjetas y permite crear, editar y eliminar desde
- * la propia app (sin ir al admin de Django). La edición de CAMPOS de la
- * plantilla sigue en el admin por ahora; esto cubre crear/editar/borrar la
- * plantilla en sí.
+ * Muestra las plantillas como tarjetas, con un FILTRO por mandante (empresa),
+ * y permite crear, editar, editar campos y eliminar desde la app.
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { plantillaService } from "./plantillaService";
@@ -27,6 +25,24 @@ export default function PlantillasPage() {
   const [editando, setEditando] = useState<Plantilla | null>(null);
   const [eliminando, setEliminando] = useState<Plantilla | null>(null);
   const [editandoCampos, setEditandoCampos] = useState<Plantilla | null>(null);
+  const [mandanteFiltro, setMandanteFiltro] = useState<string>("");
+
+  // Lista de mandantes únicos, sacada de las plantillas que existen.
+  // Así el desplegable se llena solo, sin configurar nada a mano.
+  const mandantes = useMemo(() => {
+    if (!data) return [];
+    const set = new Set<string>();
+    data.forEach((p) => { if (p.mandante) set.add(p.mandante); });
+    return Array.from(set).sort();
+  }, [data]);
+
+  // Plantillas visibles según el filtro.
+  const visibles = useMemo(() => {
+    if (!data) return [];
+    if (!mandanteFiltro) return data;
+    if (mandanteFiltro === "__sin__") return data.filter((p) => !p.mandante);
+    return data.filter((p) => p.mandante === mandanteFiltro);
+  }, [data, mandanteFiltro]);
 
   function trasGuardar() {
     setModalCrear(false);
@@ -70,18 +86,43 @@ export default function PlantillasPage() {
 
       {data && data.length > 0 && (
         <>
-          <p style={{ fontSize: "var(--fs-md)", color: "var(--text-3)", marginBottom: 16 }}>
-            {data.length} plantilla{data.length !== 1 ? "s" : ""}
-          </p>
-          <div className="pl-grid">
-            {data.map((p) => (
-              <Tarjeta key={p.id} p={p}
-                onUsar={() => navigate("/transformar")}
-                onEditar={() => setEditando(p)}
-                onCampos={() => setEditandoCampos(p)}
-                onEliminar={() => setEliminando(p)} />
-            ))}
+          {/* Filtro por mandante (empresa) */}
+          <div className="pl-filtro">
+            <label>
+              <i className="ti ti-building" /> Empresa / mandante
+            </label>
+            <select value={mandanteFiltro} onChange={(e) => setMandanteFiltro(e.target.value)}>
+              <option value="">Todas ({data.length})</option>
+              {mandantes.map((m) => {
+                const n = data.filter((p) => p.mandante === m).length;
+                return <option key={m} value={m}>{m} ({n})</option>;
+              })}
+              {data.some((p) => !p.mandante) && (
+                <option value="__sin__">Sin mandante ({data.filter((p) => !p.mandante).length})</option>
+              )}
+            </select>
+            <span className="pl-filtro-count">
+              {visibles.length} plantilla{visibles.length !== 1 ? "s" : ""}
+            </span>
           </div>
+
+          {visibles.length === 0 ? (
+            <div className="pl-estado">
+              <i className="ti ti-folder-open" />
+              <h3>Sin plantillas para este mandante</h3>
+              <p>Prueba con otra empresa o crea una nueva.</p>
+            </div>
+          ) : (
+            <div className="pl-grid">
+              {visibles.map((p) => (
+                <Tarjeta key={p.id} p={p}
+                  onUsar={() => navigate("/transformar")}
+                  onEditar={() => setEditando(p)}
+                  onCampos={() => setEditandoCampos(p)}
+                  onEliminar={() => setEliminando(p)} />
+              ))}
+            </div>
+          )}
         </>
       )}
 
