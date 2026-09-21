@@ -4,9 +4,11 @@ Servicio de generación del documento final.
 Toma el archivo Excel de la plantilla (con su formato: colores, celdas amarillas,
 título) y escribe los datos mapeados DENTRO de él, sin romper el diseño.
 
-Además del valor, aplica el FORMATO NUMÉRICO del campo (pesos, porcentaje, etc.),
-convirtiendo el texto a número real cuando corresponde, para que Excel lo trate
-como número y lo muestre con su símbolo.
+Al escribir cada valor, aplica en orden:
+  1. LIMPIEZA determinista (Capa 1, gratis, sin IA): según el tipo del campo,
+     quita espacios, saca el $ de un monto, arregla el guion de un RUT, etc.
+  2. FORMATO numérico del campo (pesos, porcentaje, UF...).
+Convierte el texto a número real cuando corresponde.
 """
 import io
 import re
@@ -17,13 +19,12 @@ from openpyxl.utils import coordinate_to_tuple
 
 
 # Mapa: formato del campo -> (number_format de Excel, ¿es porcentaje?)
-# El number_format es el código que Excel entiende para mostrar el número.
 FORMATOS_EXCEL = {
     "ENTERO":     ("#,##0", False),
     "DECIMAL":    ("#,##0.00", False),
     "PESOS":      ('"$"#,##0', False),
     "PESOS_DEC":  ('"$"#,##0.00', False),
-    "PORCENTAJE": ("0.0%", True),      # Excel multiplica x100 al mostrar %
+    "PORCENTAJE": ("0.0%", True),
     "UF":         ('#,##0.00" UF"', False),
 }
 
@@ -38,7 +39,7 @@ def _normalizar(texto):
 
 
 def _a_numero(valor):
-    """Convierte un valor a número (float) entendiendo formato chileno. None si no puede."""
+    """Convierte a número entendiendo formato chileno y montos sucios."""
     if valor is None:
         return None
     if isinstance(valor, (int, float)):
@@ -46,7 +47,12 @@ def _a_numero(valor):
     s = str(valor).strip()
     if not s:
         return None
-    s = re.sub(r"[^\d.,\-]", "", s)   # quitar $, %, espacios, letras
+    # Quitar texto entre paréntesis, ej "(ciento cincuenta millones)".
+    s = re.sub(r"\([^)]*\)", "", s)
+    # Quitar el ".-" o "-" al final (forma chilena de "pesos justos").
+    s = re.sub(r"\.?-\s*$", "", s.strip())
+    # Dejar solo dígitos, punto y coma.
+    s = re.sub(r"[^\d.,]", "", s)
     if not s:
         return None
     if "." in s and "," in s:
@@ -55,15 +61,121 @@ def _a_numero(valor):
         s = s.replace(",", ".")
     elif "." in s:
         partes = s.split(".")
-        if len(partes) > 2:
+        if all(len(g) == 3 for g in partes[1:]):
             s = s.replace(".", "")
-        elif len(partes[1]) == 3:
+        elif len(partes) > 2:
             s = s.replace(".", "")
     try:
         return float(s)
     except ValueError:
         return None
 
+
+# ─────────────────────────────────────────────────────────────
+# LIMPIEZA DETERMINISTA (Capa 1) — gratis, sin IA
+# ─────────────────────────────────────────────────────────────
+
+def _parece(nombre_o_etiqueta, palabras):
+    """¿El nombre/etiqueta del campo contiene alguna de estas palabras clave?"""
+    txt = _normalizar(nombre_o_etiqueta)
+    return any(p in txt for p in palabras)
+
+
+def _limpiar_rut(v):
+    s = str(v).strip().replace(" ", "")
+    if re.match(r"^[\d.\-]+[kK\d]$", s):
+        return s
+    return v
+
+
+def _limpiar_email(v):
+    return str(v).replace(" ", "").strip()
+
+
+def _limpiar_telefono(v):
+    s = str(v)
+    s = re.split(r"[/,]", s)[0].strip()   # si hay varios, toma el primero
+    s = re.sub(r"[^\d+]", "", s)
+    return s if s else v
+
+
+def _limpiar_monto(v):
+    """Monto: quita $, paréntesis, .-, y arma el número completo con miles."""
+    s = re.sub(r"\([^)]*\)", "", str(v))
+    s = re.sub(r"[^\d.,]", "", s).replace(".", "").replace(",", ".").rstrip(".-")
+    try:
+        num = float(s)
+        return str(int(num)) if num == int(num) else str(num)
+    except ValueError:
+        return v
+
+
+def _limpiar_numero(v):
+    """
+    Número 'simple' (plazo, años, %). Decide inteligentemente:
+      - Si tiene separadores de miles (1.234.567), lo trata como monto completo.
+      - Si es un número suelto dentro de texto ('sesenta ( 60 ) Días'), lo extrae.
+    """
+    s = str(v)
+    if re.search(r"\d{1,3}(\.\d{3})+", s):
+        return _limpiar_monto(s)
+    m = re.search(r"\d+([.,]\d+)?", s)
+    if m:
+        num = m.group().replace(".", "").replace(",", ".")
+        try:
+            f = float(num)
+            return str(int(f)) if f == int(f) else str(f)
+        except ValueError:
+            return m.group()
+    return v
+
+
+def _limpiar_texto(v):
+    return re.sub(r"\s+", " ", str(v).strip())
+
+
+# Formatos que representan MONTOS (limpian el número completo con miles).
+_FORMATOS_MONTO = {"PESOS", "PESOS_DEC", "UF"}
+# Formatos de número simple.
+_FORMATOS_NUMERO = {"ENTERO", "DECIMAL", "PORCENTAJE"}
+
+
+def limpiar_valor(valor, campo):
+    """
+    Limpieza determinista (Capa 1, gratis, sin IA). Decide qué hacer según el
+    FORMATO del campo (no el tipo) y pistas de su nombre. Lo que no puede
+    resolver con seguridad, lo deja tal cual.
+    """
+    if valor is None:
+        return valor
+    s = str(valor).strip()
+    if not s:
+        return valor
+
+    formato = getattr(campo, "formato_numero", "") or "NINGUNO"
+    ref = f"{getattr(campo, 'nombre', '')} {getattr(campo, 'etiqueta_busqueda', '')}"
+
+    # Por nombre/etiqueta (más específico): RUT, email, teléfono.
+    if _parece(ref, ["rut", "rol unico"]):
+        return _limpiar_rut(s)
+    if _parece(ref, ["email", "correo", "mail"]):
+        return _limpiar_email(s)
+    if _parece(ref, ["telefono", "fono", "celular", "movil"]):
+        return _limpiar_telefono(s)
+
+    # Por FORMATO del campo (no por tipo).
+    if formato in _FORMATOS_MONTO:
+        return _limpiar_monto(s)
+    if formato in _FORMATOS_NUMERO:
+        return _limpiar_numero(s)
+
+    # Sin formato numérico: texto (colapsar espacios).
+    return _limpiar_texto(s)
+
+
+# ─────────────────────────────────────────────────────────────
+# BÚSQUEDA DE LA CASILLA Y ESCRITURA
+# ─────────────────────────────────────────────────────────────
 
 def _buscar_etiqueta(ws, texto):
     RELLENO = {"de", "del", "la", "el", "los", "las", "y", "o", "a", "nombre"}
@@ -102,25 +214,23 @@ def _buscar_etiqueta(ws, texto):
 
 def _escribir_valor(celda, valor, campo):
     """
-    Escribe el valor en la celda, aplicando el formato numérico del campo si lo
-    tiene. Si el formato es numérico, convierte el texto a número real para que
-    Excel lo trate como número (no como texto) y muestre el símbolo.
+    Escribe el valor: primero LIMPIA (Capa 1), luego aplica formato numérico.
     """
-    formato = getattr(campo, "formato_numero", "") or "NINGUNO"
+    # 1. Limpieza determinista según el tipo del campo.
+    valor = limpiar_valor(valor, campo)
 
+    # 2. Formato numérico.
+    formato = getattr(campo, "formato_numero", "") or "NINGUNO"
     if formato in FORMATOS_EXCEL:
         code, es_pct = FORMATOS_EXCEL[formato]
         num = _a_numero(valor)
         if num is not None:
-            # Para porcentaje: si viene "12.5" (o 12,5), Excel con formato 0.0%
-            # espera 0.125. Convertimos dividiendo por 100.
             if es_pct:
                 num = num / 100.0
             celda.value = num
             celda.number_format = code
             return
 
-    # Sin formato numérico (o valor no numérico): escribir tal cual.
     celda.value = valor
 
 

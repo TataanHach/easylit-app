@@ -1,17 +1,61 @@
 """
 Tareas asíncronas del worker (Celery).
-
-Procesar un Excel puede tardar bastante, así que corre aquí, fuera del ciclo
-HTTP. La vista dispara la tarea y responde de inmediato; el worker hace el trabajo
-pesado y actualiza el estado de la transformación, que el frontend consulta por
-polling.
-
-Flujo: LIMPIEZA (pandas) → MAPEO_PROPUESTO (Gemini) → EN_REVISION (espera humano).
-La generación del archivo final ocurre tras la aprobación, en otra tarea.
 """
+import re
+
 from celery import shared_task
 
 from .models import Bitacora, EstadoTransformacion, Transformacion
+
+
+IVA = 1.19
+
+
+def _a_numero(valor):
+    """Convierte a número entendiendo formato chileno y montos sucios."""
+    if valor is None:
+        return None
+    if isinstance(valor, (int, float)):
+        return float(valor)
+    s = str(valor).strip()
+    if not s:
+        return None
+    # Quitar texto entre paréntesis, ej "(ciento cincuenta millones)".
+    s = re.sub(r"\([^)]*\)", "", s)
+    # Quitar el ".-" o "-" al final (forma chilena de "pesos justos").
+    s = re.sub(r"\.?-\s*$", "", s.strip())
+    # Dejar solo dígitos, punto y coma.
+    s = re.sub(r"[^\d.,]", "", s)
+    if not s:
+        return None
+    if "." in s and "," in s:
+        s = s.replace(".", "").replace(",", ".")
+    elif "," in s:
+        s = s.replace(",", ".")
+    elif "." in s:
+        partes = s.split(".")
+        if all(len(g) == 3 for g in partes[1:]):
+            s = s.replace(".", "")
+        elif len(partes) > 2:
+            s = s.replace(".", "")
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _aplicar_iva(valor, ajuste):
+    """Aplica el ajuste de IVA a un valor monetario, solo si es numérico."""
+    if not ajuste or ajuste == "NINGUNO":
+        return valor
+    num = _a_numero(valor)
+    if num is None:
+        return valor
+    if ajuste == "AGREGAR":
+        return round(num * IVA)
+    if ajuste == "QUITAR":
+        return round(num / IVA)
+    return valor
 
 
 @shared_task
@@ -27,7 +71,6 @@ def procesar_transformacion(transformacion_id):
         return
 
     try:
-        # 1. Limpieza determinista con pandas.
         df, resumen = limpieza.limpiar_excel(
             t.archivo_origen.path, t.opciones_limpieza or {},
             todas_las_hojas=True,
@@ -40,7 +83,6 @@ def procesar_transformacion(transformacion_id):
             transformacion=t, evento=Bitacora.Evento.LIMPIEZA, detalle=resumen
         )
 
-        # 2. Propuesta de mapeo con IA (sobre datos anonimizados si corresponde).
         campos = [
             {
                 "nombre": c.nombre, "tipo": c.tipo,
@@ -54,19 +96,11 @@ def procesar_transformacion(transformacion_id):
             anonimizar=t.organizacion.anonimizar_montos,
         )
 
-        # 3. Guardar los mapeos propuestos.
         from apps.plantillas.models import CampoPlantilla
         from .models import MapeoCampo
 
-        # La confianza global ahora refleja la REALIDAD, no solo lo que dijo la
-        # IA. Un mapeo cuya columna no encontró campo destino (destino = None)
-        # NO se puede rellenar, así que cuenta como 0, no se ignora.
-        #
-        # Antes: se promediaba solo la confianza de la IA, así que salía alto
-        # (ej. 98%) aunque las celdas quedaran vacías. Eso engañaba al usuario.
-        # Ahora: si la mitad no se mapeó, la confianza baja y avisa que algo pasó.
         confianzas = []
-        mapeados_ok = 0            # cuántos tienen destino real
+        mapeados_ok = 0
         total_campos_plantilla = t.plantilla.campos.count()
 
         for item in propuesta:
@@ -80,8 +114,6 @@ def procesar_transformacion(transformacion_id):
                 transformacion=t,
                 origen_columna=item["origen"],
                 destino_campo=destino,
-                # Si no hay destino real, la confianza mostrada del mapeo es 0,
-                # para que el usuario vea de inmediato cuáles no se asignaron.
                 confianza=item.get("confianza", 0) if destino else 0,
                 motivo=item.get("motivo", "") if destino else "Sin campo destino asignado",
             )
@@ -90,9 +122,8 @@ def procesar_transformacion(transformacion_id):
                 confianzas.append(item.get("confianza", 0))
                 mapeados_ok += 1
             else:
-                confianzas.append(0)  # cuenta como 0 en el promedio
+                confianzas.append(0)
 
-        # Confianza global: promedio real (los no mapeados arrastran hacia abajo).
         t.confianza = int(sum(confianzas) / len(confianzas)) if confianzas else 0
         t.estado = EstadoTransformacion.EN_REVISION
         t.save(update_fields=["confianza", "estado"])
@@ -118,13 +149,7 @@ def procesar_transformacion(transformacion_id):
 
 @shared_task
 def generar_documento_tarea(transformacion_id):
-    """
-    Genera el Excel final tras la aprobación del mapeo.
-
-    Toma cada mapeo aprobado, lee el valor correspondiente del origen, y lo
-    escribe en la plantilla destino preservando el formato. Guarda el resultado
-    en archivo_generado y marca la transformación como GENERADO.
-    """
+    """Genera el Excel final tras la aprobación del mapeo."""
     from django.core.files.base import ContentFile
     from .services import generacion, limpieza
 
@@ -134,31 +159,31 @@ def generar_documento_tarea(transformacion_id):
         return
 
     try:
-        # Leer el origen ya limpio para obtener los valores.
         df, _ = limpieza.limpiar_excel(
             t.archivo_origen.path, t.opciones_limpieza or {},
             todas_las_hojas=True,
         )
         primera_fila = df.iloc[0] if len(df) > 0 else None
 
-        # Construir la lista campo→valor a partir de los mapeos aprobados.
-        # Contamos cuántos de verdad tienen un valor, para reportarlo.
         mapeos_con_valor = []
         con_valor = 0
         for mapeo in t.mapeos.select_related("destino_campo").all():
-            if mapeo.destino_campo is None:
+            campo = mapeo.destino_campo
+            if campo is None:
                 continue
             valor = None
             if primera_fila is not None and mapeo.origen_columna in df.columns:
                 valor = primera_fila[mapeo.origen_columna]
+
+            ajuste = getattr(campo, "ajuste_iva", "") or "NINGUNO"
+            valor = _aplicar_iva(valor, ajuste)
+
             if valor is not None and str(valor).strip() != "":
                 con_valor += 1
-            mapeos_con_valor.append({"campo": mapeo.destino_campo, "valor": valor})
+            mapeos_con_valor.append({"campo": campo, "valor": valor})
 
-        # Generar el Excel.
         contenido = generacion.generar_documento(t.plantilla.archivo.path, mapeos_con_valor)
 
-        # Guardar el resultado.
         nombre = f"generado_{t.id}.xlsx"
         t.archivo_generado.save(nombre, ContentFile(contenido), save=False)
         t.estado = EstadoTransformacion.GENERADO

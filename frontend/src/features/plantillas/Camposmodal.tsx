@@ -17,7 +17,6 @@ import type { Plantilla } from "@/types";
 const TIPOS = [
   { v: "TEXTO", t: "Texto" },
   { v: "NUMERO", t: "Número" },
-  { v: "MONEDA", t: "Moneda" },
   { v: "FECHA", t: "Fecha" },
   { v: "UNIDAD", t: "Unidad" },
 ];
@@ -87,7 +86,8 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
     await campoService.eliminar(id);
   }
 
-  const esNumerico = (tipo: string) => tipo === "NUMERO" || tipo === "MONEDA";
+    const esNumerico = (tipo: string) => tipo === "NUMERO";
+
 
   // Cuántos campos tiene cada hoja, para mostrarlo en las pestañas.
   const contarHoja = (h: string) => campos.filter((c) => (c.hoja_destino || "") === h).length;
