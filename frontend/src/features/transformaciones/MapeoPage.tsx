@@ -1,9 +1,9 @@
 /**
  * Editor de mapeo (paso 3-4 en una pantalla).
  *
- * Muestra cada correspondencia origen→destino que propuso la IA. Ahora, al
- * corregir el campo destino en el desplegable, el cambio SE GUARDA en el backend
- * al instante (antes no se guardaba y las correcciones se perdían).
+ * Muestra cada correspondencia origen→destino que propuso la IA, permite
+ * corregir el destino (se guarda al instante), limpiar los datos con IA, y una
+ * TABLA DE VISTA PREVIA con los valores finales para revisar antes de generar.
  */
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
@@ -17,9 +17,10 @@ export default function MapeoPage() {
   const navigate = useNavigate();
   const [generando, setGenerando] = useState(false);
   const [generado, setGenerado] = useState(false);
-  // Estado local de los mapeos, para reflejar los cambios al instante.
   const [mapeosLocal, setMapeosLocal] = useState<any[]>([]);
   const [guardandoId, setGuardandoId] = useState<string | null>(null);
+  const [limpiando, setLimpiando] = useState(false);
+  const [mensajeIA, setMensajeIA] = useState("");
 
   const { data: t, isLoading, refetch } = useQuery({
     queryKey: ["transformacion", id],
@@ -38,6 +39,13 @@ export default function MapeoPage() {
     enabled: !!t?.plantilla,
   });
 
+  // Vista previa: los valores finales (cómo quedarán en el documento).
+  const { data: preview, refetch: refetchPreview } = useQuery({
+    queryKey: ["vistaPrevia", id],
+    queryFn: () => transformacionService.vistaPrevia(id!),
+    enabled: !!id && !!t && t.estado === "EN_REVISION",
+  });
+
   // Cuando llegan los mapeos del backend, copiarlos al estado local.
   useEffect(() => {
     if (t?.mapeos) setMapeosLocal(t.mapeos);
@@ -45,17 +53,38 @@ export default function MapeoPage() {
 
   // Guardar el cambio de destino de un mapeo.
   async function cambiarDestino(mapeoId: string, destinoCampoId: string) {
-    // Actualizar en pantalla al instante.
     setMapeosLocal((prev) =>
       prev.map((m) => (m.id === mapeoId ? { ...m, destino_campo: destinoCampoId || null } : m))
     );
     setGuardandoId(mapeoId);
     try {
       await transformacionService.editarMapeo(mapeoId, destinoCampoId || null);
+      await refetchPreview();
     } catch {
       alert("No se pudo guardar el cambio. Intenta de nuevo.");
     } finally {
       setGuardandoId(null);
+    }
+  }
+
+  async function limpiarConIA() {
+    if (!id) return;
+    setLimpiando(true);
+    setMensajeIA("");
+    try {
+      const r = await transformacionService.limpiarIA(id);
+      if (r.modelo && r.modelo.startsWith("gemini")) {
+        setMensajeIA(`IA limpió ${r.campos} campo(s). Revisa la vista previa y genera.`);
+      } else if (r.modelo === "sin-limpieza-ia") {
+        setMensajeIA("No había datos de texto para limpiar, o falta clave de IA.");
+      } else {
+        setMensajeIA("La IA no pudo limpiar ahora. Intenta más tarde.");
+      }
+      await refetchPreview();
+    } catch {
+      setMensajeIA("No se pudo limpiar con IA. Revisa tu conexión o cuota.");
+    } finally {
+      setLimpiando(false);
     }
   }
 
@@ -194,13 +223,63 @@ export default function MapeoPage() {
         )}
       </div>
 
+      {/* Tabla de vista previa: los valores finales, para revisar antes de generar */}
+      {preview && preview.filas && preview.filas.length > 0 && (
+        <div className="mapeo-panel" style={{ marginTop: 16 }}>
+          <div className="mapeo-panel-head">
+            <div className="titulo">
+              <span className="mapeo-ia-icon"><i className="ti ti-table" /></span>
+              <div>
+                <h2>Vista previa de los datos</h2>
+                <p>Así quedarán los valores en el documento. Revisa antes de generar.</p>
+              </div>
+            </div>
+          </div>
+          <table className="preview-tabla">
+            <thead>
+              <tr><th>Campo</th><th>Hoja</th><th>Valor final</th><th></th></tr>
+            </thead>
+            <tbody>
+              {preview.filas.map((f: any, i: number) => (
+                <tr key={i}>
+                  <td>{f.campo}</td>
+                  <td style={{ color: "var(--text-3)" }}>{f.hoja || "—"}</td>
+                  <td style={{
+                    fontWeight: f.valor_final ? 500 : 400,
+                    color: f.valor_final ? "var(--text)" : "var(--text-3)",
+                  }}>
+                    {f.valor_final || "(vacío)"}
+                  </td>
+                  <td>
+                    {f.limpiado_ia && (
+                      <span title="Limpiado con IA" style={{ color: "var(--ai-600,#5B4E8C)" }}>
+                        <i className="ti ti-sparkles" />
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="mapeo-acciones">
         <span className="mapeo-acciones-info">
           <i className="ti ti-info-circle" style={{ verticalAlign: "-2px" }} /> {mapeos.length} campos.
           Corrige los que estén mal y luego genera.
+          {mensajeIA && (
+            <span style={{ marginLeft: 10, color: "var(--ai-600, #5B4E8C)", fontWeight: 600 }}>
+              {mensajeIA}
+            </span>
+          )}
         </span>
         <div style={{ display: "flex", gap: 10 }}>
           <button className="btn btn-lg" onClick={() => navigate("/historial")}>Volver</button>
+          <button className="btn btn-lg" onClick={limpiarConIA} disabled={limpiando}
+            style={{ borderColor: "var(--ai-600, #5B4E8C)", color: "var(--ai-600, #5B4E8C)" }}>
+            {limpiando ? "Limpiando…" : <><i className="ti ti-sparkles" /> Limpiar con IA</>}
+          </button>
           <button className="btn btn-primary btn-lg" onClick={generar} disabled={generando || mapeos.length === 0}>
             {generando ? "Generando…" : <><i className="ti ti-file-export" /> Generar documento</>}
           </button>
@@ -213,8 +292,8 @@ export default function MapeoPage() {
 function ProcesandoIA({ estado, nombre }: { estado: string; nombre: string }) {
   const pasoActual =
     estado === "BORRADOR" ? 0 :
-    estado === "LIMPIEZA" ? 1 :
-    estado === "MAPEO_PROPUESTO" ? 2 : 3;
+      estado === "LIMPIEZA" ? 1 :
+        estado === "MAPEO_PROPUESTO" ? 2 : 3;
 
   const pasos = [
     { icono: "ti ti-file-search", titulo: "Leyendo el documento", desc: "Extrayendo las columnas y datos del Excel" },

@@ -81,6 +81,109 @@ class TransformacionViewSet(viewsets.ModelViewSet):
         instance.delete()
 
     @action(detail=True, methods=["post"])
+    def limpiar_ia(self, request, pk=None):
+        """
+        Limpia con IA los valores de texto/fecha del origen (NO los montos, que
+        se protegen). Guarda los valores limpios para que la generación los use.
+        Es opcional (el usuario lo pide con un botón), para no gastar cuota.
+        """
+        from apps.transformaciones.services import ia, limpieza
+        from apps.transformaciones.models import Bitacora
+ 
+        transformacion = self.get_object()
+ 
+        # Leer el origen (todas las hojas) para obtener los valores actuales.
+        df, _ = limpieza.limpiar_excel(
+            transformacion.archivo_origen.path,
+            transformacion.opciones_limpieza or {},
+            todas_las_hojas=True,
+        )
+        primera_fila = df.iloc[0] if len(df) > 0 else None
+ 
+        # Armar la lista campo+valor de los mapeos con destino.
+        valores_campos = []
+        indice_a_columna = []
+        for mapeo in transformacion.mapeos.select_related("destino_campo").all():
+            if mapeo.destino_campo is None:
+                continue
+            valor = None
+            if primera_fila is not None and mapeo.origen_columna in df.columns:
+                valor = primera_fila[mapeo.origen_columna]
+            valores_campos.append({"campo": mapeo.destino_campo, "valor": valor})
+            indice_a_columna.append(mapeo.origen_columna)
+ 
+        # Limpiar con IA (solo texto/fechas; los montos quedan intactos).
+        limpios, modelo = ia.limpiar_con_ia(valores_campos)
+ 
+        # Guardar los valores limpios en resultado_limpieza, indexados por la
+        # COLUMNA de origen, para que la generación los use.
+        valores_ia = {}
+        for col, limpio in zip(indice_a_columna, limpios):
+            if limpio is not None:
+                valores_ia[col] = limpio
+ 
+        resultado = transformacion.resultado_limpieza or {}
+        resultado["valores_ia"] = valores_ia
+        transformacion.resultado_limpieza = resultado
+        transformacion.save(update_fields=["resultado_limpieza"])
+ 
+        Bitacora.objects.create(
+            transformacion=transformacion,
+            evento=Bitacora.Evento.LIMPIEZA,
+            autor=request.user,
+            detalle={"limpieza_ia": modelo, "campos_limpiados": len(valores_ia)},
+        )
+ 
+        return Response(
+            {"ok": True, "modelo": modelo, "campos": len(valores_ia),
+             "valores": valores_ia},
+            status=status.HTTP_200_OK,
+        )
+ 
+    @action(detail=True, methods=["get"])
+    def vista_previa(self, request, pk=None):
+        """
+        Devuelve los valores FINALES (cómo quedarán en el documento) sin generar
+        el Excel. Aplica: valor del origen -> limpieza IA (si existe) -> IVA ->
+        limpieza por formato. Sirve para revisar antes de generar.
+        """
+        from apps.transformaciones.services import limpieza, generacion
+        from apps.transformaciones.tasks import _aplicar_iva
+
+        transformacion = self.get_object()
+        df, _ = limpieza.limpiar_excel(
+            transformacion.archivo_origen.path,
+            transformacion.opciones_limpieza or {},
+            todas_las_hojas=True,
+        )
+        primera_fila = df.iloc[0] if len(df) > 0 else None
+        valores_ia = (transformacion.resultado_limpieza or {}).get("valores_ia", {})
+
+        filas = []
+        for mapeo in transformacion.mapeos.select_related("destino_campo").all():
+            campo = mapeo.destino_campo
+            if campo is None:
+                continue
+            crudo = None
+            if primera_fila is not None and mapeo.origen_columna in df.columns:
+                crudo = primera_fila[mapeo.origen_columna]
+            valor = crudo
+            if mapeo.origen_columna in valores_ia:
+                valor = valores_ia[mapeo.origen_columna]
+            ajuste = getattr(campo, "ajuste_iva", "") or "NINGUNO"
+            valor = _aplicar_iva(valor, ajuste)
+            valor_final = generacion.limpiar_valor(valor, campo)
+            filas.append({
+                "campo": campo.nombre,
+                "hoja": campo.hoja_destino or "",
+                "origen_columna": mapeo.origen_columna,
+                "valor_crudo": None if crudo is None else str(crudo),
+                "valor_final": None if valor_final is None else str(valor_final),
+                "limpiado_ia": mapeo.origen_columna in valores_ia,
+            })
+        return Response({"filas": filas}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
     def aprobar(self, request, pk=None):
         transformacion = self.get_object()
         from apps.transformaciones.models import EstadoTransformacion
@@ -94,6 +197,7 @@ class TransformacionViewSet(viewsets.ModelViewSet):
         )
         serializer = self.get_serializer(transformacion)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
 
     @action(detail=True, methods=["post"])
     def generar(self, request, pk=None):

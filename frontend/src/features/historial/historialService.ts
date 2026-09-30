@@ -79,11 +79,23 @@ export const transformacionService = {
     });
     return data;
   },
-      /** Cambia el campo destino de un mapeo (corrección humana). */
+  /** Cambia el campo destino de un mapeo (corrección humana). */
   async editarMapeo(mapeoId: string, destinoCampoId: string | null) {
-      const { data } = await api.patch(`/mapeos/${mapeoId}/`, {
-        destino_campo: destinoCampoId,
-      });
-      return data;
-    },
+    const { data } = await api.patch(`/mapeos/${mapeoId}/`, {
+      destino_campo: destinoCampoId,
+    });
+    return data;
+  },
+
+  /** Limpia con IA los valores de texto/fecha (no montos). Opcional. */
+  async limpiarIA(id: string) {
+    const { data } = await api.post(`/transformaciones/${id}/limpiar_ia/`);
+    return data;  // { ok, modelo, campos, valores }
+  },
+  /** Vista previa de los valores finales (cómo quedarán en el documento). */
+  async vistaPrevia(id: string) {
+    const { data } = await api.get(`/transformaciones/${id}/vista_previa/`);
+    return data;  // { filas: [{campo, hoja, valor_crudo, valor_final, limpiado_ia}] }
+  },
+
 };

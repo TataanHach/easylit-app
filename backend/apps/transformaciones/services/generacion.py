@@ -178,7 +178,15 @@ def limpiar_valor(valor, campo):
 # ─────────────────────────────────────────────────────────────
 
 def _buscar_etiqueta(ws, texto):
-    RELLENO = {"de", "del", "la", "el", "los", "las", "y", "o", "a", "nombre"}
+    """
+    Busca la etiqueta del formulario que mejor corresponde a `texto` y devuelve
+    la celda de al lado (donde va el valor). En vez de quedarse con la primera
+    coincidencia, PUNTÚA todas y elige la que MÁS palabras clave comparte. Así,
+    para "Estado Obra", prefiere "Estado de la Obra" (2 palabras) sobre
+    "Nombre de la Obra" (1 palabra), en vez de tomar la primera que aparezca.
+    """
+    # "nombre" ya NO es relleno: es una palabra que distingue campos.
+    RELLENO = {"de", "del", "la", "el", "los", "las", "y", "o", "a"}
 
     def palabras_clave(s):
         return {p for p in _normalizar(s).split() if p not in RELLENO}
@@ -188,8 +196,8 @@ def _buscar_etiqueta(ws, texto):
     if not objetivo_norm:
         return None
 
-    candidato_contiene = None
-    candidato_palabras = None
+    mejor_puntaje = 0
+    mejor_pos = None
 
     for fila in ws.iter_rows():
         for celda in fila:
@@ -198,18 +206,24 @@ def _buscar_etiqueta(ws, texto):
             valor_norm = _normalizar(celda.value)
             if not valor_norm:
                 continue
+
+            # 1. Coincidencia exacta: gana de inmediato.
             if valor_norm == objetivo_norm:
                 return celda.row, celda.column + 1
-            if candidato_contiene is None and (objetivo_norm in valor_norm or valor_norm in objetivo_norm):
-                candidato_contiene = (celda.row, celda.column + 1)
-            if candidato_palabras is None:
-                valor_clave = palabras_clave(celda.value)
-                if objetivo_clave and valor_clave and (
-                    objetivo_clave <= valor_clave or valor_clave <= objetivo_clave
-                ):
-                    candidato_palabras = (celda.row, celda.column + 1)
 
-    return candidato_contiene or candidato_palabras
+            # 2. Puntaje por palabras clave compartidas.
+            valor_clave = palabras_clave(celda.value)
+            comunes = objetivo_clave & valor_clave
+            if comunes:
+                puntaje = len(comunes)
+                # Bonus fuerte si TODAS las palabras del objetivo están presentes.
+                if objetivo_clave and objetivo_clave <= valor_clave:
+                    puntaje += 10
+                if puntaje > mejor_puntaje:
+                    mejor_puntaje = puntaje
+                    mejor_pos = (celda.row, celda.column + 1)
+
+    return mejor_pos
 
 
 def _escribir_valor(celda, valor, campo):

@@ -165,6 +165,9 @@ def generar_documento_tarea(transformacion_id):
         )
         primera_fila = df.iloc[0] if len(df) > 0 else None
 
+      # Valores limpios por IA (Capa 2), si el usuario los generó.
+        valores_ia = (t.resultado_limpieza or {}).get("valores_ia", {})
+ 
         mapeos_con_valor = []
         con_valor = 0
         for mapeo in t.mapeos.select_related("destino_campo").all():
@@ -174,7 +177,11 @@ def generar_documento_tarea(transformacion_id):
             valor = None
             if primera_fila is not None and mapeo.origen_columna in df.columns:
                 valor = primera_fila[mapeo.origen_columna]
-
+ 
+            # Si la IA limpió este valor, usar el limpio en vez del original.
+            if mapeo.origen_columna in valores_ia:
+                valor = valores_ia[mapeo.origen_columna]
+ 
             ajuste = getattr(campo, "ajuste_iva", "") or "NINGUNO"
             valor = _aplicar_iva(valor, ajuste)
 

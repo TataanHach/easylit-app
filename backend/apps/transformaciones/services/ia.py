@@ -155,3 +155,103 @@ def proponer_mapeo(df, columnas_numericas, campos_destino, anonimizar=True):
         # Si la IA falla por cualquier razón, no rompemos el flujo: caemos a la
         # heurística local y seguimos. El usuario igual revisa y aprueba.
         return _propuesta_heuristica(muestra, campos_destino), "heuristica-respaldo"
+
+# ═════════════════════════════════════════════════════════════
+# CAPA 2 DEL ESCALÓN 4: limpieza inteligente de datos con IA.
+#
+# Limpia SOLO texto y fechas (nunca montos: esos se protegen y los limpia la
+# Capa 1 local, sin enviarlos a Google). Se usa cuando el usuario lo pide
+# explícitamente (botón "Limpiar con IA"), para no gastar cuota sin necesidad.
+# ═════════════════════════════════════════════════════════════
+
+# Formatos que son MONETARIOS: NUNCA se mandan a la IA (privacidad).
+_FORMATOS_SENSIBLES = {"PESOS", "PESOS_DEC", "UF"}
+
+
+def _construir_prompt_limpieza(items):
+    """items: lista de {n, campo, tipo, valor}. Arma el prompt para Gemini."""
+    lista = "\n".join(
+        f'  {it["n"]}. Campo "{it["campo"]}" (tipo {it["tipo"]}): "{it["valor"]}"'
+        for it in items
+    )
+    return f"""Eres un asistente que limpia datos de licitaciones chilenas.
+Para cada valor sucio, devuelve la versión LIMPIA y normalizada según su tipo.
+
+Reglas:
+- Fechas: formato YYYY-MM-DD si es posible; si es aproximada (ej "Agosto 2024 aprox."), lo más cercano (2024-08).
+- Nombres/textos: corrige espacios partidos evidentes (ej "Servi cios" -> "Servicios"), colapsa espacios dobles.
+- RUT: formato XX.XXX.XXX-X sin espacios internos.
+- Emails: sin espacios.
+- Si un valor NO es un dato real (ej "El mismo representante"), devuélvelo IGUAL.
+- Si no puedes limpiar con seguridad, devuelve el valor ORIGINAL.
+- NUNCA inventes datos que no estén.
+
+VALORES A LIMPIAR:
+{lista}
+
+Responde ÚNICAMENTE con un JSON válido, sin texto adicional ni markdown, así:
+[
+  {{"n": 1, "limpio": "valor limpio"}}
+]
+"""
+
+
+def limpiar_con_ia(valores_campos):
+    """
+    valores_campos: lista de dicts con:
+        - campo: el CampoPlantilla (para saber tipo y formato)
+        - valor: el valor sucio a limpiar
+    Devuelve (lista_valores_limpios, modelo_usado). La lista mantiene el mismo
+    orden y largo que la entrada; los montos se dejan intactos.
+
+    Si no hay clave o la IA falla, devuelve los valores SIN cambios (no rompe).
+    """
+    api_key = getattr(settings, "GEMINI_API_KEY", "")
+
+    # Preparar solo los que NO son montos (privacidad) y son texto/fecha no vacíos.
+    a_limpiar = []
+    for i, item in enumerate(valores_campos):
+        campo = item["campo"]
+        valor = item["valor"]
+        formato = getattr(campo, "formato_numero", "") or "NINGUNO"
+        # Saltar montos (sensibles) y vacíos.
+        if formato in _FORMATOS_SENSIBLES:
+            continue
+        if valor is None or str(valor).strip() == "":
+            continue
+        a_limpiar.append({
+            "n": i,  # índice original, para devolver en orden
+            "campo": getattr(campo, "nombre", ""),
+            "tipo": getattr(campo, "tipo", "TEXTO"),
+            "valor": str(valor),
+        })
+
+    # Copia de los valores originales (los que no se limpian quedan igual).
+    resultado = [item["valor"] for item in valores_campos]
+
+    if not a_limpiar or not api_key:
+        return resultado, "sin-limpieza-ia"
+
+    try:
+        import google.generativeai as genai
+
+        genai.configure(api_key=api_key)
+        modelo = genai.GenerativeModel(getattr(settings, "IA_MODEL", "gemini-flash-latest"))
+        prompt = _construir_prompt_limpieza(a_limpiar)
+        respuesta = modelo.generate_content(prompt)
+
+        texto = respuesta.text.strip()
+        texto = re.sub(r"^```(json)?|```$", "", texto, flags=re.MULTILINE).strip()
+        limpios = json.loads(texto)
+
+        # Aplicar cada valor limpio en su índice original.
+        for entrada in limpios:
+            n = entrada.get("n")
+            limpio = entrada.get("limpio")
+            if n is not None and 0 <= n < len(resultado) and limpio is not None:
+                resultado[n] = limpio
+
+        return resultado, getattr(settings, "IA_MODEL", "gemini")
+    except Exception:
+        # Si la IA falla, devolver los valores sin cambios.
+        return resultado, "limpieza-ia-fallo"
