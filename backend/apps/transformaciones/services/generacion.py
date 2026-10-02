@@ -5,7 +5,7 @@ Toma el archivo Excel de la plantilla (con su formato: colores, celdas amarillas
 título) y escribe los datos mapeados DENTRO de él, sin romper el diseño.
 
 Al escribir cada valor, aplica en orden:
-  1. LIMPIEZA determinista (Capa 1, gratis, sin IA): según el tipo del campo,
+  1. LIMPIEZA determinista (Capa 1, gratis, sin IA): según el formato del campo,
      quita espacios, saca el $ de un monto, arregla el guion de un RUT, etc.
   2. FORMATO numérico del campo (pesos, porcentaje, UF...).
 Convierte el texto a número real cuando corresponde.
@@ -18,7 +18,6 @@ from openpyxl import load_workbook
 from openpyxl.utils import coordinate_to_tuple
 
 
-# Mapa: formato del campo -> (number_format de Excel, ¿es porcentaje?)
 FORMATOS_EXCEL = {
     "ENTERO":     ("#,##0", False),
     "DECIMAL":    ("#,##0.00", False),
@@ -39,7 +38,7 @@ def _normalizar(texto):
 
 
 def _a_numero(valor):
-    """Convierte a número entendiendo formato chileno y montos sucios."""
+    """Convierte a número entendiendo formato chileno/US y montos sucios."""
     if valor is None:
         return None
     if isinstance(valor, (int, float)):
@@ -47,18 +46,21 @@ def _a_numero(valor):
     s = str(valor).strip()
     if not s:
         return None
-    # Quitar texto entre paréntesis, ej "(ciento cincuenta millones)".
     s = re.sub(r"\([^)]*\)", "", s)
-    # Quitar el ".-" o "-" al final (forma chilena de "pesos justos").
     s = re.sub(r"\.?-\s*$", "", s.strip())
-    # Dejar solo dígitos, punto y coma.
     s = re.sub(r"[^\d.,]", "", s)
     if not s:
         return None
     if "." in s and "," in s:
-        s = s.replace(".", "").replace(",", ".")
+        if s.rfind(",") < s.rfind("."):
+            s = s.replace(",", "")                     # US: 1,234.56
+        else:
+            s = s.replace(".", "").replace(",", ".")   # CL: 1.234,56
     elif "," in s:
-        s = s.replace(",", ".")
+        if re.fullmatch(r"\d{1,3}(,\d{3})+", s):
+            s = s.replace(",", "")                     # 59,500,000 -> miles
+        else:
+            s = s.replace(",", ".")
     elif "." in s:
         partes = s.split(".")
         if all(len(g) == 3 for g in partes[1:]):
@@ -76,7 +78,6 @@ def _a_numero(valor):
 # ─────────────────────────────────────────────────────────────
 
 def _parece(nombre_o_etiqueta, palabras):
-    """¿El nombre/etiqueta del campo contiene alguna de estas palabras clave?"""
     txt = _normalizar(nombre_o_etiqueta)
     return any(p in txt for p in palabras)
 
@@ -94,15 +95,31 @@ def _limpiar_email(v):
 
 def _limpiar_telefono(v):
     s = str(v)
-    s = re.split(r"[/,]", s)[0].strip()   # si hay varios, toma el primero
+    s = re.split(r"[/,]", s)[0].strip()
     s = re.sub(r"[^\d+]", "", s)
     return s if s else v
 
 
 def _limpiar_monto(v):
-    """Monto: quita $, paréntesis, .-, y arma el número completo con miles."""
+    """
+    Monto: quita $, paréntesis y texto, y arma el número completo.
+    Maneja formato chileno (1.234.567,89) y estadounidense (1,234,567.89).
+    """
     s = re.sub(r"\([^)]*\)", "", str(v))
-    s = re.sub(r"[^\d.,]", "", s).replace(".", "").replace(",", ".").rstrip(".-")
+    s = re.sub(r"[^\d.,]", "", s)
+    if "," in s and "." in s:
+        if s.rfind(",") < s.rfind("."):
+            s = s.replace(",", "")                     # US: 1,234.56
+        else:
+            s = s.replace(".", "").replace(",", ".")   # CL: 1.234,56
+    elif "," in s:
+        if re.fullmatch(r"\d{1,3}(,\d{3})+", s):
+            s = s.replace(",", "")                     # 59,500,000 -> miles
+        else:
+            s = s.replace(",", ".")
+    else:
+        s = s.replace(".", "")
+    s = s.rstrip(".-")
     try:
         num = float(s)
         return str(int(num)) if num == int(num) else str(num)
@@ -130,21 +147,25 @@ def _limpiar_numero(v):
     return v
 
 
+def _limpiar_nombre(v):
+    """Nombre de persona: quita el RUT si viene pegado (en paréntesis o suelto)."""
+    s = re.sub(r"\([^)]*\)", "", str(v))                 # quitar "(RUT ...)"
+    s = re.sub(r"\bRUT\b.*", "", s, flags=re.IGNORECASE)  # quitar "RUT ..." suelto
+    return re.sub(r"\s+", " ", s).strip()
+
+
 def _limpiar_texto(v):
     return re.sub(r"\s+", " ", str(v).strip())
 
 
-# Formatos que representan MONTOS (limpian el número completo con miles).
 _FORMATOS_MONTO = {"PESOS", "PESOS_DEC", "UF"}
-# Formatos de número simple.
 _FORMATOS_NUMERO = {"ENTERO", "DECIMAL", "PORCENTAJE"}
 
 
 def limpiar_valor(valor, campo):
     """
     Limpieza determinista (Capa 1, gratis, sin IA). Decide qué hacer según el
-    FORMATO del campo (no el tipo) y pistas de su nombre. Lo que no puede
-    resolver con seguridad, lo deja tal cual.
+    FORMATO del campo y pistas de su nombre. Lo que no puede resolver, lo deja.
     """
     if valor is None:
         return valor
@@ -155,21 +176,22 @@ def limpiar_valor(valor, campo):
     formato = getattr(campo, "formato_numero", "") or "NINGUNO"
     ref = f"{getattr(campo, 'nombre', '')} {getattr(campo, 'etiqueta_busqueda', '')}"
 
-    # Por nombre/etiqueta (más específico): RUT, email, teléfono.
+    # Por nombre/etiqueta (más específico).
     if _parece(ref, ["rut", "rol unico"]):
         return _limpiar_rut(s)
     if _parece(ref, ["email", "correo", "mail"]):
         return _limpiar_email(s)
     if _parece(ref, ["telefono", "fono", "celular", "movil"]):
         return _limpiar_telefono(s)
+    if _parece(ref, ["representante", "contacto", "persona"]):
+        return _limpiar_nombre(s)
 
-    # Por FORMATO del campo (no por tipo).
+    # Por FORMATO del campo.
     if formato in _FORMATOS_MONTO:
         return _limpiar_monto(s)
     if formato in _FORMATOS_NUMERO:
         return _limpiar_numero(s)
 
-    # Sin formato numérico: texto (colapsar espacios).
     return _limpiar_texto(s)
 
 
@@ -179,13 +201,9 @@ def limpiar_valor(valor, campo):
 
 def _buscar_etiqueta(ws, texto):
     """
-    Busca la etiqueta del formulario que mejor corresponde a `texto` y devuelve
-    la celda de al lado (donde va el valor). En vez de quedarse con la primera
-    coincidencia, PUNTÚA todas y elige la que MÁS palabras clave comparte. Así,
-    para "Estado Obra", prefiere "Estado de la Obra" (2 palabras) sobre
-    "Nombre de la Obra" (1 palabra), en vez de tomar la primera que aparezca.
+    Busca la etiqueta que MÁS palabras clave comparte (no la primera). Así
+    "Estado Obra" prefiere "Estado de la Obra" sobre "Nombre de la Obra".
     """
-    # "nombre" ya NO es relleno: es una palabra que distingue campos.
     RELLENO = {"de", "del", "la", "el", "los", "las", "y", "o", "a"}
 
     def palabras_clave(s):
@@ -206,17 +224,12 @@ def _buscar_etiqueta(ws, texto):
             valor_norm = _normalizar(celda.value)
             if not valor_norm:
                 continue
-
-            # 1. Coincidencia exacta: gana de inmediato.
             if valor_norm == objetivo_norm:
                 return celda.row, celda.column + 1
-
-            # 2. Puntaje por palabras clave compartidas.
             valor_clave = palabras_clave(celda.value)
             comunes = objetivo_clave & valor_clave
             if comunes:
                 puntaje = len(comunes)
-                # Bonus fuerte si TODAS las palabras del objetivo están presentes.
                 if objetivo_clave and objetivo_clave <= valor_clave:
                     puntaje += 10
                 if puntaje > mejor_puntaje:
@@ -227,13 +240,9 @@ def _buscar_etiqueta(ws, texto):
 
 
 def _escribir_valor(celda, valor, campo):
-    """
-    Escribe el valor: primero LIMPIA (Capa 1), luego aplica formato numérico.
-    """
-    # 1. Limpieza determinista según el tipo del campo.
+    """Escribe el valor: primero LIMPIA (Capa 1), luego aplica formato numérico."""
     valor = limpiar_valor(valor, campo)
 
-    # 2. Formato numérico.
     formato = getattr(campo, "formato_numero", "") or "NINGUNO"
     if formato in FORMATOS_EXCEL:
         code, es_pct = FORMATOS_EXCEL[formato]

@@ -1,0 +1,83 @@
+# ═════════════════════════════════════════════════════════════
+# docker-compose.yml — Orquesta TODAS las piezas de EasyLit.
+#
+# Con un solo comando (docker compose up) enciende las 5 piezas, las conecta
+# entre sí y las deja funcionando. Reemplaza las 5 terminales que usabas.
+# ═════════════════════════════════════════════════════════════
+
+services:
+
+  # ── Base de datos PostgreSQL ──
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: easylit
+      POSTGRES_USER: easylit
+      POSTGRES_PASSWORD: easylit_local_pass
+    volumes:
+      - datos_db:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # ── Redis (cola de tareas) ──
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  # ── Backend (Django + Gunicorn) ──
+  backend:
+    build: ./backend
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      SECRET_KEY: clave-secreta-local-cambiar-en-produccion
+      DATABASE_URL: postgres://easylit:easylit_local_pass@db:5432/easylit
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      ALLOWED_HOSTS: localhost,127.0.0.1,backend
+      FRONTEND_URL: http://localhost:8080
+      DEBUG: "True"
+      DB_SSL: "False"
+      SECURE_SSL: "False"
+      MEDIA_ROOT: /app/media
+    depends_on:
+      - db
+      - redis
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+    ports:
+      - "8000:8000"
+
+  # ── Worker (Celery) — misma imagen del backend, otro comando ──
+  worker:
+    build: ./backend
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+      SECRET_KEY: clave-secreta-local-cambiar-en-produccion
+      DATABASE_URL: postgres://easylit:easylit_local_pass@db:5432/easylit
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      DEBUG: "True"
+      DB_SSL: "False"
+      SECURE_SSL: "False"
+      MEDIA_ROOT: /app/media
+    depends_on:
+      - db
+      - redis
+      - backend
+    command: celery -A config worker --loglevel=info
+
+  # ── Frontend (React compilado + nginx) ──
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  datos_db:

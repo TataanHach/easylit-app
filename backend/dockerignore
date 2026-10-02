@@ -1,0 +1,10 @@
+# Archivos que NO se copian a la caja Docker (para que sea ligera y segura).
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+db.sqlite3
+.env
+media/
+.git/
+*.log

@@ -42,6 +42,10 @@ export interface CampoPlantilla {
   obligatorio: boolean;
   moneda_destino: string;
   descripcion: string;
+  hoja_destino?: string;
+  etiqueta_busqueda?: string;
+  formato_numero?: string;
+  ajuste_iva?: string;
 }
 
 export interface Plantilla {
