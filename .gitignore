@@ -31,3 +31,6 @@ frontend/.env
 .DS_Store
 Thumbs.db
 *.log
+
+*.exe
+Docker Desktop Installer.exe
