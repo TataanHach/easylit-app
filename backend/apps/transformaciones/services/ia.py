@@ -240,9 +240,15 @@ def limpiar_con_ia(valores_campos):
         prompt = _construir_prompt_limpieza(a_limpiar)
         respuesta = modelo.generate_content(prompt)
 
-        texto = respuesta.text.strip()
-        texto = re.sub(r"^```(json)?|```$", "", texto, flags=re.MULTILINE).strip()
+        texto = respuesta.text or ""
+        texto = re.sub(r"```(json)?", "", texto).strip()
+        inicio = texto.find("[")
+        fin = texto.rfind("]")
+        if inicio != -1 and fin != -1 and fin > inicio:
+            texto = texto[inicio:fin + 1]
         limpios = json.loads(texto)
+        if not isinstance(limpios, list):
+            return resultado, "limpieza-ia-sin-formato"
 
         # Aplicar cada valor limpio en su índice original.
         for entrada in limpios:

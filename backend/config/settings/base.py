@@ -115,5 +115,5 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # --- Integración de IA (se usa en el bloque del worker) ---
 # El proveedor y la clave se leen del entorno. anonimizar por defecto ON.
 IA_PROVIDER = "gemini"
-IA_MODEL = "gemini-flash-latest"
+IA_MODEL = "models/gemini-3.8-flash"
 GEMINI_API_KEY = ""  # se inyecta por variable de entorno en prod

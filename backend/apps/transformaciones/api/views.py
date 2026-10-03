@@ -23,9 +23,7 @@ from .serializers import (
 
 
 class TransformacionViewSet(viewsets.ModelViewSet):
-    """
-    CRUD de transformaciones + acciones del flujo.
-    """
+    """CRUD de transformaciones + acciones del flujo."""
 
     def get_queryset(self):
         usuario = self.request.user
@@ -82,25 +80,18 @@ class TransformacionViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def limpiar_ia(self, request, pk=None):
-        """
-        Limpia con IA los valores de texto/fecha del origen (NO los montos, que
-        se protegen). Guarda los valores limpios para que la generación los use.
-        Es opcional (el usuario lo pide con un botón), para no gastar cuota.
-        """
+        """Limpia con IA los valores de texto/fecha del origen (no montos)."""
         from apps.transformaciones.services import ia, limpieza
         from apps.transformaciones.models import Bitacora
- 
+
         transformacion = self.get_object()
- 
-        # Leer el origen (todas las hojas) para obtener los valores actuales.
         df, _ = limpieza.limpiar_excel(
             transformacion.archivo_origen.path,
             transformacion.opciones_limpieza or {},
             todas_las_hojas=True,
         )
         primera_fila = df.iloc[0] if len(df) > 0 else None
- 
-        # Armar la lista campo+valor de los mapeos con destino.
+
         valores_campos = []
         indice_a_columna = []
         for mapeo in transformacion.mapeos.select_related("destino_campo").all():
@@ -111,44 +102,43 @@ class TransformacionViewSet(viewsets.ModelViewSet):
                 valor = primera_fila[mapeo.origen_columna]
             valores_campos.append({"campo": mapeo.destino_campo, "valor": valor})
             indice_a_columna.append(mapeo.origen_columna)
- 
-        # Limpiar con IA (solo texto/fechas; los montos quedan intactos).
+
         limpios, modelo = ia.limpiar_con_ia(valores_campos)
- 
-        # Guardar los valores limpios en resultado_limpieza, indexados por la
-        # COLUMNA de origen, para que la generación los use.
+
         valores_ia = {}
         for col, limpio in zip(indice_a_columna, limpios):
             if limpio is not None:
                 valores_ia[col] = limpio
- 
+
         resultado = transformacion.resultado_limpieza or {}
         resultado["valores_ia"] = valores_ia
         transformacion.resultado_limpieza = resultado
         transformacion.save(update_fields=["resultado_limpieza"])
- 
+
         Bitacora.objects.create(
             transformacion=transformacion,
             evento=Bitacora.Evento.LIMPIEZA,
             autor=request.user,
             detalle={"limpieza_ia": modelo, "campos_limpiados": len(valores_ia)},
         )
- 
+
         return Response(
             {"ok": True, "modelo": modelo, "campos": len(valores_ia),
              "valores": valores_ia},
             status=status.HTTP_200_OK,
         )
- 
+
     @action(detail=True, methods=["get"])
     def vista_previa(self, request, pk=None):
         """
-        Devuelve los valores FINALES (cómo quedarán en el documento) sin generar
-        el Excel. Aplica: valor del origen -> limpieza IA (si existe) -> IVA ->
-        limpieza por formato. Sirve para revisar antes de generar.
+        Vista previa POR HOJA: devuelve cómo quedará cada hoja del documento.
+          - Hojas de formulario: lista de campos (campo -> valor final).
+          - Hojas de itemizado: la tabla de partidas (encabezados + filas limpias).
+        El frontend muestra una hoja a la vez, navegable con flechas.
         """
         from apps.transformaciones.services import limpieza, generacion
         from apps.transformaciones.tasks import _aplicar_iva
+        from openpyxl import load_workbook
 
         transformacion = self.get_object()
         df, _ = limpieza.limpiar_excel(
@@ -159,7 +149,8 @@ class TransformacionViewSet(viewsets.ModelViewSet):
         primera_fila = df.iloc[0] if len(df) > 0 else None
         valores_ia = (transformacion.resultado_limpieza or {}).get("valores_ia", {})
 
-        filas = []
+        # --- 1. Campos de formulario, agrupados por hoja ---
+        campos_por_hoja = {}
         for mapeo in transformacion.mapeos.select_related("destino_campo").all():
             campo = mapeo.destino_campo
             if campo is None:
@@ -173,15 +164,91 @@ class TransformacionViewSet(viewsets.ModelViewSet):
             ajuste = getattr(campo, "ajuste_iva", "") or "NINGUNO"
             valor = _aplicar_iva(valor, ajuste)
             valor_final = generacion.limpiar_valor(valor, campo)
-            filas.append({
+
+            hoja = campo.hoja_destino or "General"
+            campos_por_hoja.setdefault(hoja, []).append({
                 "campo": campo.nombre,
-                "hoja": campo.hoja_destino or "",
-                "origen_columna": mapeo.origen_columna,
-                "valor_crudo": None if crudo is None else str(crudo),
                 "valor_final": None if valor_final is None else str(valor_final),
                 "limpiado_ia": mapeo.origen_columna in valores_ia,
             })
-        return Response({"filas": filas}, status=status.HTTP_200_OK)
+
+        # --- 2. Itemizados: leer las tablas del origen y limpiarlas ---
+        itemizados_por_hoja = {}
+        try:
+            ruta_plantilla = transformacion.plantilla.archivo.path
+            ruta_origen = transformacion.archivo_origen.path
+            wb_dest = load_workbook(ruta_plantilla)
+            wb_ori = load_workbook(ruta_origen, data_only=True)
+
+            for nombre_hoja in wb_dest.sheetnames:
+                ws_dest = wb_dest[nombre_hoja]
+                enc_dest = generacion._detectar_encabezado_tabla(ws_dest)
+                if enc_dest is None:
+                    continue  # no es hoja de itemizado
+                # Buscar la tabla en el origen (misma hoja preferida)
+                datos = None
+                if nombre_hoja in wb_ori.sheetnames:
+                    datos = generacion._leer_itemizado_origen(wb_ori[nombre_hoja])
+                if datos is None:
+                    for h in wb_ori.sheetnames:
+                        d = generacion._leer_itemizado_origen(wb_ori[h])
+                        if d:
+                            datos = d
+                            break
+                if not datos:
+                    continue
+
+                # Encabezados del destino y emparejar
+                _, encabezados_tabla = enc_dest
+                cols_dest = [n for n in encabezados_tabla if n]
+                mapa = generacion._emparejar_columnas(datos["encabezados"], cols_dest)
+
+                filas_limpias = []
+                for partida in datos["partidas"]:
+                    fila = []
+                    for col_dest in cols_dest:
+                        col_ori = mapa.get(col_dest)
+                        v = partida.get(col_ori, "") if col_ori else ""
+                        v = generacion._limpiar_celda_tabla(v, col_dest)
+                        fila.append(str(v) if v is not None else "")
+                    filas_limpias.append(fila)
+
+                itemizados_por_hoja[nombre_hoja] = {
+                    "columnas": cols_dest,
+                    "filas": filas_limpias,
+                }
+            wb_dest.close()
+            wb_ori.close()
+        except Exception:
+            pass
+
+        # --- 3. Armar la lista de hojas en orden ---
+        try:
+            wb = load_workbook(transformacion.plantilla.archivo.path, read_only=True)
+            orden_hojas = wb.sheetnames
+            wb.close()
+        except Exception:
+            orden_hojas = list(campos_por_hoja.keys()) + list(itemizados_por_hoja.keys())
+
+        hojas = []
+        for nombre in orden_hojas:
+            if nombre in itemizados_por_hoja:
+                hojas.append({
+                    "nombre": nombre,
+                    "tipo": "itemizado",
+                    "tabla": itemizados_por_hoja[nombre],
+                })
+            elif nombre in campos_por_hoja:
+                hojas.append({
+                    "nombre": nombre,
+                    "tipo": "formulario",
+                    "campos": campos_por_hoja[nombre],
+                })
+        # Campos sin hoja asignada (hoja "General")
+        if "General" in campos_por_hoja and not any(h["nombre"] == "General" for h in hojas):
+            hojas.append({"nombre": "General", "tipo": "formulario", "campos": campos_por_hoja["General"]})
+
+        return Response({"hojas": hojas}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"])
     def aprobar(self, request, pk=None):
@@ -197,7 +264,6 @@ class TransformacionViewSet(viewsets.ModelViewSet):
         )
         serializer = self.get_serializer(transformacion)
         return Response(serializer.data, status=status.HTTP_200_OK)
-    
 
     @action(detail=True, methods=["post"])
     def generar(self, request, pk=None):
@@ -227,18 +293,11 @@ class TransformacionViewSet(viewsets.ModelViewSet):
 
 
 class MapeoCampoViewSet(viewsets.ModelViewSet):
-    """
-    Editar los mapeos de una transformación (correcciones humanas).
-      PATCH /api/mapeos/{id}/   cambiar el destino_campo de un mapeo
-
-    Con esto, cuando el usuario corrige a qué campo va una columna en el editor
-    de mapeo, el cambio se guarda y se usa al generar el documento.
-    """
+    """Editar los mapeos de una transformación (correcciones humanas)."""
     serializer_class = MapeoCampoSerializer
     http_method_names = ["get", "patch", "head", "options"]
 
     def get_queryset(self):
-        # Solo mapeos de transformaciones de la organización del usuario.
         usuario = self.request.user
         if usuario.es_superadmin:
             qs = MapeoCampo.objects.all()
@@ -252,7 +311,6 @@ class MapeoCampoViewSet(viewsets.ModelViewSet):
         return qs.select_related("destino_campo", "transformacion")
 
     def perform_update(self, serializer):
-        # Al corregir a mano, marcar que fue ajuste humano y dejar constancia.
         mapeo = serializer.save(ajustado_por_humano=True)
         Bitacora.objects.create(
             transformacion=mapeo.transformacion,

@@ -21,4 +21,4 @@ CELERY_RESULT_BACKEND = REDIS_URL
 # Si el .env tiene GEMINI_API_KEY, se usa Gemini real. Si está vacía, el sistema
 # cae al modo simulado (heurística local) automáticamente.
 GEMINI_API_KEY = config("GEMINI_API_KEY", default="")
-IA_MODEL = config("IA_MODEL", default="gemini-flash-latest")
+IA_MODEL = config("IA_MODEL", default="models/gemini-3.8-flash")

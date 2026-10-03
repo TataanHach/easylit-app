@@ -154,3 +154,37 @@
 .preview-tabla td { padding: 8px 12px; border-bottom: 1px solid var(--line-soft); }
 .preview-tabla tr:hover { background: var(--bg); }
  
+/* Navegación de la vista previa por hojas */
+.preview-nav {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 4px 14px; margin-bottom: 10px; border-bottom: 1px solid var(--line);
+}
+.preview-flecha {
+  width: 36px; height: 36px; border-radius: var(--r-md);
+  border: 1px solid var(--line-strong); background: var(--surface);
+  cursor: pointer; color: var(--text-2); display: flex; align-items: center; justify-content: center;
+}
+.preview-flecha:hover:not(:disabled) { background: var(--bg); border-color: var(--brand-600); color: var(--brand-600); }
+.preview-flecha:disabled { opacity: .35; cursor: not-allowed; }
+.preview-flecha i { font-size: 18px; }
+.preview-titulo { text-align: center; }
+.preview-hoja-nombre { display: block; font-size: var(--fs-lg); font-weight: 600; color: var(--text); }
+.preview-hoja-contador { font-size: var(--fs-sm); color: var(--text-3); display: inline-flex; align-items: center; gap: 8px; }
+.preview-badge-item {
+  font-size: var(--fs-xs); font-weight: 700; padding: 1px 7px; border-radius: var(--r-pill);
+  background: var(--dest-50); color: var(--dest-700);
+}
+ 
+/* Tabla de la vista previa (si no la tenías ya) */
+.preview-tabla { width: 100%; border-collapse: collapse; font-size: var(--fs-md); }
+.preview-tabla th {
+  text-align: left; padding: 8px 12px; border-bottom: 2px solid var(--line);
+  font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .04em; color: var(--text-3);
+}
+.preview-tabla td { padding: 8px 12px; border-bottom: 1px solid var(--line-soft); }
+.preview-tabla tr:hover { background: var(--bg); }
+ 
+/* Tabla de itemizado: celdas más compactas y numéricas a la derecha */
+.preview-itemizado th, .preview-itemizado td { white-space: nowrap; padding: 6px 14px; }
+.preview-itemizado td:not(:first-child) { text-align: right; }
+ 
