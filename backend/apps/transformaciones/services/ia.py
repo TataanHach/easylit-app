@@ -175,16 +175,23 @@ def _construir_prompt_limpieza(items):
         for it in items
     )
     return f"""Eres un asistente que limpia datos de licitaciones chilenas.
-Para cada valor sucio, devuelve la versión LIMPIA y normalizada según su tipo.
+Para cada valor sucio, devuelve la versión LIMPIA según su tipo.
 
-Reglas:
-- Fechas: formato YYYY-MM-DD si es posible; si es aproximada (ej "Agosto 2024 aprox."), lo más cercano (2024-08).
-- Nombres/textos: corrige espacios partidos evidentes (ej "Servi cios" -> "Servicios"), colapsa espacios dobles.
+Reglas de QUÉ SÍ hacer:
+- Fechas: formato YYYY-MM-DD si es clara; si es aproximada ("Agosto 2024 aprox."), lo más cercano (2024-08) sin inventar día.
+- Números y plazos: extrae solo el número si viene con texto ("sesenta ( 60 ) Días" -> "60", "120 dias" -> "120").
+- Unidades: normaliza lo evidente ("1200 mts2" -> "1200 m2").
+- Espacios: corrige palabras partidas ("Servi cios" -> "Servicios") y espacios dobles.
 - RUT: formato XX.XXX.XXX-X sin espacios internos.
 - Emails: sin espacios.
-- Si un valor NO es un dato real (ej "El mismo representante"), devuélvelo IGUAL.
-- Si no puedes limpiar con seguridad, devuelve el valor ORIGINAL.
-- NUNCA inventes datos que no estén.
+
+Reglas de QUÉ NO hacer (MUY IMPORTANTE):
+- NO expandas abreviaturas en NOMBRES de entidades, empresas o instituciones.
+  "I. Municipalidad de Maipu" se queda "I. Municipalidad de Maipú" (solo corrige la tilde), NUNCA "Ilustre Municipalidad".
+- NO agregues ni quites palabras en nombres propios.
+- Si un valor NO es un dato real ("El mismo representante"), devuélvelo IGUAL.
+- Si dudas, devuelve el valor ORIGINAL.
+- NUNCA inventes información.
 
 VALORES A LIMPIAR:
 {lista}
