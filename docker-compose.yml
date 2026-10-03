@@ -1,8 +1,9 @@
 # ═════════════════════════════════════════════════════════════
 # docker-compose.yml — Orquesta TODAS las piezas de EasyLit.
 #
-# Con un solo comando (docker compose up) enciende las 5 piezas, las conecta
-# entre sí y las deja funcionando. Reemplaza las 5 terminales que usabas.
+# AÑADIDO: un volumen compartido "media" entre backend y worker, para que los
+# archivos que sube el backend los pueda leer el worker (están en cajas
+# separadas y necesitan una carpeta común).
 # ═════════════════════════════════════════════════════════════
 
 services:
@@ -41,6 +42,9 @@ services:
       DB_SSL: "False"
       SECURE_SSL: "False"
       MEDIA_ROOT: /app/media
+    volumes:
+      # Carpeta compartida para los archivos subidos y generados.
+      - media_compartida:/app/media
     depends_on:
       - db
       - redis
@@ -65,6 +69,9 @@ services:
       DB_SSL: "False"
       SECURE_SSL: "False"
       MEDIA_ROOT: /app/media
+    volumes:
+      # La MISMA carpeta compartida: así el worker ve los archivos del backend.
+      - media_compartida:/app/media
     depends_on:
       - db
       - redis
@@ -81,3 +88,4 @@ services:
 
 volumes:
   datos_db:
+  media_compartida:

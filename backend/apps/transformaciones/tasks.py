@@ -189,7 +189,10 @@ def generar_documento_tarea(transformacion_id):
                 con_valor += 1
             mapeos_con_valor.append({"campo": campo, "valor": valor})
 
-        contenido = generacion.generar_documento(t.plantilla.archivo.path, mapeos_con_valor)
+        contenido = generacion.generar_documento(
+            t.plantilla.archivo.path, mapeos_con_valor,
+            ruta_origen=t.archivo_origen.path,
+        )
 
         nombre = f"generado_{t.id}.xlsx"
         t.archivo_generado.save(nombre, ContentFile(contenido), save=False)

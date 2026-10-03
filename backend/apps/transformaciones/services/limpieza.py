@@ -5,12 +5,12 @@ Lee el Excel origen y lo normaliza. Detecta el formato automáticamente:
   - TABLA: encabezados arriba, datos en filas.
   - VERTICAL: formulario "etiqueta | dato".
 
-Y puede leer UNA hoja o TODAS las hojas del origen combinándolas (multi-hoja),
-para orígenes con la información repartida en varias pestañas.
-
-Todo aquí es reproducible: mismos datos de entrada → mismo resultado.
+Al leer todas las hojas (multi-hoja), SALTA las hojas de ITEMIZADO (tablas de
+partidas: materiales, personal), porque esas no son campos de formulario y las
+procesa aparte el generador. Así no ensucian el mapeo ni bajan la confianza.
 """
 import re
+import unicodedata
 from decimal import Decimal, InvalidOperation
 
 import pandas as pd
@@ -46,7 +46,6 @@ def _a_numero(valor):
 
 
 def normalizar_unidad(texto, catalogo):
-    """Resuelve el texto de una unidad ('M3', 'mt2') a su símbolo canónico."""
     if not texto:
         return None
     t = str(texto).strip().lower()
@@ -59,11 +58,40 @@ def normalizar_unidad(texto, catalogo):
 
 
 # ─────────────────────────────────────────────────────────────
-# DETECCIÓN Y LECTURA DE FORMATO (tabla vs vertical, 1 hoja o todas)
+# DETECCIÓN DE FORMATO Y DE ITEMIZADOS
 # ─────────────────────────────────────────────────────────────
 
 def _texto(c):
     return "" if c is None else str(c).strip()
+
+
+def _norm_tabla(s):
+    s = str(s).lower().strip()
+    s = "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
+    return re.sub(r"[^a-z0-9]", " ", s).strip()
+
+
+# Palabras que delatan el encabezado de una tabla de itemizado.
+_PALABRAS_TABLA = [
+    "descripcion", "cantidad", "precio", "valor", "total", "unidad",
+    "cargo", "rol", "remuneracion", "item", "detalle", "personas", "monto", "pagar",
+]
+
+
+def es_hoja_itemizado(ws):
+    """
+    Una hoja es ITEMIZADO si tiene una fila con 3+ columnas de texto y al menos
+    2 de ellas son palabras típicas de tabla de partidas (Descripción, Cantidad,
+    Precio...). Esas hojas NO se leen como campos: las vuelca el generador.
+    """
+    for fila in ws.iter_rows(values_only=True):
+        celdas = [_texto(c) for c in fila]
+        con_texto = [c for c in celdas if c]
+        if len(con_texto) >= 3:
+            coinc = sum(1 for c in con_texto if any(p in _norm_tabla(c) for p in _PALABRAS_TABLA))
+            if coinc >= 2:
+                return True
+    return False
 
 
 def _detectar_formato(ws):
@@ -79,7 +107,6 @@ def _detectar_formato(ws):
 
 
 def _leer_vertical(ws):
-    """Convierte una hoja vertical (etiqueta | dato) en un DataFrame de 1 fila."""
     datos = {}
     for fila in ws.iter_rows(values_only=True):
         celdas = [_texto(c) for c in fila if _texto(c)]
@@ -92,7 +119,6 @@ def _leer_vertical(ws):
 
 
 def _leer_una_hoja(ruta_archivo, hoja):
-    """Lee una hoja concreta detectando su formato. Devuelve (df, tipo)."""
     try:
         wb = load_workbook(ruta_archivo, data_only=True)
         ws = wb[hoja] if (hoja and hoja in wb.sheetnames) else wb.active
@@ -111,18 +137,25 @@ def _leer_una_hoja(ruta_archivo, hoja):
 
 def _leer_todas_las_hojas(ruta_archivo):
     """
-    Lee TODAS las hojas y combina sus campos en un DataFrame de una fila.
-    Si dos hojas tienen un campo con el mismo nombre, la segunda se prefija con
-    el nombre de la hoja para no pisar a la primera.
-    Solo tiene sentido cuando las hojas son verticales (formularios); si alguna
-    es una tabla de varias filas, toma su primera fila.
+    Lee todas las hojas de FORMULARIO y combina sus campos. SALTA las hojas de
+    itemizado (tablas de partidas), que las procesa el generador aparte.
     """
-    wb = load_workbook(ruta_archivo, read_only=True)
-    nombres = wb.sheetnames
-    wb.close()
+    # Primero, detectar qué hojas son itemizado (para saltarlas).
+    itemizados = set()
+    try:
+        wb = load_workbook(ruta_archivo, data_only=True)
+        for nombre in wb.sheetnames:
+            if es_hoja_itemizado(wb[nombre]):
+                itemizados.add(nombre)
+        nombres = wb.sheetnames
+        wb.close()
+    except Exception:
+        nombres = []
 
     combinado = {}
     for hoja in nombres:
+        if hoja in itemizados:
+            continue   # saltar hojas de itemizado
         df, _tipo = _leer_una_hoja(ruta_archivo, hoja)
         if df.empty:
             continue
@@ -138,13 +171,6 @@ def _leer_todas_las_hojas(ruta_archivo):
 
 def limpiar_excel(ruta_archivo, opciones, catalogo_unidades=None, hoja=None,
                   todas_las_hojas=False):
-    """
-    Lee y limpia el Excel.
-      - Si todas_las_hojas=True: combina los campos de TODAS las hojas.
-      - Si hoja se indica: lee esa hoja.
-      - Si no: lee la hoja activa.
-    Detecta tabla vs vertical automáticamente. Devuelve (dataframe, resumen).
-    """
     catalogo_unidades = catalogo_unidades or []
     resumen = {
         "filas_originales": 0,
@@ -175,7 +201,6 @@ def limpiar_excel(ruta_archivo, opciones, catalogo_unidades=None, hoja=None,
     if df.empty:
         return df, resumen
 
-    # 1. Espacios sobrantes.
     if opciones.get("espacios", True):
         df.columns = [str(c).strip() for c in df.columns]
         for col in df.select_dtypes(include="object").columns:
@@ -183,13 +208,11 @@ def limpiar_excel(ruta_archivo, opciones, catalogo_unidades=None, hoja=None,
             df[col] = df[col].apply(lambda x: str(x).strip() if pd.notna(x) else x)
             resumen["espacios_corregidos"] += int((antes != df[col]).sum())
 
-    # 2. Duplicados.
     if opciones.get("duplicados", True):
         n_antes = len(df)
         df = df.drop_duplicates().reset_index(drop=True)
         resumen["duplicados_eliminados"] = n_antes - len(df)
 
-    # 3. Filas vacías.
     if opciones.get("vacias", False):
         df = df.dropna(how="all").reset_index(drop=True)
 
@@ -197,7 +220,6 @@ def limpiar_excel(ruta_archivo, opciones, catalogo_unidades=None, hoja=None,
 
 
 def detectar_columnas_numericas(df):
-    """Indica qué columnas parecen numéricas."""
     columnas = []
     for col in df.columns:
         muestra = df[col].dropna().head(20)
