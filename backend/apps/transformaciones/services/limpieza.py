@@ -94,6 +94,17 @@ def es_hoja_itemizado(ws):
     return False
 
 
+def hojas_itemizado(ruta_archivo):
+    """Nombres de las hojas del Excel que son tablas de itemizado."""
+    try:
+        wb = load_workbook(ruta_archivo, data_only=True)
+        nombres = [n for n in wb.sheetnames if es_hoja_itemizado(wb[n])]
+        wb.close()
+        return nombres
+    except Exception:
+        return []
+
+
 def _detectar_formato(ws):
     """Decide si una hoja es TABLA o VERTICAL."""
     filas = [f for f in ws.iter_rows(values_only=True) if any(_texto(c) for c in f)]

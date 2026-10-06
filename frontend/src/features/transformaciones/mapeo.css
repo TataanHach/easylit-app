@@ -193,3 +193,55 @@
   font-size: var(--fs-sm); background: var(--surface); cursor: pointer; color: var(--text-2);
 }
 .iva-select:focus { border-color: var(--brand-600); outline: none; }
+/* Mapeo por campo de la plantilla */
+.mapeo-fila-head {
+  padding-top: 10px; padding-bottom: 10px; background: var(--surface-2);
+  font-size: var(--fs-sm); font-weight: 600; color: var(--text-2);
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.mapeo-fila-head span:last-child { text-align: right; }
+.mapeo-campo { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mapeo-hoja {
+  font-size: var(--fs-xs); font-weight: 500; padding: 1px 6px; border-radius: var(--r-xs);
+  background: var(--surface); border: 1px solid var(--brand-100); color: var(--text-2);
+}
+.mapeo-oblig { color: var(--danger-600); font-weight: 700; }
+.mapeo-manual {
+  font-size: var(--fs-xs); font-weight: 700; padding: 2px 8px; border-radius: var(--r-pill);
+  background: var(--brand-50); color: var(--brand-700); border: 1px solid var(--brand-100);
+}
+.mapeo-select:disabled { opacity: .6; cursor: wait; }
+@media (max-width: 700px) { .mapeo-fila-head { display: none; } }
+
+/* Mapeo por hoja */
+.mapeo-nav { border-bottom: 1px solid var(--line-soft); }
+.mapeo-progreso {
+  font-size: var(--fs-xs); font-weight: 600; padding: 1px 8px; border-radius: var(--r-pill);
+  background: var(--warn-50); color: var(--warn-700); border: 1px solid var(--warn-100);
+}
+.mapeo-progreso.completo { background: var(--dest-50); color: var(--ok-700); border-color: var(--dest-100); }
+.mapeo-dato { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.mapeo-valor {
+  font-size: var(--fs-sm); color: var(--text-3); padding-left: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mapeo-valor strong { color: var(--text-2); font-weight: 600; }
+.mapeo-select optgroup { font-weight: 700; color: var(--text-2); }
+.mapeo-select option { font-weight: 400; color: var(--text); }
+
+/* Totales faltantes en tablas */
+.totales-banda {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 0 16px 12px; padding: 10px 14px; border-radius: var(--r-md);
+  background: var(--warn-50); border: 1px solid var(--warn-100); color: var(--warn-700);
+  font-size: var(--fs-md);
+}
+.totales-banda.activo { background: var(--brand-50); border-color: var(--brand-100); color: var(--brand-900); }
+.totales-banda > i { font-size: 18px; }
+.totales-banda > span { flex: 1; min-width: 200px; }
+.totales-banda .btn { white-space: nowrap; }
+.celda-calculada { background: var(--brand-50); color: var(--brand-700); font-weight: 600; font-style: italic; }
+
+/* Celdas de tabla limpiadas por la IA */
+.celda-ia { background: var(--ai-50); color: var(--ai-600); }
+.celda-ia-icono { font-size: 12px; margin-left: 4px; vertical-align: 1px; }

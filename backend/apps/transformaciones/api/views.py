@@ -118,15 +118,49 @@ class TransformacionViewSet(viewsets.ModelViewSet):
             valores_campos.append({"campo": mapeo.destino_campo, "valor": valor})
             indice_a_columna.append(mapeo.origen_columna)
 
-        limpios, modelo = ia.limpiar_con_ia(valores_campos)
+        # Textos de las tablas (itemizado): solo columnas de texto/fecha, sin repetidos.
+        from types import SimpleNamespace
+        from openpyxl import load_workbook
+        from apps.transformaciones.services import generacion
 
-        valores_ia = {}
-        for col, limpio in zip(indice_a_columna, limpios):
+        textos_tabla = []
+        try:
+            ruta = transformacion.archivo_origen.path
+            wb_ori = load_workbook(ruta, data_only=True)
+            for nombre in limpieza.hojas_itemizado(ruta):
+                datos = generacion._leer_itemizado_origen(wb_ori[nombre])
+                if datos:
+                    textos_tabla += generacion.textos_para_ia(datos, maximo=300 - len(textos_tabla))
+                if len(textos_tabla) >= 300:
+                    break
+            wb_ori.close()
+        except Exception:
+            textos_tabla = []
+        for _clave, col, tipo, valor in textos_tabla:
+            pseudo = SimpleNamespace(nombre=col, tipo=tipo, formato_numero="NINGUNO")
+            valores_campos.append({"campo": pseudo, "valor": valor})
+
+        # Una sola llamada a la IA para campos y tablas.
+        limpios, modelo = ia.limpiar_con_ia(valores_campos)
+        n_campos = len(indice_a_columna)
+
+        valores_ia, campos_cambiados = {}, 0
+        for i, col in enumerate(indice_a_columna):
+            limpio = limpios[i]
             if limpio is not None:
                 valores_ia[col] = limpio
+                if str(limpio).strip() != str(valores_campos[i]["valor"]).strip():
+                    campos_cambiados += 1
+
+        valores_ia_tablas, celdas_cambiadas = {}, 0
+        for (clave, _col, _tipo, original), limpio in zip(textos_tabla, limpios[n_campos:]):
+            if limpio is not None and str(limpio).strip() != original:
+                valores_ia_tablas.setdefault(clave, {})[original] = str(limpio).strip()
+                celdas_cambiadas += 1
 
         resultado = transformacion.resultado_limpieza or {}
         resultado["valores_ia"] = valores_ia
+        resultado["valores_ia_tablas"] = valores_ia_tablas
         transformacion.resultado_limpieza = resultado
         transformacion.save(update_fields=["resultado_limpieza"])
 
@@ -134,11 +168,14 @@ class TransformacionViewSet(viewsets.ModelViewSet):
             transformacion=transformacion,
             evento=Bitacora.Evento.LIMPIEZA,
             autor=request.user,
-            detalle={"limpieza_ia": modelo, "campos_limpiados": len(valores_ia)},
+            detalle={"limpieza_ia": modelo, "campos_limpiados": campos_cambiados,
+                     "textos_tabla_enviados": len(textos_tabla),
+                     "textos_tabla_limpiados": celdas_cambiadas},
         )
 
         return Response(
-            {"ok": True, "modelo": modelo, "campos": len(valores_ia),
+            {"ok": True, "modelo": modelo, "campos": campos_cambiados,
+             "textos_tabla": celdas_cambiadas, "textos_tabla_revisados": len(textos_tabla),
              "valores": valores_ia},
             status=status.HTTP_200_OK,
         )
@@ -224,24 +261,26 @@ class TransformacionViewSet(viewsets.ModelViewSet):
                 if not datos:
                     continue
 
-                # Encabezados del destino y emparejar
+                # Encabezados del destino; filas limpias (y totales si se pidió).
                 _, encabezados_tabla = enc_dest
                 cols_dest = [n for n in encabezados_tabla if n]
-                mapa = generacion._emparejar_columnas(datos["encabezados"], cols_dest)
+                calcular = bool((transformacion.resultado_limpieza or {}).get("calcular_totales"))
+                ia_tablas = (transformacion.resultado_limpieza or {}).get("valores_ia_tablas")
+                filas, faltantes = generacion.filas_itemizado(datos, cols_dest, calcular, ia_tablas)
 
-                filas_limpias = []
-                for partida in datos["partidas"]:
-                    fila = []
-                    for col_dest in cols_dest:
-                        col_ori = mapa.get(col_dest)
-                        v = partida.get(col_ori, "") if col_ori else ""
-                        v = generacion._limpiar_celda_tabla(v, col_dest)
-                        fila.append(str(v) if v is not None else "")
-                    filas_limpias.append(fila)
+                filas_limpias, calculadas, por_ia = [], [], []
+                for i, (valores, calc, ia_cols) in enumerate(filas):
+                    filas_limpias.append([generacion.texto_celda_tabla(valores[c], c) for c in cols_dest])
+                    calculadas += [[i, cols_dest.index(c)] for c in calc]
+                    por_ia += [[i, cols_dest.index(c)] for c in ia_cols]
 
                 itemizados_por_hoja[nombre_hoja] = {
                     "columnas": cols_dest,
                     "filas": filas_limpias,
+                    "totales_faltantes": faltantes,      # filas sin total con precio y cantidad
+                    "totales_calculados": calcular,
+                    "celdas_calculadas": calculadas,     # [fila, columna] marcadas en la vista
+                    "celdas_ia": por_ia,                 # [fila, columna] limpiadas por la IA
                 }
             wb_dest.close()
             wb_ori.close()
@@ -274,7 +313,114 @@ class TransformacionViewSet(viewsets.ModelViewSet):
         if "General" in campos_por_hoja and not any(h["nombre"] == "General" for h in hojas):
             hojas.append({"nombre": "General", "tipo": "formulario", "campos": campos_por_hoja["General"]})
 
-        return Response({"hojas": hojas}, status=status.HTTP_200_OK)
+        # --- 4. Datos del origen con su valor, para elegir cuál va en cada campo ---
+        datos_origen = []
+        for mapeo in transformacion.mapeos.all().order_by("origen_columna"):
+            valor = None
+            if primera_fila is not None and mapeo.origen_columna in df.columns:
+                valor = primera_fila[mapeo.origen_columna]
+            if mapeo.origen_columna in valores_ia:
+                valor = valores_ia[mapeo.origen_columna]
+            texto = "" if valor is None or str(valor) == "nan" else str(valor).strip()
+            datos_origen.append({"columna": mapeo.origen_columna, "valor": texto[:80]})
+
+        return Response({"hojas": hojas, "datos_origen": datos_origen}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
+    def asignar_dato(self, request, pk=None):
+        """
+        Elige qué dato del origen rellena un campo de la plantilla.
+        Body: { "campo": "<id CampoPlantilla>", "origen_columna": "RUT oferente" }
+        (origen_columna null/"" = dejar el campo sin dato).
+
+        Cada dato del origen va a un solo campo: si el elegido ya rellenaba otro
+        campo, se mueve, y la respuesta lo indica en `quitado_de`.
+        """
+        from django.db import transaction as db_transaction
+        from apps.plantillas.models import CampoPlantilla
+
+        transformacion = self.get_object()
+        campo_id = request.data.get("campo")
+        columna = (request.data.get("origen_columna") or "").strip() or None
+
+        campo = CampoPlantilla.objects.filter(
+            id=campo_id, plantilla=transformacion.plantilla
+        ).first()
+        if campo is None:
+            return Response(
+                {"detail": "Ese campo no pertenece a la plantilla de esta transformación. "
+                           "Recarga la página e intenta de nuevo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        mapeos = transformacion.mapeos.select_related("destino_campo")
+        elegido = None
+        if columna:
+            elegido = mapeos.filter(origen_columna=columna).first()
+            if elegido is None:
+                return Response(
+                    {"detail": f"El dato «{columna}» no existe en el archivo de origen. "
+                               "Recarga la página e intenta de nuevo."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        quitado_de = None
+        with db_transaction.atomic():
+            # Los datos que rellenaban este campo dejan de hacerlo.
+            anteriores = list(mapeos.filter(destino_campo=campo).exclude(
+                id=elegido.id if elegido else None
+            ))
+            for m in anteriores:
+                m.destino_campo = None
+                m.ajustado_por_humano = True
+                m.save(update_fields=["destino_campo", "ajustado_por_humano"])
+
+            if elegido and elegido.destino_campo_id != campo.id:
+                if elegido.destino_campo_id:
+                    quitado_de = elegido.destino_campo.nombre
+                elegido.destino_campo = campo
+                elegido.ajustado_por_humano = True
+                elegido.save(update_fields=["destino_campo", "ajustado_por_humano"])
+
+            Bitacora.objects.create(
+                transformacion=transformacion,
+                evento=Bitacora.Evento.AJUSTE_HUMANO,
+                autor=request.user,
+                detalle={
+                    "campo": campo.nombre,
+                    "dato": columna,
+                    "dato_anterior": [m.origen_columna for m in anteriores],
+                    "quitado_de": quitado_de,
+                },
+            )
+
+        return Response(
+            {
+                "mapeos": MapeoCampoSerializer(transformacion.mapeos.all(), many=True).data,
+                "quitado_de": quitado_de,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"])
+    def calcular_totales(self, request, pk=None):
+        """
+        Activa o quita el cálculo de totales faltantes en las tablas
+        (total = precio × cantidad). Body: { "activar": true | false }.
+        """
+        transformacion = self.get_object()
+        activar = bool(request.data.get("activar", True))
+        resultado = transformacion.resultado_limpieza or {}
+        resultado["calcular_totales"] = activar
+        transformacion.resultado_limpieza = resultado
+        transformacion.save(update_fields=["resultado_limpieza"])
+        Bitacora.objects.create(
+            transformacion=transformacion,
+            evento=Bitacora.Evento.AJUSTE_HUMANO,
+            autor=request.user,
+            detalle={"calcular_totales": activar},
+        )
+        return Response({"ok": True, "activar": activar}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"])
     def ajustar_iva(self, request, pk=None):
@@ -341,11 +487,12 @@ class TransformacionViewSet(viewsets.ModelViewSet):
                            "termine el mapeo y vuelve a intentarlo."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if not transformacion.mapeos.filter(destino_campo__isnull=False).exists():
+        hay_itemizado = bool((transformacion.resultado_limpieza or {}).get("hojas_itemizado"))
+        if not hay_itemizado and not transformacion.mapeos.filter(destino_campo__isnull=False).exists():
             return Response(
-                {"detail": "Ningún dato tiene un campo destino asignado, así que el "
-                           "documento saldría vacío. En «Mapeo propuesto» elige a qué "
-                           "campo de la plantilla va cada dato y vuelve a generar."},
+                {"detail": "Ningún campo tiene un dato asignado, así que el documento "
+                           "saldría vacío. En «Mapeo propuesto» elige qué dato del Excel "
+                           "va en cada campo y vuelve a generar."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

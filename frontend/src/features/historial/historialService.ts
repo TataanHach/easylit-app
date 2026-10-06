@@ -88,6 +88,23 @@ export const transformacionService = {
     });
     return data;
   },
+  /**
+   * Elige qué dato del origen rellena un campo de la plantilla (null = sin dato).
+   * Si el dato ya estaba en otro campo, se mueve: `quitado_de` dice de cuál.
+   */
+  async asignarDato(id: string, campoId: string, origenColumna: string | null) {
+    const { data } = await api.post(`/transformaciones/${id}/asignar_dato/`, {
+      campo: campoId, origen_columna: origenColumna,
+    });
+    return data as { mapeos: any[]; quitado_de: string | null };
+  },
+
+  /** Calcula (o deja de calcular) los totales faltantes de las tablas: precio × cantidad. */
+  async calcularTotales(id: string, activar: boolean) {
+    const { data } = await api.post(`/transformaciones/${id}/calcular_totales/`, { activar });
+    return data;
+  },
+
   /** Cambia el campo destino de un mapeo (corrección humana). */
   async editarMapeo(mapeoId: string, destinoCampoId: string | null) {
     const { data } = await api.patch(`/mapeos/${mapeoId}/`, {

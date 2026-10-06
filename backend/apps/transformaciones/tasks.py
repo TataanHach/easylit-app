@@ -58,6 +58,19 @@ def _aplicar_iva(valor, ajuste):
     return valor
 
 
+def _plantilla_tiene_tablas(plantilla):
+    """True si alguna hoja de la plantilla es una tabla de itemizado (destino)."""
+    from openpyxl import load_workbook
+    from .services import generacion
+    try:
+        wb = load_workbook(plantilla.archivo.path)
+        hay = any(generacion._detectar_encabezado_tabla(ws) for ws in wb.worksheets)
+        wb.close()
+        return hay
+    except Exception:
+        return False
+
+
 @shared_task
 def procesar_transformacion(transformacion_id):
     """Limpia el Excel y pide a la IA el mapeo. Deja todo listo para revisión."""
@@ -76,19 +89,23 @@ def procesar_transformacion(transformacion_id):
             t.archivo_origen.path, t.opciones_limpieza or {},
             todas_las_hojas=True,
         )
-        if df.empty or len(df.columns) == 0:
+        # Las hojas de itemizado (tablas de partidas) no aparecen en `df`: las
+        # copia el generador directo a las hojas de tabla de la plantilla.
+        itemizados = limpieza.hojas_itemizado(t.archivo_origen.path)
+        sin_formulario = df.empty or len(df.columns) == 0
+        if sin_formulario and not itemizados:
             raise ErrorUsuario(
                 "No se encontraron datos en el archivo de la licitación. Revisa que "
                 "tenga al menos una hoja con encabezados (o etiquetas) y sus valores, "
                 "y vuelve a subirlo."
             )
-        if not t.plantilla.campos.exists():
+        if not t.plantilla.campos.exists() and not _plantilla_tiene_tablas(t.plantilla):
             raise ErrorUsuario(
-                f"La plantilla «{t.plantilla.nombre}» no tiene campos configurados, así "
-                "que no hay dónde volcar los datos. Ve a Plantillas, agrega sus campos "
-                "y vuelve a crear la transformación."
+                f"La plantilla «{t.plantilla.nombre}» no tiene campos configurados ni "
+                "hojas de tabla, así que no hay dónde volcar los datos. Ve a Plantillas, "
+                "agrega sus campos y vuelve a crear la transformación."
             )
-        columnas_num = limpieza.detectar_columnas_numericas(df)
+        resumen["hojas_itemizado"] = itemizados
         t.resultado_limpieza = resumen
         t.estado = EstadoTransformacion.LIMPIEZA
         t.save(update_fields=["resultado_limpieza", "estado"])
@@ -104,10 +121,15 @@ def procesar_transformacion(transformacion_id):
             }
             for c in t.plantilla.campos.all()
         ]
-        propuesta, modelo_usado = ia.proponer_mapeo(
-            df, columnas_num, campos,
-            anonimizar=t.organizacion.anonimizar_montos,
-        )
+        if sin_formulario:
+            # Solo tablas: no hay datos sueltos que mapear (ni que mandar a la IA).
+            propuesta, modelo_usado = [], "solo-itemizado"
+        else:
+            columnas_num = limpieza.detectar_columnas_numericas(df)
+            propuesta, modelo_usado = ia.proponer_mapeo(
+                df, columnas_num, campos,
+                anonimizar=t.organizacion.anonimizar_montos,
+            )
         # La IA ya respondió: queda guardar el mapeo (paso "Preparando la revisión").
         if modelo_usado == "heuristica-respaldo":
             # Gemini falló y se usó la coincidencia por nombres: el usuario debe saberlo.
@@ -147,9 +169,18 @@ def procesar_transformacion(transformacion_id):
             else:
                 confianzas.append(0)
 
+        # Las columnas de las tablas también cuentan en la confianza: si no, una
+        # licitación que solo trae tablas quedaba en 0% aunque calzara perfecto.
+        if itemizados:
+            from .services import generacion
+            tablas = generacion.emparejamiento_tablas(t.plantilla.archivo.path, t.archivo_origen.path)
+            for info in tablas.values():
+                confianzas.extend(info.pop("puntajes"))
+            t.resultado_limpieza["tablas_emparejadas"] = tablas
+
         t.confianza = int(sum(confianzas) / len(confianzas)) if confianzas else 0
         t.estado = EstadoTransformacion.EN_REVISION
-        t.save(update_fields=["confianza", "estado"])
+        t.save(update_fields=["confianza", "estado", "resultado_limpieza"])
         Bitacora.objects.create(
             transformacion=t, evento=Bitacora.Evento.MAPEO_IA,
             detalle={
@@ -221,6 +252,8 @@ def generar_documento_tarea(transformacion_id):
         contenido = generacion.generar_documento(
             t.plantilla.archivo.path, mapeos_con_valor,
             ruta_origen=t.archivo_origen.path,
+            calcular_totales=bool((t.resultado_limpieza or {}).get("calcular_totales")),
+            valores_ia_tablas=(t.resultado_limpieza or {}).get("valores_ia_tablas"),
         )
 
         nombre = f"generado_{t.id}.xlsx"

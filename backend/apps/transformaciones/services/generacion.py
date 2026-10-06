@@ -11,6 +11,7 @@ Preserva el formato del Excel original (colores, títulos, estilos).
 import io
 import re
 import unicodedata
+from datetime import date, datetime
 
 from openpyxl import load_workbook
 from openpyxl.utils import coordinate_to_tuple
@@ -229,12 +230,18 @@ def _leer_itemizado_origen(ws):
     cols = [(idx, nom) for idx, nom in enumerate(encabezados) if nom]
     partidas = []
     for fila in ws.iter_rows(min_row=fila_enc + 1, values_only=True):
-        celdas = [_texto(c) for c in fila]
-        if cols and len(celdas) > cols[0][0] and celdas[cols[0][0]]:
-            partidas.append({nom: (celdas[idx] if idx < len(celdas) else "") for idx, nom in cols})
+        # Se guarda el valor ORIGINAL (fecha, número o texto), no su texto:
+        # convertir todo a str perdía las fechas y los números.
+        if cols and len(fila) > cols[0][0] and _texto(fila[cols[0][0]]):
+            partidas.append({nom: (fila[idx] if idx < len(fila) else None) for idx, nom in cols})
     if not partidas:
         return None
-    return {"encabezados": [n for _, n in cols], "partidas": partidas}
+    return {"hoja": ws.title, "encabezados": [n for _, n in cols], "partidas": partidas}
+
+
+def clave_ia_tabla(hoja, columna):
+    """Clave con que se guardan los valores limpiados por IA de una columna de tabla."""
+    return f"{hoja}::{columna}"
 
 
 def _emparejar_columnas(cols_origen, cols_destino):
@@ -252,19 +259,192 @@ def _emparejar_columnas(cols_origen, cols_destino):
     return mapa
 
 
-def _limpiar_celda_tabla(valor, nombre_columna):
-    """Limpia una celda de itemizado según qué tipo de columna es (por su nombre)."""
-    if not valor or not str(valor).strip():
-        return valor
+# Tipos de columna, reconocidos por palabras de su encabezado.
+_COL_DINERO = ["valor", "precio", "total", "remuneracion", "monto", "pagar", "venta",
+               "costo", "neto", "iva", "subtotal", "importe", "sueldo", "pago"]
+_COL_CANTIDAD = ["cantidad", "cant", "personas", "unidades"]
+_COL_FECHA = ["fecha", "inicio", "termino", "vencimiento", "emision"]
+
+# Errores de fórmula de Excel: no son datos, la celda queda vacía.
+_ERRORES_EXCEL = {"#VALUE!", "#DIV/0!", "#N/A", "#REF!", "#NAME?", "#NUM!", "#NULL!", "#SPILL!", "#CALC!"}
+
+_FORMATOS_FECHA_TEXTO = ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d.%m.%Y", "%d/%m/%y", "%d-%m-%y",
+                         "%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M")
+
+
+def _tipo_columna(nombre_columna):
     n = _normalizar(nombre_columna)
-    if any(p in n for p in ["valor", "precio", "total", "remuneracion", "monto", "pagar"]):
-        return _limpiar_monto(valor)
-    if any(p in n for p in ["cantidad", "personas"]):
-        return _limpiar_cantidad(valor)
-    return _limpiar_texto(valor)
+    palabras = n.split()
+    if any(p in n for p in _COL_FECHA):
+        return "fecha"
+    if palabras and palabras[0] in _COL_CANTIDAD:   # "cantidad total" es cantidad
+        return "cantidad"
+    if any(p in n for p in _COL_DINERO):
+        return "dinero"
+    if any(p in palabras or n.startswith(p) for p in _COL_CANTIDAD):
+        return "cantidad"
+    return "texto"
 
 
-def _volcar_itemizado(ws_destino, datos_origen):
+def _entero_si_exacto(num):
+    return int(num) if float(num).is_integer() else num
+
+
+def _fecha_desde_texto(s):
+    for fmt in _FORMATOS_FECHA_TEXTO:
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            pass
+    return None
+
+
+def _limpiar_celda_tabla(valor, nombre_columna):
+    """
+    Limpia una celda de itemizado y devuelve el valor con su tipo real
+    (date, int/float o str), o None si queda vacía.
+      - Errores de Excel (#VALUE!, #DIV/0!…) → vacía.
+      - Fechas → date (sin la hora 00:00:00).
+      - Columnas de dinero/cantidad → número, aunque venga con símbolos ("1.500+", "$ 2.000").
+      - Texto que es un número limpio ("100") → número.
+      - Resto → texto sin espacios de más.
+    """
+    if valor is None:
+        return None
+    if isinstance(valor, datetime):
+        return valor.date() if (valor.hour, valor.minute, valor.second) == (0, 0, 0) else valor
+    if isinstance(valor, date):
+        return valor
+    if isinstance(valor, bool):
+        return valor
+    if isinstance(valor, (int, float)):
+        return _entero_si_exacto(valor)
+
+    s = re.sub(r"\s+", " ", str(valor)).strip()
+    if not s or s.upper() in _ERRORES_EXCEL:
+        return None
+
+    tipo = _tipo_columna(nombre_columna)
+    if tipo == "fecha":
+        f = _fecha_desde_texto(s)
+        if f:
+            return f
+    if tipo in ("dinero", "cantidad"):
+        # En cantidades se toma el número aunque venga con palabras: "cien (100)" → 100.
+        num = _a_numero(_limpiar_cantidad(s) if tipo == "cantidad" else s)
+        if num is not None:
+            return _entero_si_exacto(num)
+        return s
+    # Número escrito como texto ("100", "2,5"); sin ceros a la izquierda para no
+    # romper códigos como "007".
+    if re.fullmatch(r"-?(0|[1-9]\d*)([.,]\d+)?", s):
+        return _entero_si_exacto(float(s.replace(",", ".")))
+    return s
+
+
+def texto_celda_tabla(valor, nombre_columna):
+    """Cómo se ve una celda limpia en la vista previa (formato chileno)."""
+    v = _limpiar_celda_tabla(valor, nombre_columna)
+    if v is None:
+        return ""
+    if isinstance(v, datetime):
+        return v.strftime("%d-%m-%Y %H:%M")
+    if isinstance(v, date):
+        return v.strftime("%d-%m-%Y")
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        miles = f"{v:,.0f}" if float(v).is_integer() else f"{v:,.2f}"
+        miles = miles.replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"${miles}" if _tipo_columna(nombre_columna) == "dinero" else miles
+    return str(v)
+
+
+def _es_num(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def columnas_calculo_total(cols_dest):
+    """
+    Columnas para calcular total = precio × cantidad, si la tabla las tiene:
+    (total, cantidad, precio) o None.
+    """
+    total = next((c for c in cols_dest
+                  if "total" in _normalizar(c).split() and _tipo_columna(c) == "dinero"), None)
+    cantidad = next((c for c in cols_dest if _tipo_columna(c) == "cantidad"), None)
+    precio = next((c for c in cols_dest
+                   if c != total and _tipo_columna(c) == "dinero"
+                   and any(p in _normalizar(c) for p in ["precio", "unitario", "valor", "venta"])), None)
+    return (total, cantidad, precio) if total and cantidad and precio else None
+
+
+def filas_itemizado(datos_origen, cols_dest, calcular_totales=False, valores_ia=None):
+    """
+    Filas limpias de una tabla, listas para la vista previa o el documento.
+    Devuelve (filas, faltantes): cada fila es (valores {columna: valor},
+    columnas_calculadas, columnas_limpiadas_por_ia). `faltantes` = filas sin
+    total pero con precio y cantidad; si `calcular_totales`, a esas se les pone
+    precio × cantidad. `valores_ia` = {clave_ia_tabla: {original: limpio}}.
+    """
+    mapa = _emparejar_columnas(datos_origen["encabezados"], cols_dest)
+    calc = columnas_calculo_total(cols_dest)
+    valores_ia = valores_ia or {}
+    hoja = datos_origen.get("hoja", "")
+    filas, faltantes = [], 0
+    for partida in datos_origen["partidas"]:
+        valores, por_ia = {}, set()
+        for col in cols_dest:
+            ori = mapa.get(col)
+            if not ori:
+                valores[col] = None
+                continue
+            crudo = partida.get(ori)
+            limpios = valores_ia.get(clave_ia_tabla(hoja, ori), {})
+            if isinstance(crudo, str) and crudo.strip() in limpios:
+                nuevo = limpios[crudo.strip()]
+                if nuevo != crudo.strip():
+                    por_ia.add(col)
+                crudo = nuevo
+            valores[col] = _limpiar_celda_tabla(crudo, col)
+        calculadas = set()
+        if calc:
+            tot, cant, pre = calc
+            if valores.get(tot) is None and _es_num(valores.get(cant)) and _es_num(valores.get(pre)):
+                faltantes += 1
+                if calcular_totales:
+                    valores[tot] = _entero_si_exacto(round(valores[cant] * valores[pre], 2))
+                    calculadas.add(tot)
+        filas.append((valores, calculadas, por_ia))
+    return filas, faltantes
+
+
+def textos_para_ia(datos_origen, maximo=300):
+    """
+    Valores de texto de una tabla que vale la pena mandar a la IA: solo columnas
+    de texto y fecha (nunca dinero ni cantidad), sin repetidos y solo los que la
+    limpieza normal deja como texto. Devuelve [(clave, columna, tipo, valor)].
+    """
+    hoja = datos_origen.get("hoja", "")
+    vistos, salida = set(), []
+    for col in datos_origen["encabezados"]:
+        tipo = _tipo_columna(col)
+        if tipo in ("dinero", "cantidad"):
+            continue   # privacidad: montos y cantidades no salen de la empresa
+        for partida in datos_origen["partidas"]:
+            crudo = partida.get(col)
+            if not isinstance(crudo, str) or not crudo.strip():
+                continue
+            if not isinstance(_limpiar_celda_tabla(crudo, col), str):
+                continue   # ya quedó como número o fecha: no hace falta la IA
+            clave = clave_ia_tabla(hoja, col)
+            if (clave, crudo.strip()) in vistos:
+                continue
+            vistos.add((clave, crudo.strip()))
+            salida.append((clave, col, "FECHA" if tipo == "fecha" else "TEXTO", crudo.strip()))
+            if len(salida) >= maximo:
+                return salida
+    return salida
+
+
+def _volcar_itemizado(ws_destino, datos_origen, calcular_totales=False, valores_ia=None):
     """
     Escribe las partidas del origen en la tabla del destino, emparejando columnas
     y limpiando cada celda. Devuelve cuántas partidas escribió.
@@ -276,27 +456,23 @@ def _volcar_itemizado(ws_destino, datos_origen):
     cols_dest = [(idx, nom) for idx, nom in enumerate(encabezados_dest) if nom]
     nombres_dest = [n for _, n in cols_dest]
 
-    mapa = _emparejar_columnas(datos_origen["encabezados"], nombres_dest)
+    filas, _ = filas_itemizado(datos_origen, nombres_dest, calcular_totales, valores_ia)
 
     fila_actual = fila_enc + 1
     escritas = 0
-    for partida in datos_origen["partidas"]:
+    for valores, _calculadas, _por_ia in filas:
         for idx_col, nom_dest in cols_dest:
-            col_origen = mapa.get(nom_dest)
-            if col_origen and col_origen in partida:
-                valor = _limpiar_celda_tabla(partida[col_origen], nom_dest)
-                # Si la columna es de dinero/cantidad y quedó numérica, escribir como número.
-                num = _a_numero(valor)
+            valor = valores.get(nom_dest)
+            if valor is not None:
                 celda = ws_destino.cell(row=fila_actual, column=idx_col + 1)
-                nd = _normalizar(nom_dest)
-                es_dinero = any(p in nd for p in ["valor", "precio", "total", "remuneracion", "monto", "pagar"])
-                if es_dinero and num is not None:
-                    celda.value = num
-                    celda.number_format = '"$"#,##0'
-                elif num is not None and any(p in nd for p in ["cantidad", "personas"]):
-                    celda.value = num
-                else:
-                    celda.value = valor
+                celda.value = valor
+                es_numero = isinstance(valor, (int, float)) and not isinstance(valor, bool)
+                if isinstance(valor, datetime):
+                    celda.number_format = "DD-MM-YYYY HH:MM"
+                elif isinstance(valor, date):
+                    celda.number_format = "DD-MM-YYYY"
+                elif es_numero and _tipo_columna(nom_dest) == "dinero":
+                    celda.number_format = '"$"#,##0' if float(valor).is_integer() else '"$"#,##0.00'
         fila_actual += 1
         escritas += 1
     return escritas
@@ -357,7 +533,58 @@ def _escribir_valor(celda, valor, campo):
     celda.value = valor
 
 
-def generar_documento(ruta_plantilla, mapeos_con_valor, ruta_origen=None):
+def buscar_tabla_origen(wb_origen, nombre_hoja):
+    """Tabla del origen para una hoja de tabla de la plantilla: primero la hoja
+    del mismo nombre; si no, la primera hoja del origen que tenga tabla."""
+    if nombre_hoja in wb_origen.sheetnames:
+        datos = _leer_itemizado_origen(wb_origen[nombre_hoja])
+        if datos:
+            return datos
+    for hoja_ori in wb_origen.sheetnames:
+        datos = _leer_itemizado_origen(wb_origen[hoja_ori])
+        if datos:
+            return datos
+    return None
+
+
+def emparejamiento_tablas(ruta_plantilla, ruta_origen):
+    """
+    Qué tan bien se emparejan las columnas de cada tabla de la plantilla con las
+    del origen. Por hoja: {columnas, emparejadas, sin_pareja, puntajes}, donde
+    cada puntaje es 100 (mismo nombre), 70 (nombre parecido) o 0 (sin pareja).
+    """
+    resultado = {}
+    try:
+        wb_dest = load_workbook(ruta_plantilla)
+        wb_ori = load_workbook(ruta_origen, data_only=True)
+    except Exception:
+        return resultado
+    for nombre in wb_dest.sheetnames:
+        enc = _detectar_encabezado_tabla(wb_dest[nombre])
+        if not enc:
+            continue
+        datos = buscar_tabla_origen(wb_ori, nombre)
+        if not datos:
+            continue
+        cols = [c for c in enc[1] if c]
+        mapa = _emparejar_columnas(datos["encabezados"], cols)
+        puntajes = [
+            100 if mapa[c] and _normalizar(mapa[c]) == _normalizar(c) else (70 if mapa[c] else 0)
+            for c in cols
+        ]
+        resultado[nombre] = {
+            "columnas": len(cols),
+            "emparejadas": sum(1 for c in cols if mapa[c]),
+            "sin_pareja": [c for c in cols if not mapa[c]],
+            "puntajes": puntajes,
+        }
+    wb_dest.close()
+    wb_ori.close()
+    return resultado
+
+
+def generar_documento(ruta_plantilla, mapeos_con_valor, ruta_origen=None, calcular_totales=False,
+                      valores_ia_tablas=None):
     """
     ruta_plantilla: .xlsx de la plantilla destino.
     mapeos_con_valor: lista de {campo, valor} para los campos de FORMULARIO.
@@ -400,19 +627,9 @@ def generar_documento(ruta_plantilla, mapeos_con_valor, ruta_origen=None):
                 # ¿La hoja destino tiene una tabla de itemizado?
                 if _detectar_encabezado_tabla(ws_dest) is None:
                     continue
-                # Buscar la tabla en el origen: primero en la hoja del mismo nombre.
-                datos = None
-                if nombre_hoja in wb_origen.sheetnames:
-                    datos = _leer_itemizado_origen(wb_origen[nombre_hoja])
-                # Si no, buscar en cualquier hoja del origen que tenga tabla.
-                if datos is None:
-                    for hoja_ori in wb_origen.sheetnames:
-                        d = _leer_itemizado_origen(wb_origen[hoja_ori])
-                        if d:
-                            datos = d
-                            break
+                datos = buscar_tabla_origen(wb_origen, nombre_hoja)
                 if datos:
-                    _volcar_itemizado(ws_dest, datos)
+                    _volcar_itemizado(ws_dest, datos, calcular_totales, valores_ia_tablas)
             wb_origen.close()
         except Exception:
             # Si falla el volcado de itemizados, no rompe la generación de campos.

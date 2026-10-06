@@ -30,6 +30,7 @@ export default function MapeoPage() {
   const [guardandoId, setGuardandoId] = useState<string | null>(null);
   const [limpiando, setLimpiando] = useState(false);
   const [hojaActiva, setHojaActiva] = useState(0);
+  const [hojaMapeo, setHojaMapeo] = useState(0);   // hoja visible en «Mapeo propuesto»
 
   const { data: t, isLoading, isFetchedAfterMount, refetch } = useQuery({
     queryKey: ["transformacion", id],
@@ -95,8 +96,29 @@ export default function MapeoPage() {
     const asignados = lista.filter((m) => m.destino_campo).length;
     const confianza = t.confianza ?? 0;
     const avisoIA = t.resultado_limpieza?.aviso_ia as string | undefined;
+    const tablas = (t.resultado_limpieza?.hojas_itemizado as string[] | undefined) ?? [];
 
-    if (total === 0) {
+    // Columnas de las tablas de la plantilla que no encontraron pareja en el origen.
+    const emparejadas = (t.resultado_limpieza?.tablas_emparejadas ?? {}) as Record<
+      string, { columnas: number; emparejadas: number; sin_pareja: string[] }
+    >;
+    const sinPareja = Object.entries(emparejadas).flatMap(([hoja, info]) =>
+      info.sin_pareja.map((c) => `${c} (${hoja})`)
+    );
+    const colsTotal = Object.values(emparejadas).reduce((s, i) => s + i.columnas, 0);
+    const colsOk = Object.values(emparejadas).reduce((s, i) => s + i.emparejadas, 0);
+
+    if (total === 0 && tablas.length > 0 && sinPareja.length > 0) {
+      avisos.advertencia(
+        "Tablas listas, pero faltan columnas",
+        `Se emparejaron ${colsOk} de ${colsTotal} columnas (${confianza}% de confianza). Estas no tienen columna en el origen y quedarán vacías: ${sinPareja.join(", ")}.`
+      );
+    } else if (total === 0 && tablas.length > 0) {
+      avisos.exito(
+        "Tablas listas para copiar",
+        `Las ${colsTotal || ""} columnas de ${tablas.length === 1 ? "la tabla" : "las tablas"} «${tablas.join("», «")}» se emparejaron (${confianza}% de confianza). Revisa la vista previa y genera el documento.`
+      );
+    } else if (total === 0) {
       avisos.error(
         "El mapeo terminó sin datos",
         "No se encontraron columnas ni etiquetas en el archivo de origen. Revisa que el Excel tenga encabezados y valores, y crea una nueva transformación."
@@ -124,18 +146,31 @@ export default function MapeoPage() {
     }
   }
 
-  async function cambiarDestino(mapeoId: string, destinoCampoId: string) {
-    setMapeosLocal((prev) =>
-      prev.map((m) => (m.id === mapeoId ? { ...m, destino_campo: destinoCampoId || null } : m))
-    );
-    setGuardandoId(mapeoId);
+  /** Elige qué dato del origen va en un campo de la plantilla ("" = sin dato). */
+  async function cambiarDato(campoId: string, campoNombre: string, columna: string) {
+    if (!id) return;
+    const anteriores = mapeosLocal;
+    // Cambio optimista: el dato elegido pasa a este campo y el anterior queda libre.
+    setMapeosLocal((prev) => prev.map((m) => {
+      if (columna && m.origen_columna === columna) return { ...m, destino_campo: campoId };
+      if (m.destino_campo === campoId) return { ...m, destino_campo: null };
+      return m;
+    }));
+    setGuardandoId(campoId);
     try {
-      await transformacionService.editarMapeo(mapeoId, destinoCampoId || null);
+      const r = await transformacionService.asignarDato(id, campoId, columna || null);
+      setMapeosLocal(r.mapeos);
+      if (r.quitado_de) {
+        avisos.info(
+          "Dato movido de campo",
+          `«${columna}» ya no rellena «${r.quitado_de}»: ahora va en «${campoNombre}». Si «${r.quitado_de}» necesita un dato, elígelo en su fila.`
+        );
+      }
       await refetchPreview();
     } catch (e) {
-      // Volver al valor guardado para no mostrar un cambio que no se aplicó.
-      setMapeosLocal(t?.mapeos ?? []);
-      avisos.error(describirError(e, "guardar el cambio de campo"));
+      // Volver a lo que había para no mostrar un cambio que no se aplicó.
+      setMapeosLocal(anteriores);
+      avisos.error(describirError(e, `cambiar el dato de «${campoNombre}»`));
     } finally {
       setGuardandoId(null);
     }
@@ -151,22 +186,49 @@ export default function MapeoPage() {
     }
   }
 
+  const [calculandoTotales, setCalculandoTotales] = useState(false);
+
+  async function alternarTotales(activar: boolean, faltantes: number) {
+    if (!id) return;
+    setCalculandoTotales(true);
+    try {
+      await transformacionService.calcularTotales(id, activar);
+      await refetchPreview();
+      if (activar) {
+        avisos.exito(
+          "Totales calculados",
+          `Se completaron ${faltantes} total(es) como precio × cantidad. Están marcados en la vista previa y se incluirán en el documento.`
+        );
+      } else {
+        avisos.info("Cálculo de totales quitado", "Los totales faltantes volverán a quedar vacíos en el documento.");
+      }
+    } catch (e) {
+      avisos.error(describirError(e, activar ? "calcular los totales" : "quitar el cálculo de totales"));
+    } finally {
+      setCalculandoTotales(false);
+    }
+  }
+
   async function limpiarConIA() {
     if (!id) return;
     setLimpiando(true);
     try {
       const r = await transformacionService.limpiarIA(id);
       if (r.modelo && (r.modelo.startsWith("gemini") || r.modelo.startsWith("models/"))) {
+        const partes = [
+          r.campos > 0 ? `${r.campos} campo(s)` : "",
+          r.textos_tabla > 0 ? `${r.textos_tabla} texto(s) de tablas` : "",
+        ].filter(Boolean);
         avisos.exito(
           "Limpieza con IA lista",
-          r.campos > 0
-            ? `Se limpiaron ${r.campos} campo(s) de texto y fechas. Revisa la vista previa antes de generar.`
+          partes.length > 0
+            ? `Se limpiaron ${partes.join(" y ")}. Están marcados con ✦ en la vista previa; revísalos antes de generar.`
             : "La IA revisó los datos y no encontró nada que corregir."
         );
       } else if (r.modelo === "sin-limpieza-ia") {
         avisos.info(
           "No había nada que limpiar",
-          "Los campos mapeados no tienen texto ni fechas con valor. Los montos nunca se envían a la IA."
+          "Ni los campos mapeados ni las tablas tienen textos o fechas por limpiar. Los montos y cantidades nunca se envían a la IA."
         );
       } else if (r.modelo === "sin-clave-ia") {
         avisos.error(
@@ -298,8 +360,34 @@ export default function MapeoPage() {
 
   // Advertencias antes de generar.
   const avisoIA = t.resultado_limpieza?.aviso_ia as string | undefined;
-  const sinAsignar = mapeos.filter((m) => !m.destino_campo).length;
-  const ningunoAsignado = mapeos.length > 0 && sinAsignar === mapeos.length;
+  const tablasOrigen = (t.resultado_limpieza?.hojas_itemizado as string[] | undefined) ?? [];
+  const soloTablas = mapeos.length === 0 && tablasOrigen.length > 0;
+  // Sin campos con dato y sin tablas que copiar, el documento saldría vacío.
+  const ningunoAsignado = tablasOrigen.length === 0 && mapeos.length > 0 && !mapeos.some((m) => m.destino_campo);
+  const camposSinDato = campos.filter((c) => !mapeos.some((m) => m.destino_campo === c.id)).length;
+  // Valor de cada dato del origen (viene con la vista previa) para mostrarlo al elegir.
+  const valorDe: Record<string, string> = Object.fromEntries(
+    (preview?.datos_origen ?? []).map((d: { columna: string; valor: string }) => [d.columna, d.valor])
+  );
+  const nombreCampo: Record<string, string> = Object.fromEntries(campos.map((c) => [c.id, c.nombre]));
+
+  // Campos agrupados por hoja, en el orden de las hojas del Excel de la plantilla.
+  const ordenHojas = hojas.map((h: { nombre: string }) => h.nombre);
+  const hojasMapeo: { nombre: string; campos: typeof campos }[] = [];
+  campos.forEach((c) => {
+    const nombre = c.hoja_destino || "General";
+    let grupo = hojasMapeo.find((h) => h.nombre === nombre);
+    if (!grupo) { grupo = { nombre, campos: [] }; hojasMapeo.push(grupo); }
+    grupo.campos.push(c);
+  });
+  const posicion = (n: string) => (ordenHojas.indexOf(n) === -1 ? 999 : ordenHojas.indexOf(n));
+  hojasMapeo.sort((a, b) => posicion(a.nombre) - posicion(b.nombre));
+  const indiceMapeo = Math.min(hojaMapeo, Math.max(0, hojasMapeo.length - 1));
+  const grupoMapeo = hojasMapeo[indiceMapeo];
+  const conDato = (lista: typeof campos) => lista.filter((c) => mapeos.some((m) => m.destino_campo === c.id)).length;
+
+  // Datos del origen ordenados alfabéticamente, para el desplegable.
+  const datosOrdenados = [...mapeos].sort((a, b) => a.origen_columna.localeCompare(b.origen_columna, "es"));
   const obligatoriosFaltantes = campos.filter(
     (c) => c.obligatorio && !mapeos.some((m) => m.destino_campo === c.id)
   );
@@ -358,6 +446,23 @@ export default function MapeoPage() {
             </table>
           )}
 
+          {hoja?.tipo === "itemizado" && hoja.tabla.totales_faltantes > 0 && (
+            <div className={`totales-banda ${hoja.tabla.totales_calculados ? "activo" : ""}`}>
+              <i className={hoja.tabla.totales_calculados ? "ti ti-calculator" : "ti ti-alert-triangle"} />
+              <span>
+                {hoja.tabla.totales_calculados
+                  ? <>Se calcularon <strong>{hoja.tabla.totales_faltantes}</strong> total(es) como precio × cantidad (marcados en azul).</>
+                  : <>Hay <strong>{hoja.tabla.totales_faltantes}</strong> fila(s) sin total, pero con precio y cantidad. Puedes calcularlo.</>}
+              </span>
+              <button className="btn" disabled={calculandoTotales}
+                onClick={() => alternarTotales(!hoja.tabla.totales_calculados, hoja.tabla.totales_faltantes)}>
+                {calculandoTotales ? "…" : hoja.tabla.totales_calculados
+                  ? <><i className="ti ti-arrow-back-up" /> Quitar cálculo</>
+                  : <><i className="ti ti-calculator" /> Calcular totales (precio × cantidad)</>}
+              </button>
+            </div>
+          )}
+
           {hoja?.tipo === "itemizado" && (
             <div style={{ overflowX: "auto" }}>
               <table className="preview-tabla preview-itemizado">
@@ -366,7 +471,21 @@ export default function MapeoPage() {
                 </thead>
                 <tbody>
                   {hoja.tabla.filas.map((fila: string[], i: number) => (
-                    <tr key={i}>{fila.map((celda, j) => <td key={j}>{celda || "—"}</td>)}</tr>
+                    <tr key={i}>
+                      {fila.map((celda, j) => {
+                        const marcada = (lista?: number[][]) =>
+                          (lista ?? []).some(([fi, co]) => fi === i && co === j);
+                        const calculada = marcada(hoja.tabla.celdas_calculadas);
+                        const porIA = marcada(hoja.tabla.celdas_ia);
+                        return (
+                          <td key={j} className={calculada ? "celda-calculada" : porIA ? "celda-ia" : ""}
+                            title={calculada ? "Calculado: precio × cantidad" : porIA ? "Limpiado con IA" : undefined}>
+                            {celda || "—"}
+                            {porIA && <i className="ti ti-sparkles celda-ia-icono" />}
+                          </td>
+                        );
+                      })}
+                    </tr>
                   ))}
                 </tbody>
               </table>
@@ -387,8 +506,8 @@ export default function MapeoPage() {
           <i className="ti ti-alert-circle" />
           <div>
             <strong>No se puede generar todavía</strong>
-            Ningún dato tiene un campo destino, así que el documento saldría vacío. Abajo, en «Mapeo propuesto»,
-            elige a qué campo de la plantilla va cada dato.
+            Ningún campo tiene un dato asignado, así que el documento saldría vacío. Abajo, en «Mapeo propuesto»,
+            elige qué dato del Excel va en cada campo.
           </div>
         </div>
       ) : obligatoriosFaltantes.length > 0 && (
@@ -405,8 +524,8 @@ export default function MapeoPage() {
       {/* ───── BOTONES (entre vista previa y mapeo) ───── */}
       <div className="mapeo-acciones" style={{ marginBottom: 14 }}>
         <span className="mapeo-acciones-info">
-          <i className="ti ti-info-circle" style={{ verticalAlign: "-2px" }} /> {mapeos.length} campos
-          {sinAsignar > 0 && !ningunoAsignado && <> · {sinAsignar} sin asignar (no se incluirán)</>}.
+          <i className="ti ti-info-circle" style={{ verticalAlign: "-2px" }} /> {campos.length} campos
+          {camposSinDato > 0 && !ningunoAsignado && <> · {camposSinDato} sin dato (quedarán vacíos)</>}.
         </span>
         <div style={{ display: "flex", gap: 10 }}>
           <button className="btn btn-lg" onClick={() => navigate("/historial")}>Volver</button>
@@ -415,8 +534,8 @@ export default function MapeoPage() {
             {limpiando ? "Limpiando…" : <><i className="ti ti-sparkles" /> Limpiar con IA</>}
           </button>
           <button className="btn btn-primary btn-lg" onClick={generar}
-            disabled={generando || mapeos.length === 0 || ningunoAsignado}
-            title={ningunoAsignado ? "Asigna al menos un campo destino para poder generar" : undefined}>
+            disabled={generando || (mapeos.length === 0 && !soloTablas) || ningunoAsignado}
+            title={ningunoAsignado ? "Asigna un dato a al menos un campo para poder generar" : undefined}>
             {generando ? "Generando…" : <><i className="ti ti-file-export" /> Generar documento</>}
           </button>
         </div>
@@ -429,7 +548,7 @@ export default function MapeoPage() {
             <span className="mapeo-ia-icon"><i className="ti ti-brain" /></span>
             <div>
               <h2>Mapeo propuesto</h2>
-              <p>Corrige cada destino si hace falta. Se guarda al instante.</p>
+              <p>Elige qué dato del Excel va en cada campo de la plantilla. Se guarda al instante.</p>
             </div>
           </div>
           <span className="privacy-tag"><i className="ti ti-lock" /> Montos ocultos a la IA</span>
@@ -437,41 +556,102 @@ export default function MapeoPage() {
 
         {mapeos.length === 0 ? (
           <div style={{ padding: 32, textAlign: "center", color: "var(--text-3)" }}>
-            No se encontraron datos para mapear en el archivo de origen. Revisa que el Excel tenga encabezados y
-            valores, y crea una nueva transformación.
+            {soloTablas ? (
+              <>
+                <i className="ti ti-table" style={{ fontSize: 26, display: "block", marginBottom: 6 }} />
+                Esta licitación solo trae tablas ({tablasOrigen.join(", ")}), así que no hay datos sueltos que mapear.
+                Las filas se copiarán a las hojas de tabla de la plantilla: revisa la vista previa y genera.
+              </>
+            ) : (
+              "No se encontraron datos para mapear en el archivo de origen. Revisa que el Excel tenga encabezados y valores, y crea una nueva transformación."
+            )}
           </div>
         ) : (
-          mapeos.map((m) => {
-            const clase = m.confianza >= 85 ? "alta" : m.confianza >= 60 ? "media" : "baja";
-            return (
-              <div className="mapeo-fila" key={m.id}>
-                <span className="mapeo-origen">{m.origen_columna}</span>
-                <span className="mapeo-flecha"><i className="ti ti-arrow-right" /></span>
-                <select
-                  className={`mapeo-select ${!m.destino_campo ? "sin-asignar" : ""}`}
-                  value={m.destino_campo ?? ""}
-                  onChange={(e) => cambiarDestino(m.id, e.target.value)}
-                >
-                  <option value="">— Sin asignar —</option>
-                  {campos.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.hoja_destino ? `[${c.hoja_destino}] ` : ""}{c.nombre}
-                    </option>
-                  ))}
-                </select>
-                <span className={`mapeo-conf ${clase}`}>
-                  {guardandoId === m.id ? (
-                    <i className="ti ti-loader-2" style={{ animation: "girar 1s linear infinite", color: "var(--brand-500)" }} />
-                  ) : (
-                    <>
-                      <span className="mapeo-conf-bar"><span className="mapeo-conf-fill" style={{ width: `${m.confianza}%` }} /></span>
-                      <span className="mapeo-conf-num">{m.confianza}%</span>
-                    </>
-                  )}
-                </span>
+          <>
+            {hojasMapeo.length > 1 && (
+              <div className="preview-nav mapeo-nav">
+                <button className="preview-flecha" disabled={indiceMapeo === 0} title="Hoja anterior"
+                  onClick={() => setHojaMapeo(indiceMapeo - 1)}>
+                  <i className="ti ti-chevron-left" />
+                </button>
+                <div className="preview-titulo">
+                  <span className="preview-hoja-nombre">{grupoMapeo?.nombre}</span>
+                  <span className="preview-hoja-contador">
+                    Hoja {indiceMapeo + 1} de {hojasMapeo.length}
+                    <span className={`mapeo-progreso ${grupoMapeo && conDato(grupoMapeo.campos) === grupoMapeo.campos.length ? "completo" : ""}`}>
+                      {grupoMapeo ? conDato(grupoMapeo.campos) : 0} de {grupoMapeo?.campos.length ?? 0} con dato
+                    </span>
+                  </span>
+                </div>
+                <button className="preview-flecha" disabled={indiceMapeo >= hojasMapeo.length - 1} title="Hoja siguiente"
+                  onClick={() => setHojaMapeo(indiceMapeo + 1)}>
+                  <i className="ti ti-chevron-right" />
+                </button>
               </div>
-            );
-          })
+            )}
+            <div className="mapeo-fila mapeo-fila-head">
+              <span>Campo de la plantilla</span><span /><span>Dato del Excel</span><span>Confianza</span>
+            </div>
+            {(grupoMapeo?.campos ?? []).map((c) => {
+              const m = mapeos.find((x) => x.destino_campo === c.id);
+              const clase = !m ? "" : m.confianza >= 85 ? "alta" : m.confianza >= 60 ? "media" : "baja";
+              return (
+                <div className="mapeo-fila" key={c.id}>
+                  <span className="mapeo-origen mapeo-campo">
+                    {c.nombre}
+                    {c.obligatorio && <span className="mapeo-oblig" title="Campo obligatorio">*</span>}
+                  </span>
+                  <span className="mapeo-flecha"><i className="ti ti-arrow-left" /></span>
+                  <div className="mapeo-dato">
+                    <select
+                      className={`mapeo-select ${!m ? "sin-asignar" : ""}`}
+                      value={m?.origen_columna ?? ""}
+                      disabled={guardandoId === c.id}
+                      onChange={(e) => cambiarDato(c.id, c.nombre, e.target.value)}
+                    >
+                      <option value="">— Sin dato —</option>
+                      {m && (
+                        <optgroup label="Dato actual">
+                          <option value={m.origen_columna}>{opcionDato(m.origen_columna, valorDe)}</option>
+                        </optgroup>
+                      )}
+                      <optgroup label="Disponibles">
+                        {datosOrdenados.filter((d) => !d.destino_campo).map((d) => (
+                          <option key={d.id} value={d.origen_columna}>{opcionDato(d.origen_columna, valorDe)}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Ya usados en otro campo (se moverán aquí)">
+                        {datosOrdenados.filter((d) => d.destino_campo && d.destino_campo !== c.id).map((d) => (
+                          <option key={d.id} value={d.origen_columna}>
+                            {opcionDato(d.origen_columna, valorDe)} → {nombreCampo[d.destino_campo] ?? "otro campo"}
+                          </option>
+                        ))}
+                      </optgroup>
+                    </select>
+                    {m && (
+                      <span className="mapeo-valor" title={valorDe[m.origen_columna] || ""}>
+                        Valor: <strong>{valorDe[m.origen_columna] ? recortarTexto(valorDe[m.origen_columna], 60) : "(vacío)"}</strong>
+                      </span>
+                    )}
+                  </div>
+                  <span className={`mapeo-conf ${clase}`}>
+                    {guardandoId === c.id ? (
+                      <i className="ti ti-loader-2" style={{ color: "var(--brand-500)" }} />
+                    ) : !m ? (
+                      <span className="mapeo-conf-num" style={{ color: "var(--text-3)" }}>—</span>
+                    ) : m.ajustado_por_humano ? (
+                      <span className="mapeo-manual" title="Elegido por ti">Manual</span>
+                    ) : (
+                      <>
+                        <span className="mapeo-conf-bar"><span className="mapeo-conf-fill" style={{ width: `${m.confianza}%` }} /></span>
+                        <span className="mapeo-conf-num">{m.confianza}%</span>
+                      </>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
+          </>
         )}
       </div>
     </div>
@@ -541,4 +721,13 @@ function ProcesandoIA({ estado, nombre, onTerminar }: {
       </div>
     </div>
   );
+}
+function recortarTexto(texto: string, max: number) {
+  return texto.length > max ? `${texto.slice(0, max).trimEnd()}…` : texto;
+}
+
+/** Texto de una opción del desplegable: «Columna — valor». */
+function opcionDato(columna: string, valorDe: Record<string, string>) {
+  const valor = valorDe[columna];
+  return `${recortarTexto(columna, 30)}  —  ${valor ? recortarTexto(valor, 30) : "(vacío)"}`;
 }
