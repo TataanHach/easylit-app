@@ -35,7 +35,7 @@ export default function LoginPage() {
     try {
       const estado = await authService.estadoCorreo(correo);
       if (!estado.existe) {
-        setError("No hay ninguna cuenta con ese correo. Pídele a tu gerente que te dé de alta.");
+        setError("Correo no registrado.");
       } else if (estado.necesita_contrasena) {
         // Fue invitado y aún no tiene contraseña → a crearla.
         navigate("/crear-contrasena", { state: { email: correo } });
@@ -57,7 +57,7 @@ export default function LoginPage() {
       await login(limpiarTexto(email), password);
       navigate("/");
     } catch {
-      setError("Correo o contraseña incorrectos.");
+      setError("Contraseña incorrectos.");
     } finally {
       setCargando(false);
     }
