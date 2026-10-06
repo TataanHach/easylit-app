@@ -10,11 +10,28 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { plantillaService } from "@/features/plantillas/plantillaService";
 import { transformacionService } from "@/features/historial/historialService";
+import { describirError } from "@/lib/errores";
+import { LIMITES, limpiarTexto } from "@/lib/limites";
 import "./transformar.css";
+
+const EXTENSIONES = ["xlsx", "xlsm", "xls", "csv"];
+
+/** Valida el archivo antes de subirlo. Devuelve el problema o "" si está bien. */
+function problemaArchivo(f: File): string {
+  const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
+  if (!EXTENSIONES.includes(ext)) {
+    return `«${f.name}» no es un Excel ni un CSV. Sube un archivo .xlsx, .xls o .csv.`;
+  }
+  if (f.size === 0) {
+    return `«${f.name}» está vacío. Revisa que se haya guardado bien y vuelve a subirlo.`;
+  }
+  return "";
+}
 
 export default function TransformarPage() {
   const navigate = useNavigate();
   const [archivo, setArchivo] = useState<File | null>(null);
+  const [nombre, setNombre] = useState("");          // nombre para el historial
   const [empresa, setEmpresa] = useState("");        // mandante elegido
   const [plantillaId, setPlantillaId] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -47,6 +64,24 @@ export default function TransformarPage() {
     setPlantillaId("");
   }
 
+  // Al elegir plantilla con "Todas las empresas", se fija la empresa de esa plantilla.
+  function cambiarPlantilla(id: string) {
+    setPlantillaId(id);
+    if (!empresa && id) {
+      const p = plantillas?.find((x) => x.id === id);
+      if (p) setEmpresa(p.mandante || "__sin__");
+    }
+  }
+
+  function elegirArchivo(f: File | null) {
+    setError("");
+    if (f) {
+      const problema = problemaArchivo(f);
+      if (problema) { setError(problema); setArchivo(null); return; }
+    }
+    setArchivo(f);
+  }
+
   async function transformar() {
     if (!archivo || !plantillaId) return;
     setError("");
@@ -56,15 +91,12 @@ export default function TransformarPage() {
         archivo,
         plantilla: plantillaId,
         mandante: empresa && empresa !== "__sin__" ? empresa : undefined,
+        nombre: limpiarTexto(nombre) || undefined,
       });
       navigate(`/transformar/${t.id}/mapeo`);
-    } catch (e: any) {
-      const detalle = e?.response?.data;
-      setError(
-        typeof detalle === "object"
-          ? Object.values(detalle).flat().join(" ")
-          : "No se pudo crear la transformación. Revisa el archivo y la plantilla."
-      );
+    } catch (e) {
+      const { titulo, detalle } = describirError(e, "crear la transformación");
+      setError(`${titulo}. ${detalle}`);
       setEnviando(false);
     }
   }
@@ -100,7 +132,7 @@ export default function TransformarPage() {
           {!archivo ? (
             <label className="dropzone">
               <input type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }}
-                onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} />
+                onChange={(e) => { elegirArchivo(e.target.files?.[0] ?? null); e.target.value = ""; }} />
               <div className="drop-icon"><i className="ti ti-file-upload" /></div>
               <p className="drop-title">Sube la licitación</p>
               <p className="drop-sub">Excel o CSV · haz clic para seleccionar</p>
@@ -146,10 +178,10 @@ export default function TransformarPage() {
           <div className="campo">
             <label>Plantilla</label>
             {cargandoPlantillas ? (
-              <p className="drop-sub">Cargando plantillas…</p>
+              <p className="drop-sub"><i className="ti ti-loader-2" style={{ marginRight: 6 }} />Cargando plantillas…</p>
             ) : plantillasFiltradas.length > 0 ? (
               <select className="select-plantilla" value={plantillaId}
-                onChange={(e) => setPlantillaId(e.target.value)}>
+                onChange={(e) => cambiarPlantilla(e.target.value)}>
                 <option value="">Elige una plantilla…</option>
                 {plantillasFiltradas.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -169,6 +201,14 @@ export default function TransformarPage() {
             )}
           </div>
         </div>
+      </div>
+
+      <div className="campo" style={{ marginTop: "var(--s-4)" }}>
+        <label htmlFor="nombre-transformacion">Nombre de la transformación (opcional)</label>
+        <input id="nombre-transformacion" type="text"
+          maxLength={LIMITES.nombreTransformacion} value={nombre} onChange={(e) => setNombre(e.target.value)}
+          onBlur={(e) => setNombre(limpiarTexto(e.target.value))}
+          placeholder={archivo ? archivo.name.replace(/\.[^.]+$/, "") : "Ej: Licitación pavimentación 2026"} />
       </div>
 
       <div className="acciones">

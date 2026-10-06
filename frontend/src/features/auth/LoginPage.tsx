@@ -12,6 +12,8 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 import { authService } from "./authService";
 import "./auth.css";
+import { LIMITES, limpiarTexto } from "@/lib/limites";
+import { CONTRASENA_MAX, CONTRASENA_MIN } from "@/lib/contrasena";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -27,14 +29,16 @@ export default function LoginPage() {
   async function continuarConCorreo(e: FormEvent) {
     e.preventDefault();
     setError("");
+    const correo = limpiarTexto(email);
+    setEmail(correo);
     setCargando(true);
     try {
-      const estado = await authService.estadoCorreo(email);
+      const estado = await authService.estadoCorreo(correo);
       if (!estado.existe) {
         setError("No hay ninguna cuenta con ese correo. Pídele a tu gerente que te dé de alta.");
       } else if (estado.necesita_contrasena) {
         // Fue invitado y aún no tiene contraseña → a crearla.
-        navigate("/crear-contrasena", { state: { email } });
+        navigate("/crear-contrasena", { state: { email: correo } });
       } else {
         setPaso("password");
       }
@@ -50,7 +54,7 @@ export default function LoginPage() {
     setError("");
     setCargando(true);
     try {
-      await login(email, password);
+      await login(limpiarTexto(email), password);
       navigate("/");
     } catch {
       setError("Correo o contraseña incorrectos.");
@@ -111,8 +115,9 @@ export default function LoginPage() {
                   <i className="ti ti-mail" />
                   <input
                     id="email" type="email" className="auth-input" autoComplete="email"
-                    placeholder="nombre@empresa.cl" required autoFocus
+                    placeholder="nombre@empresa.cl" required autoFocus maxLength={LIMITES.email}
                     value={email} onChange={(e) => setEmail(e.target.value)}
+                    onBlur={(e) => setEmail(limpiarTexto(e.target.value))}
                   />
                 </div>
               </div>
@@ -137,6 +142,7 @@ export default function LoginPage() {
                     id="password" type={verPw ? "text" : "password"}
                     className="auth-input has-toggle" autoComplete="current-password"
                     placeholder="Tu contraseña" required autoFocus
+                    minLength={CONTRASENA_MIN} maxLength={CONTRASENA_MAX}
                     value={password} onChange={(e) => setPassword(e.target.value)}
                   />
                   <button type="button" className="toggle-pw" onClick={() => setVerPw(!verPw)}

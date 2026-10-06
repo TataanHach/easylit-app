@@ -62,6 +62,7 @@ def _aplicar_iva(valor, ajuste):
 def procesar_transformacion(transformacion_id):
     """Limpia el Excel y pide a la IA el mapeo. Deja todo listo para revisión."""
     from .services import ia, limpieza
+    from .services.errores import ErrorUsuario, mensaje_amigable
 
     try:
         t = Transformacion.objects.select_related("plantilla", "organizacion").get(
@@ -75,6 +76,18 @@ def procesar_transformacion(transformacion_id):
             t.archivo_origen.path, t.opciones_limpieza or {},
             todas_las_hojas=True,
         )
+        if df.empty or len(df.columns) == 0:
+            raise ErrorUsuario(
+                "No se encontraron datos en el archivo de la licitación. Revisa que "
+                "tenga al menos una hoja con encabezados (o etiquetas) y sus valores, "
+                "y vuelve a subirlo."
+            )
+        if not t.plantilla.campos.exists():
+            raise ErrorUsuario(
+                f"La plantilla «{t.plantilla.nombre}» no tiene campos configurados, así "
+                "que no hay dónde volcar los datos. Ve a Plantillas, agrega sus campos "
+                "y vuelve a crear la transformación."
+            )
         columnas_num = limpieza.detectar_columnas_numericas(df)
         t.resultado_limpieza = resumen
         t.estado = EstadoTransformacion.LIMPIEZA
@@ -95,6 +108,16 @@ def procesar_transformacion(transformacion_id):
             df, columnas_num, campos,
             anonimizar=t.organizacion.anonimizar_montos,
         )
+        # La IA ya respondió: queda guardar el mapeo (paso "Preparando la revisión").
+        if modelo_usado == "heuristica-respaldo":
+            # Gemini falló y se usó la coincidencia por nombres: el usuario debe saberlo.
+            t.resultado_limpieza["aviso_ia"] = (
+                "La IA no estuvo disponible (sin conexión o sin cuota de Gemini), así que "
+                "el mapeo se propuso solo por coincidencia de nombres. Revisa cada campo "
+                "con más atención antes de generar."
+            )
+        t.estado = EstadoTransformacion.MAPEO_PROPUESTO
+        t.save(update_fields=["estado", "resultado_limpieza"])
 
         from apps.plantillas.models import CampoPlantilla
         from .models import MapeoCampo
@@ -140,7 +163,7 @@ def procesar_transformacion(transformacion_id):
 
     except Exception as e:
         t.estado = EstadoTransformacion.ERROR
-        t.detalle_error = str(e)[:500]
+        t.detalle_error = mensaje_amigable(e, "procesar")[:500]
         t.save(update_fields=["estado", "detalle_error"])
         Bitacora.objects.create(
             transformacion=t, evento=Bitacora.Evento.ERROR, detalle={"error": str(e)[:500]}
@@ -152,6 +175,7 @@ def generar_documento_tarea(transformacion_id):
     """Genera el Excel final tras la aprobación del mapeo."""
     from django.core.files.base import ContentFile
     from .services import generacion, limpieza
+    from .services.errores import mensaje_amigable
 
     try:
         t = Transformacion.objects.select_related("plantilla").get(id=transformacion_id)
@@ -182,7 +206,12 @@ def generar_documento_tarea(transformacion_id):
             if mapeo.origen_columna in valores_ia:
                 valor = valores_ia[mapeo.origen_columna]
  
-            ajuste = getattr(campo, "ajuste_iva", "") or "NINGUNO"
+            # El IVA de la previsualizacion reemplaza al de la plantilla.
+            iva_por_campo = (t.resultado_limpieza or {}).get("iva_por_campo", {})
+            if campo.nombre in iva_por_campo:
+                ajuste = iva_por_campo[campo.nombre]
+            else:
+                ajuste = getattr(campo, "ajuste_iva", "") or "NINGUNO"
             valor = _aplicar_iva(valor, ajuste)
 
             if valor is not None and str(valor).strip() != "":
@@ -197,7 +226,8 @@ def generar_documento_tarea(transformacion_id):
         nombre = f"generado_{t.id}.xlsx"
         t.archivo_generado.save(nombre, ContentFile(contenido), save=False)
         t.estado = EstadoTransformacion.GENERADO
-        t.save(update_fields=["archivo_generado", "estado"])
+        t.detalle_error = ""   # por si un intento anterior había fallado
+        t.save(update_fields=["archivo_generado", "estado", "detalle_error"])
         Bitacora.objects.create(
             transformacion=t, evento=Bitacora.Evento.GENERACION,
             detalle={
@@ -208,7 +238,7 @@ def generar_documento_tarea(transformacion_id):
         )
     except Exception as e:
         t.estado = EstadoTransformacion.ERROR
-        t.detalle_error = f"Error al generar: {str(e)[:400]}"
+        t.detalle_error = mensaje_amigable(e, "generar")[:500]
         t.save(update_fields=["estado", "detalle_error"])
         Bitacora.objects.create(
             transformacion=t, evento=Bitacora.Evento.ERROR, detalle={"error": str(e)[:400]}

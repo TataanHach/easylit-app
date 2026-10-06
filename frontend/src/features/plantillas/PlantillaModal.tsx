@@ -7,12 +7,14 @@
  */
 import { FormEvent, useState } from "react";
 import { plantillaService } from "./plantillaService";
+import { LIMITES, limpiarTexto } from "@/lib/limites";
+import { describirError } from "@/lib/errores";
 import type { Plantilla } from "@/types";
 
 interface Props {
   plantilla?: Plantilla | null; // si viene, es edición
   onCerrar: () => void;
-  onGuardado: () => void;
+  onGuardado: (nombre: string) => void;
 }
 
 export default function PlantillaModal({ plantilla, onCerrar, onGuardado }: Props) {
@@ -28,21 +30,28 @@ export default function PlantillaModal({ plantilla, onCerrar, onGuardado }: Prop
   async function guardar(e: FormEvent) {
     e.preventDefault();
     setError("");
-    if (!nombre.trim()) { setError("El nombre es obligatorio."); return; }
-    if (!esEdicion && !archivo) { setError("Sube el archivo del formato."); return; }
+    const datos = {
+      nombre: limpiarTexto(nombre), mandante: limpiarTexto(mandante), sector: limpiarTexto(sector),
+    };
+    setNombre(datos.nombre); setMandante(datos.mandante); setSector(datos.sector);
+    if (!datos.nombre) { setError("Falta el nombre de la plantilla. Escríbelo para poder guardarla."); return; }
+    if (!esEdicion && !archivo) { setError("Falta el archivo del formato. Sube el Excel del mandante para crear la plantilla."); return; }
     setGuardando(true);
     try {
       if (esEdicion) {
-        await plantillaService.editar(plantilla!.id, { nombre, mandante, sector });
+        await plantillaService.editar(plantilla!.id, datos);
       } else {
-        await plantillaService.crear({ nombre, mandante, sector, formato, archivo: archivo! });
+        await plantillaService.crear({ ...datos, formato, archivo: archivo! });
       }
-      onGuardado();
-    } catch {
-      setError("No se pudo guardar. Revisa los datos e intenta de nuevo.");
-    } finally {
+    } catch (e) {
+      const { titulo, detalle } = describirError(e, "guardar la plantilla");
+      setError(`${titulo}. ${detalle}`);
       setGuardando(false);
+      return;
     }
+    // Fuera del try: la plantilla ya quedó guardada, así que un fallo al cerrar
+    // el modal no debe decir "No se pudo guardar" (eso llevaba a crearla dos veces).
+    onGuardado(datos.nombre);
   }
 
   return (
@@ -58,17 +67,20 @@ export default function PlantillaModal({ plantilla, onCerrar, onGuardado }: Prop
 
             <div className="mfield">
               <label>Nombre *</label>
-              <input value={nombre} onChange={(e) => setNombre(e.target.value)}
+              <input value={nombre} onChange={(e) => setNombre(e.target.value)} maxLength={LIMITES.nombrePlantilla}
+                onBlur={(e) => setNombre(limpiarTexto(e.target.value))}
                 placeholder="Ej. Formulario Identificación MINEDUC" autoFocus />
             </div>
             <div className="mfield">
               <label>Mandante</label>
-              <input value={mandante} onChange={(e) => setMandante(e.target.value)}
+              <input value={mandante} onChange={(e) => setMandante(e.target.value)} maxLength={LIMITES.mandante}
+                onBlur={(e) => setMandante(limpiarTexto(e.target.value))}
                 placeholder="Ej. MINEDUC, Codelco…" />
             </div>
             <div className="mfield">
               <label>Sector</label>
-              <input value={sector} onChange={(e) => setSector(e.target.value)}
+              <input value={sector} onChange={(e) => setSector(e.target.value)} maxLength={LIMITES.sector}
+                onBlur={(e) => setSector(limpiarTexto(e.target.value))}
                 placeholder="Ej. Educación, Minería…" />
             </div>
 

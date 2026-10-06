@@ -1,6 +1,7 @@
 /** Modal de confirmación para eliminar una plantilla. */
 import { useState } from "react";
 import { plantillaService } from "./plantillaService";
+import { describirError } from "@/lib/errores";
 import type { Plantilla } from "@/types";
 
 interface Props { plantilla: Plantilla; onCerrar: () => void; onEliminado: () => void; }
@@ -14,8 +15,9 @@ export default function ConfirmarEliminar({ plantilla, onCerrar, onEliminado }: 
     try {
       await plantillaService.eliminar(plantilla.id);
       onEliminado();
-    } catch {
-      setError("No se pudo eliminar. Puede que esté en uso por transformaciones.");
+    } catch (e) {
+      const { titulo, detalle } = describirError(e, "eliminar la plantilla");
+      setError(`${titulo}. ${detalle}`);
       setEliminando(false);
     }
   }

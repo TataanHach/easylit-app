@@ -106,3 +106,10 @@
   .auth-brand { display: none; }
   .auth-mini-logo { display: flex; }
 }
+
+/* Lista de requisitos de la contraseña */
+.pw-requisitos { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 3px; }
+.pw-requisitos li { font-size: var(--fs-sm); color: var(--text-3); display: flex; align-items: center; gap: 6px; }
+.pw-requisitos li.ok { color: var(--dest-600); }
+.pw-requisitos li.falta { color: var(--danger-600); }
+.pw-requisitos i { font-size: 14px; }

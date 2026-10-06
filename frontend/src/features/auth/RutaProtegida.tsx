@@ -12,7 +12,7 @@ export default function RutaProtegida({ children }: { children: ReactNode }) {
   if (cargando) {
     return (
       <div style={{ display: "grid", placeItems: "center", minHeight: "100dvh", color: "var(--text-3)" }}>
-        Cargando…
+        <span><i className="ti ti-loader-2" style={{ marginRight: 6 }} />Cargando…</span>
       </div>
     );
   }

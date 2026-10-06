@@ -53,15 +53,22 @@ class TransformacionViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         usuario = self.request.user
+        # Si no se eligió empresa, se hereda el mandante de la plantilla.
+        mandante = (
+            serializer.validated_data.get("mandante")
+            or serializer.validated_data["plantilla"].mandante
+        )
         transformacion = serializer.save(
             autor=usuario,
             organizacion=usuario.organizacion,
+            mandante=mandante,
         )
         Bitacora.objects.create(
             transformacion=transformacion,
             evento=Bitacora.Evento.CARGA,
             autor=usuario,
             detalle={
+                "nombre": transformacion.nombre,
                 "archivo": transformacion.nombre_origen,
                 "plantilla": transformacion.plantilla.nombre,
             },
@@ -84,12 +91,20 @@ class TransformacionViewSet(viewsets.ModelViewSet):
         from apps.transformaciones.services import ia, limpieza
         from apps.transformaciones.models import Bitacora
 
+        from apps.transformaciones.services.errores import mensaje_amigable
+
         transformacion = self.get_object()
-        df, _ = limpieza.limpiar_excel(
-            transformacion.archivo_origen.path,
-            transformacion.opciones_limpieza or {},
-            todas_las_hojas=True,
-        )
+        try:
+            df, _ = limpieza.limpiar_excel(
+                transformacion.archivo_origen.path,
+                transformacion.opciones_limpieza or {},
+                todas_las_hojas=True,
+            )
+        except Exception as e:
+            return Response(
+                {"detail": mensaje_amigable(e, "procesar")},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         primera_fila = df.iloc[0] if len(df) > 0 else None
 
         valores_campos = []
@@ -148,6 +163,7 @@ class TransformacionViewSet(viewsets.ModelViewSet):
         )
         primera_fila = df.iloc[0] if len(df) > 0 else None
         valores_ia = (transformacion.resultado_limpieza or {}).get("valores_ia", {})
+        iva_por_campo = (transformacion.resultado_limpieza or {}).get("iva_por_campo", {})
 
         # --- 1. Campos de formulario, agrupados por hoja ---
         campos_por_hoja = {}
@@ -161,15 +177,25 @@ class TransformacionViewSet(viewsets.ModelViewSet):
             valor = crudo
             if mapeo.origen_columna in valores_ia:
                 valor = valores_ia[mapeo.origen_columna]
-            ajuste = getattr(campo, "ajuste_iva", "") or "NINGUNO"
+            # El IVA elegido en la previsualización REEMPLAZA al de la plantilla.
+            if campo.nombre in iva_por_campo:
+                ajuste = iva_por_campo[campo.nombre]
+            else:
+                ajuste = getattr(campo, "ajuste_iva", "") or "NINGUNO"
             valor = _aplicar_iva(valor, ajuste)
             valor_final = generacion.limpiar_valor(valor, campo)
+
+            # ¿Es campo de moneda? (para mostrar el control de IVA)
+            formato = getattr(campo, "formato_numero", "") or "NINGUNO"
+            es_moneda = formato in ("PESOS", "PESOS_DEC", "UF")
 
             hoja = campo.hoja_destino or "General"
             campos_por_hoja.setdefault(hoja, []).append({
                 "campo": campo.nombre,
                 "valor_final": None if valor_final is None else str(valor_final),
                 "limpiado_ia": mapeo.origen_columna in valores_ia,
+                "es_moneda": es_moneda,
+                "ajuste_iva": ajuste,
             })
 
         # --- 2. Itemizados: leer las tablas del origen y limpiarlas ---
@@ -251,6 +277,39 @@ class TransformacionViewSet(viewsets.ModelViewSet):
         return Response({"hojas": hojas}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"])
+    def ajustar_iva(self, request, pk=None):
+        """
+        Guarda el ajuste de IVA elegido para un campo en la previsualización.
+        Body: { "campo": "Monto_Neto", "ajuste": "AGREGAR" } (o QUITAR, NINGUNO).
+        Reemplaza el ajuste de la plantilla para esta transformación.
+        """
+        transformacion = self.get_object()
+        campo = request.data.get("campo")
+        ajuste = request.data.get("ajuste", "NINGUNO")
+        if not campo:
+            return Response(
+                {"detail": "No se indicó a qué campo aplicar el IVA. Recarga la página "
+                           "e intenta de nuevo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if ajuste not in ("NINGUNO", "AGREGAR", "QUITAR"):
+            return Response(
+                {"detail": f"El ajuste de IVA «{ajuste}» no es válido. Elige Sin IVA, "
+                           "+ IVA o Neto."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        resultado = transformacion.resultado_limpieza or {}
+        iva_campos = resultado.get("iva_por_campo", {})
+        iva_campos[campo] = ajuste
+        resultado["iva_por_campo"] = iva_campos
+        transformacion.resultado_limpieza = resultado
+        transformacion.save(update_fields=["resultado_limpieza"])
+
+        return Response({"ok": True, "campo": campo, "ajuste": ajuste},
+                        status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
     def aprobar(self, request, pk=None):
         transformacion = self.get_object()
         from apps.transformaciones.models import EstadoTransformacion
@@ -271,10 +330,41 @@ class TransformacionViewSet(viewsets.ModelViewSet):
         from apps.transformaciones.tasks import generar_documento_tarea
 
         transformacion = self.get_object()
+        en_proceso = (
+            EstadoTransformacion.BORRADOR,
+            EstadoTransformacion.LIMPIEZA,
+            EstadoTransformacion.MAPEO_PROPUESTO,
+        )
+        if transformacion.estado in en_proceso:
+            return Response(
+                {"detail": "La licitación todavía se está procesando. Espera a que "
+                           "termine el mapeo y vuelve a intentarlo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not transformacion.mapeos.filter(destino_campo__isnull=False).exists():
+            return Response(
+                {"detail": "Ningún dato tiene un campo destino asignado, así que el "
+                           "documento saldría vacío. En «Mapeo propuesto» elige a qué "
+                           "campo de la plantilla va cada dato y vuelve a generar."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         transformacion.estado = EstadoTransformacion.APROBADO
         transformacion.save(update_fields=["estado"])
         generar_documento_tarea(str(transformacion.id))
         transformacion.refresh_from_db()
+
+        if transformacion.estado != EstadoTransformacion.GENERADO:
+            # La tarea falló: se vuelve a revisión para que el usuario pueda
+            # corregir y reintentar, y se responde con el motivo legible.
+            motivo = transformacion.detalle_error or (
+                "No se pudo generar el documento. Intenta de nuevo; si se repite, "
+                "avisa al administrador."
+            )
+            transformacion.estado = EstadoTransformacion.EN_REVISION
+            transformacion.save(update_fields=["estado"])
+            return Response({"detail": motivo}, status=status.HTTP_400_BAD_REQUEST)
+
         serializer = self.get_serializer(transformacion)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -284,11 +374,16 @@ class TransformacionViewSet(viewsets.ModelViewSet):
 
         transformacion = self.get_object()
         if not transformacion.descargable:
-            raise Http404("El documento aún no está generado.")
+            raise Http404("El documento aún no está generado. Genera el documento "
+                          "desde la revisión y vuelve a descargarlo.")
+        if transformacion.nombre:
+            nombre_archivo = f"{transformacion.nombre}.xlsx"
+        else:
+            nombre_archivo = f"{transformacion.nombre_origen}_transformado.xlsx"
         return FileResponse(
             transformacion.archivo_generado.open("rb"),
             as_attachment=True,
-            filename=f"{transformacion.nombre_origen}_transformado.xlsx",
+            filename=nombre_archivo,
         )
 
 

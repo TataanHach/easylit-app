@@ -16,6 +16,13 @@ export const transformacionService = {
     });
     return data;
   },
+  /** Ajusta el IVA de un campo en la previsualización. */
+  async ajustarIVA(id: string, campo: string, ajuste: string) {
+    const { data } = await api.post(`/transformaciones/${id}/ajustar_iva/`, {
+      campo, ajuste,
+    });
+    return data;
+  },
 
   async detalle(id: string): Promise<Transformacion> {
     const { data } = await api.get<Transformacion>(`/transformaciones/${id}/`);
@@ -67,12 +74,14 @@ export const transformacionService = {
     archivo: File;
     plantilla: string;
     mandante?: string;
+    nombre?: string;
   }): Promise<Transformacion> {
     const form = new FormData();
     form.append("archivo_origen", payload.archivo);
     form.append("nombre_origen", payload.archivo.name);
     form.append("plantilla", payload.plantilla);
     if (payload.mandante) form.append("mandante", payload.mandante);
+    if (payload.nombre) form.append("nombre", payload.nombre);
 
     const { data } = await api.post<Transformacion>("/transformaciones/", form, {
       headers: { "Content-Type": "multipart/form-data" },

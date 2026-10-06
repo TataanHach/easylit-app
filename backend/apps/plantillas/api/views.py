@@ -4,7 +4,7 @@ Vistas de plantillas.
 Mismo aislamiento por organización que las transformaciones. La galería usa el
 serializer ligero; el detalle trae los campos anidados para el editor de mapeo.
 """
-from rest_framework import viewsets
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -48,6 +48,21 @@ class PlantillaViewSet(viewsets.ModelViewSet):
             organizacion=self.request.user.organizacion,
             creada_por=self.request.user,
         )
+
+    def destroy(self, request, *args, **kwargs):
+        # Una plantilla usada por transformaciones está protegida (PROTECT): se
+        # explica el motivo en vez de devolver un error 500.
+        plantilla = self.get_object()
+        usos = plantilla.transformaciones.count()
+        if usos:
+            return Response(
+                {"detail": f"La plantilla «{plantilla.nombre}» la usan {usos} "
+                           f"transformación(es) del historial, y borrarla dejaría esos "
+                           f"documentos sin formato. Elimina primero esas transformaciones "
+                           f"o deja la plantilla como está."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
 
     @action(detail=True, methods=["get"])
     def hojas(self, request, pk=None):

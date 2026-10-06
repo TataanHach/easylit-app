@@ -10,9 +10,12 @@
  *
  * Guarda cada cambio contra el backend inmediatamente.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useAvisos } from "@/components/ui/Avisos";
+import { describirError } from "@/lib/errores";
 import { campoService, plantillaService } from "./plantillaService";
 import type { Plantilla } from "@/types";
+import { LIMITES, limpiarTexto } from "@/lib/limites";
 
 const TIPOS = [
   { v: "TEXTO", t: "Texto" },
@@ -34,6 +37,7 @@ const FORMATOS = [
 interface Props { plantilla: Plantilla; onCerrar: () => void; }
 
 export default function CamposModal({ plantilla, onCerrar }: Props) {
+  const avisos = useAvisos();
   const [campos, setCampos] = useState<any[]>([]);
   const [hojas, setHojas] = useState<string[]>([]);
   const [hojaActiva, setHojaActiva] = useState<string>("");
@@ -73,17 +77,50 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
         hoja_destino: hayHojas ? hojaActiva : "",
       });
       setCampos([...campos, nuevo]);
+    } catch (e) {
+      avisos.error(describirError(e, "añadir el campo"));
     } finally { setGuardando(false); }
   }
 
+  // Último valor guardado de cada campo, para volver a él si un cambio falla.
+  const guardados = useRef<Record<string, any>>({});
+  useEffect(() => {
+    campos.forEach((c) => { guardados.current[c.id] ??= c; });
+  }, [campos]);
+
   async function actualizar(id: string, cambios: any) {
-    setCampos(campos.map((c) => (c.id === id ? { ...c, ...cambios } : c)));
-    await campoService.editar(id, cambios);
+    setCampos((lista) => lista.map((c) => (c.id === id ? { ...c, ...cambios } : c)));
+    try {
+      await campoService.editar(id, cambios);
+      guardados.current[id] = { ...guardados.current[id], ...cambios };
+    } catch (e) {
+      const anterior = guardados.current[id];
+      if (anterior) setCampos((lista) => lista.map((c) => (c.id === id ? anterior : c)));
+      avisos.error(describirError(e, "guardar el cambio del campo"));
+    }
+  }
+
+  function guardarNombre(id: string, valor: string) {
+    const nombre = limpiarTexto(valor);
+    if (!nombre) {
+      // Sin nombre el campo no se puede identificar: se vuelve al anterior.
+      const anterior = guardados.current[id];
+      if (anterior) setCampos((lista) => lista.map((c) => (c.id === id ? { ...c, nombre: anterior.nombre } : c)));
+      avisos.error("El campo necesita un nombre", "No se puede dejar vacío. Se restauró el nombre anterior.");
+      return;
+    }
+    actualizar(id, { nombre });
   }
 
   async function quitar(id: string) {
+    const lista = campos;
     setCampos(campos.filter((c) => c.id !== id));
-    await campoService.eliminar(id);
+    try {
+      await campoService.eliminar(id);
+    } catch (e) {
+      setCampos(lista);
+      avisos.error(describirError(e, "quitar el campo"));
+    }
   }
 
     const esNumerico = (tipo: string) => tipo === "NUMERO";
@@ -107,7 +144,7 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
           </p>
 
           {cargando ? (
-            <p style={{ color: "var(--text-3)" }}>Cargando…</p>
+            <p style={{ color: "var(--text-3)" }}><i className="ti ti-loader-2" style={{ marginRight: 6 }} />Cargando…</p>
           ) : (
             <>
               {/* Pestañas por hoja (solo si el Excel tiene varias hojas) */}
@@ -135,9 +172,9 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
               </div>
               {camposVisibles.map((c) => (
                 <div className="campo-fila" key={c.id}>
-                  <input value={c.nombre}
+                  <input value={c.nombre} maxLength={LIMITES.nombreCampo}
                     onChange={(e) => setCampos(campos.map((x) => x.id === c.id ? { ...x, nombre: e.target.value } : x))}
-                    onBlur={(e) => actualizar(c.id, { nombre: e.target.value })} />
+                    onBlur={(e) => guardarNombre(c.id, e.target.value)} />
 
                   <select value={c.tipo} onChange={(e) => actualizar(c.id, { tipo: e.target.value })}>
                     {TIPOS.map((t) => <option key={t.v} value={t.v}>{t.t}</option>)}
@@ -152,9 +189,9 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
                     {FORMATOS.map((f) => <option key={f.v} value={f.v}>{f.t}</option>)}
                   </select>
 
-                  <input value={c.etiqueta_busqueda ?? ""} placeholder="Ej. RUT"
+                  <input value={c.etiqueta_busqueda ?? ""} placeholder="Ej. RUT" maxLength={LIMITES.etiquetaBusqueda}
                     onChange={(e) => setCampos(campos.map((x) => x.id === c.id ? { ...x, etiqueta_busqueda: e.target.value } : x))}
-                    onBlur={(e) => actualizar(c.id, { etiqueta_busqueda: e.target.value })} />
+                    onBlur={(e) => actualizar(c.id, { etiqueta_busqueda: limpiarTexto(e.target.value) })} />
 
                   <button className="campo-del" title="Quitar" onClick={() => quitar(c.id)}>
                     <i className="ti ti-trash" />

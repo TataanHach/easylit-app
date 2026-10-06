@@ -44,6 +44,10 @@ class Transformacion(models.Model):
         related_name="transformaciones",
     )
 
+    # Nombre que el usuario le da a la transformación para reconocerla en el
+    # historial. Opcional: si queda vacío se muestra el nombre del archivo.
+    nombre = models.CharField(max_length=200, blank=True)
+
     # --- Origen ---
     archivo_origen = models.FileField(upload_to="origen/%Y/%m/")
     nombre_origen = models.CharField(max_length=255)

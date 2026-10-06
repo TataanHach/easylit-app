@@ -32,5 +32,3 @@ frontend/.env
 Thumbs.db
 *.log
 
-*.exe
-Docker Desktop Installer.exe

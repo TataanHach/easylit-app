@@ -86,10 +86,12 @@ export interface Partida {
 
 export interface Transformacion {
   id: string;
+  nombre: string;
   nombre_origen: string;
   mandante: string;
   plantilla: string;
   plantilla_nombre?: string;
+  plantilla_mandante?: string;
   estado: EstadoTransformacion;
   detalle_error?: string;
   confianza: number | null;
@@ -98,5 +100,5 @@ export interface Transformacion {
   descargable: boolean;
   creada: string;
   mapeos?: MapeoCampo[];
-  resultado_limpieza?: Record<string, number>;
+  resultado_limpieza?: Record<string, unknown>;
 }

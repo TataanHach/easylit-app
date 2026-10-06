@@ -187,7 +187,7 @@ Reglas de QUÉ SÍ hacer:
 
 Reglas de QUÉ NO hacer (MUY IMPORTANTE):
 - NO expandas abreviaturas en NOMBRES de entidades, empresas o instituciones.
-  "I. Municipalidad de Maipu" se queda "I. Municipalidad de Maipú" (solo corrige la tilde), NUNCA "Ilustre Municipalidad".
+- "I. Municipalidad de Maipu" se queda "I. Municipalidad de Maipú" (solo corrige la tilde), NUNCA "Ilustre Municipalidad".
 - NO agregues ni quites palabras en nombres propios.
 - Si un valor NO es un dato real ("El mismo representante"), devuélvelo IGUAL.
 - Si dudas, devuelve el valor ORIGINAL.
@@ -236,8 +236,10 @@ def limpiar_con_ia(valores_campos):
     # Copia de los valores originales (los que no se limpian quedan igual).
     resultado = [item["valor"] for item in valores_campos]
 
-    if not a_limpiar or not api_key:
+    if not a_limpiar:
         return resultado, "sin-limpieza-ia"
+    if not api_key:
+        return resultado, "sin-clave-ia"
 
     try:
         import google.generativeai as genai

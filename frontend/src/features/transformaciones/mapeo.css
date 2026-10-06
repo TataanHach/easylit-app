@@ -188,3 +188,8 @@
 .preview-itemizado th, .preview-itemizado td { white-space: nowrap; padding: 6px 14px; }
 .preview-itemizado td:not(:first-child) { text-align: right; }
  
+.iva-select {
+  padding: 3px 8px; border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+  font-size: var(--fs-sm); background: var(--surface); cursor: pointer; color: var(--text-2);
+}
+.iva-select:focus { border-color: var(--brand-600); outline: none; }

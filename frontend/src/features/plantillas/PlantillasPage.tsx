@@ -12,6 +12,7 @@ import PlantillaModal from "./PlantillaModal";
 import ConfirmarEliminar from "./ConfirmarEliminar";
 import CamposModal from "./CamposModal";
 import type { Plantilla } from "@/types";
+import { useAvisos } from "@/components/ui/Avisos";
 import "./plantillas.css";
 
 export default function PlantillasPage() {
@@ -21,6 +22,7 @@ export default function PlantillasPage() {
     queryFn: plantillaService.listar,
   });
 
+  const avisos = useAvisos();
   const [modalCrear, setModalCrear] = useState(false);
   const [editando, setEditando] = useState<Plantilla | null>(null);
   const [eliminando, setEliminando] = useState<Plantilla | null>(null);
@@ -44,12 +46,19 @@ export default function PlantillasPage() {
     return data.filter((p) => p.mandante === mandanteFiltro);
   }, [data, mandanteFiltro]);
 
-  function trasGuardar() {
+  function trasGuardar(nombre: string) {
+    avisos.exito(
+      editando ? "Plantilla actualizada" : "Plantilla creada",
+      editando
+        ? `Se guardaron los cambios de «${nombre}».`
+        : `«${nombre}» ya está disponible. Configura sus campos con «Editar campos».`
+    );
     setModalCrear(false);
     setEditando(null);
     refetch();
   }
   function trasEliminar() {
+    if (eliminando) avisos.exito("Plantilla eliminada", `«${eliminando.nombre}» se quitó de tus plantillas.`);
     setEliminando(null);
     refetch();
   }

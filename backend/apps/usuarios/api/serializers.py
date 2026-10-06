@@ -7,6 +7,7 @@ invitación. La lógica de negocio (crear invitación, consumir token) va en las
 vistas; esto solo valida y da forma a los datos.
 """
 from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -88,8 +89,9 @@ class CrearContrasenaSerializer(serializers.Serializer):
     contraseña. Opcionalmente completa su RUT y teléfono.
     """
     token = serializers.CharField()
-    password = serializers.CharField(write_only=True, min_length=8)
-    password2 = serializers.CharField(write_only=True)
+    # Sin recortar espacios: en una contraseña pueden ser intencionales.
+    password = serializers.CharField(write_only=True, trim_whitespace=False)
+    password2 = serializers.CharField(write_only=True, trim_whitespace=False)
     rut = serializers.CharField(max_length=12, required=False, allow_blank=True)
     telefono = serializers.CharField(max_length=30, required=False, allow_blank=True)
 
@@ -106,8 +108,11 @@ class CrearContrasenaSerializer(serializers.Serializer):
         if not invitacion.vigente:
             raise serializers.ValidationError({"token": "La invitación expiró o ya fue usada."})
 
-        # Validar la fuerza de la contraseña con las reglas de Django.
-        validate_password(attrs["password"], user=invitacion.usuario)
+        # Validar la contraseña con las reglas configuradas (apps/usuarios/validadores.py).
+        try:
+            validate_password(attrs["password"], user=invitacion.usuario)
+        except DjangoValidationError as e:
+            raise serializers.ValidationError({"password": list(e.messages)})
 
         attrs["invitacion"] = invitacion
         return attrs

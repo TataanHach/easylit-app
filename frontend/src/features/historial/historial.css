@@ -98,3 +98,44 @@
 .estado-caja i { font-size: 32px; }
 .estado-caja h3 { font-size: var(--fs-lg); font-weight: 600; margin: 12px 0 4px; color: var(--text); }
 .estado-caja p { font-size: var(--fs-base); }
+
+/* Paginación */
+.paginacion {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  gap: var(--s-3); padding: var(--s-3) var(--s-5); border-top: 1px solid var(--line);
+}
+.paginacion-info, .paginacion-num { font-size: var(--fs-md); color: var(--text-2); }
+.paginacion-botones { display: inline-flex; align-items: center; gap: 8px; }
+.paginacion-botones .btn { padding: 6px 10px; }
+.paginacion-botones .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Filtros */
+.filtros {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s-3);
+  padding: var(--s-3) var(--s-5); border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.filtro { display: flex; flex-direction: column; gap: 4px; min-width: 150px; flex: 1 1 150px; max-width: 220px; }
+.filtro span { font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); }
+.filtro select, .filtro input {
+  font: inherit; font-size: var(--fs-md); padding: 6px 8px;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--text);
+}
+.filtro select:focus, .filtro input:focus { border-color: var(--brand-600); outline: none; }
+.filtros-limpiar { padding: 6px 12px; }
+
+/* Fecha dd/mm/aaaa con botón de calendario */
+.fecha-input { position: relative; display: flex; }
+.fecha-input input[type="text"] { flex: 1; min-width: 0; padding-right: 34px; }
+.fecha-input input.invalida { border-color: var(--danger-500); }
+.fecha-btn {
+  position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+  border: none; background: transparent; cursor: pointer;
+  padding: 4px 8px; color: var(--text-2);
+}
+.fecha-btn:hover { color: var(--brand-600); }
+.fecha-selector {
+  position: absolute; right: 0; bottom: 0; width: 1px; height: 1px;
+  opacity: 0; pointer-events: none; border: 0; padding: 0;
+}

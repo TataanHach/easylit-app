@@ -1,0 +1,50 @@
+/* Avisos flotantes (toasts). */
+.avisos {
+  position: fixed; z-index: 1000;
+  top: calc(16px + env(safe-area-inset-top, 0px)); right: 16px;
+  display: flex; flex-direction: column; gap: 10px;
+  width: min(420px, calc(100vw - 32px));
+  pointer-events: none;
+}
+.aviso {
+  pointer-events: auto;
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 14px 14px 14px 16px; border-radius: var(--r-md);
+  background: var(--surface); border: 1px solid var(--line);
+  border-left-width: 4px; box-shadow: var(--shadow-md);
+  animation: aviso-entrar .2s ease-out;
+}
+.aviso-exito { border-left-color: var(--ok-600); background: var(--dest-50); }
+.aviso-error { border-left-color: var(--danger-500); background: var(--danger-50); }
+.aviso-info  { border-left-color: var(--brand-600); background: var(--brand-50); }
+.aviso-advertencia { border-left-color: var(--warn-500); background: var(--warn-50); }
+
+.aviso-icono { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+.aviso-exito .aviso-icono { color: var(--ok-600); }
+.aviso-error .aviso-icono { color: var(--danger-600); }
+.aviso-info  .aviso-icono { color: var(--brand-600); }
+.aviso-advertencia .aviso-icono { color: var(--warn-600); }
+
+.aviso-texto { flex: 1; min-width: 0; }
+.aviso-titulo { font-weight: 600; font-size: var(--fs-base); color: var(--text); }
+.aviso-detalle { font-size: var(--fs-md); color: var(--text-2); margin-top: 3px; line-height: 1.4; }
+
+.aviso-cerrar {
+  border: none; background: transparent; cursor: pointer;
+  color: var(--text-3); padding: 2px 4px; font-size: 16px; line-height: 1;
+}
+.aviso-cerrar:hover { color: var(--text); }
+
+@keyframes aviso-entrar { from { opacity: 0; transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .aviso { animation: none; } }
+
+/* Banda de advertencia dentro de una pantalla (no flotante). */
+.banda {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 12px 14px; border-radius: var(--r-md); border: 1px solid;
+  font-size: var(--fs-base); margin-bottom: 12px;
+}
+.banda i { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.banda strong { display: block; margin-bottom: 2px; }
+.banda-aviso { background: var(--warn-50); border-color: var(--warn-100); color: var(--warn-700); }
+.banda-error { background: var(--danger-50); border-color: #f2c9c9; color: var(--danger-700); }
