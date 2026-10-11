@@ -105,6 +105,17 @@ class AlcanceYAislamientoTest(TestCase):
         }, format="multipart")
         self.assertEqual(r.status_code, 400)  # rechazado por validación
 
+    def test_archivo_de_mas_de_20_mb_se_rechaza(self):
+        from apps.common.archivos import MAX_BYTES
+        self._login("ger_a@a.cl")
+        r = self.c.post("/api/transformaciones/", {
+            "archivo_origen": SimpleUploadedFile("grande.xlsx", b"x" * (MAX_BYTES + 1)),
+            "nombre_origen": "grande.xlsx",
+            "plantilla": str(self.plant_a.id),
+        }, format="multipart")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("el máximo es 20 MB", str(r.data["archivo_origen"][0]))
+
 
 
 class LimpiezaIAEstableTest(TestCase):

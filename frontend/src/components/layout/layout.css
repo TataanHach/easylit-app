@@ -101,9 +101,12 @@
 .btn i { font-size: 14px; }
 .btn-primary { background: var(--brand-600); color: #fff; border-color: var(--brand-600); font-weight: 600; }
 .btn-primary:hover { background: var(--brand-700); }
+/* Acciones que borran algo. */
+.btn-peligro { background: var(--danger-500); color: #fff; border-color: var(--danger-500); font-weight: 600; }
+.btn-peligro:hover { background: var(--danger-600); border-color: var(--danger-600); }
 
-/* Botón hamburguesa (solo móvil) */
-.nav-toggle { display: none; }
+/* Botón hamburguesa, cierre del menú y fondo (solo pantalla angosta) */
+.nav-toggle, .nav-cerrar, .nav-fondo { display: none; }
 
 @media (max-width: 900px) {
   .sidebar {
@@ -112,6 +115,16 @@
     box-shadow: var(--shadow-md);
   }
   .app-shell.nav-open .sidebar { transform: translateX(0); }
+  .nav-cerrar {
+    display: inline-flex; align-items: center; justify-content: center; margin-left: auto;
+    width: 32px; height: 32px; border: none; background: none; border-radius: var(--r-md);
+    color: var(--text-3); cursor: pointer; font-size: 18px;
+  }
+  .nav-cerrar:hover { background: var(--bg); color: var(--text); }
+  .nav-fondo {
+    display: block; position: fixed; inset: 0; z-index: 30;
+    background: rgba(15, 23, 42, .35); animation: nav-fondo .18s ease-out;
+  }
   .nav-toggle {
     display: inline-flex; align-items: center; justify-content: center;
     width: 36px; height: 36px; border: 1px solid var(--line);
@@ -119,3 +132,5 @@
   }
   .content { padding: var(--s-4); }
 }
+
+@keyframes nav-fondo { from { opacity: 0; } }

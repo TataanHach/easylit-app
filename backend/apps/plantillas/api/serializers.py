@@ -7,6 +7,7 @@ llamada, que es lo que necesita el editor de mapeo.
 """
 from rest_framework import serializers
 
+from apps.common.archivos import validar_tamano
 from apps.plantillas.models import CampoPlantilla, Plantilla, UnidadCanonica
 
 
@@ -75,6 +76,7 @@ class PlantillaSerializer(serializers.ModelSerializer):
                 f"El archivo «{archivo.name}» está vacío. Revisa que se haya guardado "
                 "bien y vuelve a subirlo."
             )
+        validar_tamano(archivo)
         return archivo
 
 

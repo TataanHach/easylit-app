@@ -1,0 +1,103 @@
+/* Guía paso a paso de los campos (AyudaCampos.tsx). */
+.ayuda-overlay {
+  position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center;
+  padding: 16px; background: rgba(15, 23, 42, .45); animation: ayuda-fondo .2s ease-out;
+}
+.ayuda-modal {
+  width: 100%; max-width: 620px; max-height: calc(100dvh - 32px);
+  display: flex; flex-direction: column; background: var(--surface);
+  border-radius: var(--r-lg); box-shadow: 0 20px 50px rgba(15, 23, 42, .25);
+  animation: ayuda-entrada .28s cubic-bezier(.2, .9, .3, 1.2);
+}
+.ayuda-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px; border-bottom: 1px solid var(--line);
+}
+.ayuda-contador { font-size: var(--fs-sm); color: var(--text-3); font-weight: 600; }
+.ayuda-cuerpo {
+  padding: 18px 22px; overflow-y: auto; color: var(--text-2); line-height: 1.55;
+  font-size: var(--fs-md); animation: ayuda-paso .25s ease-out;
+}
+.ayuda-cuerpo h2 {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 12px;
+  font-size: var(--fs-lg); color: var(--text);
+}
+.ayuda-cuerpo h2 i { color: var(--brand-600); font-size: 22px; }
+.ayuda-cuerpo p { margin: 0 0 10px; }
+.ayuda-cuerpo ul, .ayuda-cuerpo ol { margin: 0 0 10px; padding-left: 20px; }
+.ayuda-cuerpo li { margin-bottom: 6px; }
+.ayuda-cuerpo strong { color: var(--text); }
+
+/* Texto normal (no flex): en flex, cada trozo de texto y cada <strong> pasan a
+   ser elementos separados y el "gap" les mete espacios de más. El ícono va
+   posicionado a la izquierda. */
+.ayuda-nota {
+  position: relative; padding: 10px 12px 10px 36px; border-radius: var(--r-md);
+  background: var(--brand-50); border: 1px solid var(--brand-100); font-size: var(--fs-sm);
+}
+.ayuda-nota > i { position: absolute; left: 12px; top: 11px; color: var(--brand-600); font-size: 16px; }
+.ayuda-ok { color: var(--dest-700); font-weight: 600; }
+.ayuda-mal { color: var(--danger-600); font-weight: 600; }
+.ayuda-aviso { color: var(--warn-700); font-weight: 600; }
+
+.ayuda-dos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ayuda-si, .ayuda-no { padding: 12px 14px; border-radius: var(--r-md); }
+.ayuda-si { background: var(--dest-50); border: 1px solid var(--dest-100); }
+.ayuda-no { background: var(--danger-50); border: 1px solid #f2c9c9; }
+.ayuda-sub { font-weight: 700; color: var(--text); display: flex; gap: 6px; align-items: center; }
+.ayuda-si .ayuda-sub i { color: var(--dest-600); }
+.ayuda-no .ayuda-sub i { color: var(--danger-600); }
+@media (max-width: 560px) { .ayuda-dos { grid-template-columns: 1fr; } }
+
+.ayuda-tabla { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+.ayuda-tabla th, .ayuda-tabla td { padding: 7px 10px; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: top; }
+.ayuda-tabla th { width: 34%; color: var(--text); white-space: nowrap; }
+
+/* ── Mini hoja de Excel (la "foto" de cada paso) ── */
+.mx { margin: 6px 0 14px; overflow-x: auto; }
+.mx-tabla { border-collapse: collapse; font-size: var(--fs-sm); background: #fff; min-width: 100%; }
+.mx-tabla th, .mx-tabla td { border: 1px solid #d6dbe1; padding: 6px 10px; white-space: nowrap; color: #1f2937; }
+.mx-tabla thead th, .mx-tabla tbody th {
+  background: #f1f3f5; color: #6b7280; font-weight: 600; text-align: center; font-size: var(--fs-xs);
+}
+.mx-tabla tbody th { width: 28px; }
+.mx-tabla td { min-width: 90px; }
+.mx-tabla td.etiqueta { background: #e8f0fe; font-weight: 600; }
+.mx-tabla td.dato { background: #e6f4ea; color: #1e6b34; font-weight: 600; animation: ayuda-latido 1.6s ease-in-out .3s 2; }
+.mx-tabla td.encabezado { background: #e8f0fe; font-weight: 700; }
+.mx-tabla td.auto { background: #fef7e0; color: #7a5b00; }
+.mx figcaption { margin-top: 6px; font-size: var(--fs-sm); color: var(--text-3); }
+.mx-marca { display: inline-block; width: 12px; height: 12px; margin-right: 2px; border-radius: 3px; border: 1px solid #d6dbe1; vertical-align: -1px; }
+.mx-marca.etiqueta { background: #e8f0fe; }
+.mx-marca.dato { background: #e6f4ea; }
+.mx-marca.auto { background: #fef7e0; }
+
+.ayuda-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 14px 20px; border-top: 1px solid var(--line);
+}
+.ayuda-puntos { display: flex; gap: 6px; }
+.ayuda-puntos button {
+  width: 9px; height: 9px; padding: 0; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--line-strong); transition: width .2s, background .2s;
+}
+.ayuda-puntos button.activo { width: 22px; border-radius: 5px; background: var(--brand-600); }
+.ayuda-botones { display: flex; gap: 8px; }
+
+/* Botón "?" en la cabecera del editor de campos. */
+.ayuda-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  height: 30px; padding: 0 10px; border-radius: var(--r-pill, 999px);
+  border: 1px solid var(--brand-100); background: var(--brand-50); color: var(--brand-700);
+  font-weight: 700; font-size: var(--fs-sm); cursor: pointer;
+}
+.ayuda-btn:hover { background: var(--brand-100); }
+
+@keyframes ayuda-fondo { from { opacity: 0; } }
+@keyframes ayuda-entrada { from { opacity: 0; transform: translateY(12px) scale(.96); } }
+@keyframes ayuda-paso { from { opacity: 0; transform: translateX(10px); } }
+@keyframes ayuda-latido { 50% { box-shadow: inset 0 0 0 2px #34a853; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ayuda-overlay, .ayuda-modal, .ayuda-cuerpo, .mx-tabla td.dato { animation: none; }
+}

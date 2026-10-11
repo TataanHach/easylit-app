@@ -7,7 +7,7 @@
  */
 import { FormEvent, useState } from "react";
 import { plantillaService } from "./plantillaService";
-import { LIMITES, limpiarTexto } from "@/lib/limites";
+import { LIMITES, limpiarTexto, problemaTamano } from "@/lib/limites";
 import { describirError } from "@/lib/errores";
 import type { Plantilla } from "@/types";
 
@@ -27,6 +27,14 @@ export default function PlantillaModal({ plantilla, onCerrar, onGuardado }: Prop
   const [archivo, setArchivo] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [guardando, setGuardando] = useState(false);
+
+  // Se revisa al elegirlo: así el usuario no espera la subida para saber que pesa demasiado.
+  function elegirArchivo(f: File | null) {
+    setError("");
+    const problema = f ? problemaTamano(f) : "";
+    if (problema) { setError(problema); setArchivo(null); return; }
+    setArchivo(f);
+  }
 
   async function guardar(e: FormEvent) {
     e.preventDefault();
@@ -99,7 +107,7 @@ export default function PlantillaModal({ plantilla, onCerrar, onGuardado }: Prop
                   <label>Archivo del formato *</label>
                   <label className={`file-drop ${archivo ? "tiene" : ""}`}>
                     <input type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }}
-                      onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} />
+                      onChange={(e) => { elegirArchivo(e.target.files?.[0] ?? null); e.target.value = ""; }} />
                     {archivo ? <><i className="ti ti-file-check" /> {archivo.name}</>
                             : <><i className="ti ti-upload" /> Haz clic para subir el Excel</>}
                   </label>

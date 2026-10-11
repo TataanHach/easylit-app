@@ -9,7 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { plantillaService } from "./plantillaService";
 import PlantillaModal from "./PlantillaModal";
-import ConfirmarEliminar from "./ConfirmarEliminar";
+import ConfirmarModal from "@/components/ui/ConfirmarModal";
 import CamposModal from "./CamposModal";
 import type { Plantilla } from "@/types";
 import { useAvisos } from "@/components/ui/Avisos";
@@ -128,7 +128,8 @@ export default function PlantillasPage() {
             <div className="pl-grid">
               {visibles.map((p) => (
                 <Tarjeta key={p.id} p={p}
-                  onUsar={() => navigate("/transformar")}
+                  // A Transformar con esta plantilla (y su empresa) ya elegidas.
+                  onUsar={() => navigate("/transformar", { state: { plantillaId: p.id, mandante: p.mandante } })}
                   onEditar={() => setEditando(p)}
                   onCampos={() => setEditandoCampos(p)}
                   onEliminar={() => setEliminando(p)} />
@@ -145,8 +146,20 @@ export default function PlantillasPage() {
           onGuardado={trasGuardar} />
       )}
       {eliminando && (
-        <ConfirmarEliminar plantilla={eliminando}
-          onCerrar={() => setEliminando(null)} onEliminado={trasEliminar} />
+        <ConfirmarModal
+          titulo="¿Eliminar esta plantilla?"
+          mensaje={`Se eliminará «${eliminando.nombre}»${eliminando.mandante ? ` (${eliminando.mandante})` : ""} `
+            + `con sus ${eliminando.total_campos} campo(s). Esta acción no se puede deshacer. `
+            + "Si alguna transformación del historial la usa, no se podrá eliminar hasta borrar esas transformaciones."}
+          confirmar="Sí, eliminar"
+          procesando="Eliminando…"
+          accion="eliminar la plantilla"
+          onCancelar={() => setEliminando(null)}
+          onConfirmar={async () => {
+            await plantillaService.eliminar(eliminando.id);
+            trasEliminar();
+          }}
+        />
       )}
       {editandoCampos && (
         <CamposModal plantilla={editandoCampos}

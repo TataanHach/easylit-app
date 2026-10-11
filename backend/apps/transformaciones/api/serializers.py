@@ -7,6 +7,7 @@ y de la plantilla para que la tabla no tenga que resolver esas referencias.
 """
 from rest_framework import serializers
 
+from apps.common.archivos import validar_tamano
 from apps.transformaciones.models import (
     Bitacora,
     MapeoCampo,
@@ -59,6 +60,7 @@ class CrearTransformacionSerializer(serializers.ModelSerializer):
                 f"El archivo «{archivo.name}» está vacío. Revisa que se haya guardado "
                 "bien y vuelve a subirlo."
             )
+        validar_tamano(archivo)
         return archivo
 
     def validate_plantilla(self, plantilla):

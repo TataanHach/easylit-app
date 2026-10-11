@@ -32,11 +32,30 @@ interface Props {
   secundario?: { texto: string; onClick: () => void };
 }
 
-const ICONO: Record<EstadoResultado, string> = {
-  exito: "ti ti-circle-check",
-  advertencia: "ti ti-alert-triangle",
-  error: "ti ti-circle-x",
-};
+/**
+ * Íconos en SVG de trazo (no de fuente), para poder animarlos "dibujándose":
+ * primero el contorno y luego la marca (✓, ! o ✗). Ver resultado-modal.css.
+ */
+function Icono({ estado }: { estado: EstadoResultado }) {
+  return (
+    <svg viewBox="0 0 52 52" aria-hidden="true" className="resultado-svg">
+      {estado === "advertencia" ? (
+        <>
+          <path className="trazo contorno" pathLength={1} d="M26 6 L48 45 H4 Z" />
+          <path className="trazo marca" pathLength={1} d="M26 20 V32" />
+          <circle className="punto" cx="26" cy="38.5" r="1.8" />
+        </>
+      ) : (
+        <>
+          <circle className="trazo contorno" pathLength={1} cx="26" cy="26" r="22" />
+          {estado === "exito"
+            ? <path className="trazo marca" pathLength={1} d="M16 27 L23 34 L37 19" />
+            : <path className="trazo marca" pathLength={1} d="M18.5 18.5 L33.5 33.5 M33.5 18.5 L18.5 33.5" />}
+        </>
+      )}
+    </svg>
+  );
+}
 
 export default function ResultadoModal({ resultado, onAceptar, secundario }: Props) {
   const { estado, titulo, mensaje, cifras, grupos } = resultado;
@@ -54,7 +73,7 @@ export default function ResultadoModal({ resultado, onAceptar, secundario }: Pro
     <div className="resultado-overlay">
       <div className={`resultado-modal resultado-${estado}`} role="alertdialog" aria-modal="true"
         aria-labelledby="resultado-titulo" aria-describedby="resultado-mensaje">
-        <div className="resultado-icono"><i className={ICONO[estado]} /></div>
+        <div className="resultado-icono"><Icono estado={estado} /></div>
         <h2 id="resultado-titulo">{titulo}</h2>
         <p id="resultado-mensaje" className="resultado-mensaje">{mensaje}</p>
 

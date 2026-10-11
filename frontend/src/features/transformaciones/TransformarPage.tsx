@@ -7,11 +7,11 @@
  */
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { plantillaService } from "@/features/plantillas/plantillaService";
 import { transformacionService } from "@/features/historial/historialService";
 import { describirError } from "@/lib/errores";
-import { LIMITES, limpiarTexto } from "@/lib/limites";
+import { LIMITES, limpiarTexto, problemaTamano } from "@/lib/limites";
 import "./transformar.css";
 
 const EXTENSIONES = ["xlsx", "xlsm", "xls", "csv"];
@@ -25,15 +25,19 @@ function problemaArchivo(f: File): string {
   if (f.size === 0) {
     return `«${f.name}» está vacío. Revisa que se haya guardado bien y vuelve a subirlo.`;
   }
-  return "";
+  return problemaTamano(f);
 }
 
 export default function TransformarPage() {
   const navigate = useNavigate();
+  // Si se llega con "Usar" desde Plantillas, viene la plantilla (y su empresa)
+  // para dejarlas ya elegidas. Sin mandante, la empresa es "Sin mandante".
+  const desdePlantilla = (useLocation().state ?? {}) as { plantillaId?: string; mandante?: string };
   const [archivo, setArchivo] = useState<File | null>(null);
   const [nombre, setNombre] = useState("");          // nombre para el historial
-  const [empresa, setEmpresa] = useState("");        // mandante elegido
-  const [plantillaId, setPlantillaId] = useState("");
+  const [empresa, setEmpresa] = useState(            // mandante elegido
+    desdePlantilla.plantillaId ? desdePlantilla.mandante || "__sin__" : "");
+  const [plantillaId, setPlantillaId] = useState(desdePlantilla.plantillaId ?? "");
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState("");
 

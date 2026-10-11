@@ -15,6 +15,8 @@ import { useAvisos } from "@/components/ui/Avisos";
 import { describirError } from "@/lib/errores";
 import { campoService, plantillaService, type RevisionHojas } from "./plantillaService";
 import ResultadoModal, { type Resultado } from "@/components/ui/ResultadoModal";
+import ConfirmarModal from "@/components/ui/ConfirmarModal";
+import AyudaCampos from "./AyudaCampos";
 import type { Plantilla } from "@/types";
 import { LIMITES, limpiarTexto } from "@/lib/limites";
 
@@ -47,6 +49,9 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
   const [guardando, setGuardando] = useState(false);
   const [revisando, setRevisando] = useState(false);
   const [resultado, setResultado] = useState<Resultado | null>(null);
+  // Campo que se pidió eliminar: espera la confirmación antes de borrarlo.
+  const [porEliminar, setPorEliminar] = useState<any | null>(null);
+  const [verAyuda, setVerAyuda] = useState(false);
 
   useEffect(() => {
     // Cargar campos y hojas en paralelo.
@@ -230,10 +235,12 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
 
   async function quitar(id: string) {
     const lista = campos;
+    const nombre = campos.find((c) => c.id === id)?.nombre ?? "";
     setCampos(campos.filter((c) => c.id !== id));
     try {
       await campoService.eliminar(id);
       revisar();
+      avisos.exito("Campo eliminado", `«${nombre}» se quitó de la plantilla.`);
     } catch (e) {
       setCampos(lista);
       avisos.error(describirError(e, "quitar el campo"));
@@ -251,7 +258,13 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
       <div className="modal campos-modal">
         <div className="modal-head">
           <h2>Campos de "{plantilla.nombre}"</h2>
-          <button className="modal-close" onClick={onCerrar}><i className="ti ti-x" /></button>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <button className="ayuda-btn" onClick={() => setVerAyuda(true)} title="¿Cómo funcionan los campos?"
+              aria-label="Ayuda: cómo funcionan los campos">
+              <i className="ti ti-help" /> ?
+            </button>
+            <button className="modal-close" onClick={onCerrar}><i className="ti ti-x" /></button>
+          </div>
         </div>
         <div className="modal-body">
           <p className="campos-hint">
@@ -324,7 +337,7 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
                     onChange={(e) => setCampos(campos.map((x) => x.id === c.id ? { ...x, etiqueta_busqueda: e.target.value } : x))}
                     onBlur={(e) => actualizar(c.id, { etiqueta_busqueda: limpiarTexto(e.target.value) })} />
 
-                  <button className="campo-del" title="Quitar" onClick={() => quitar(c.id)}>
+                  <button className="campo-del" title="Eliminar campo" onClick={() => setPorEliminar(c)}>
                     <i className="ti ti-trash" />
                   </button>
                   {revision?.problemas[c.id] && (
@@ -363,6 +376,18 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
           </button>
         </div>
       </div>
+      {verAyuda && <AyudaCampos onCerrar={() => setVerAyuda(false)} />}
+      {porEliminar && (
+        <ConfirmarModal
+          titulo="¿Eliminar este campo?"
+          mensaje={`Se eliminará «${porEliminar.nombre}»${porEliminar.hoja_destino ? ` de la hoja «${porEliminar.hoja_destino}»` : ""}. `
+            + "Esta acción no se puede deshacer: al transformar, esa casilla ya no se llenará, y las "
+            + "transformaciones que lo usaban quedarán con ese dato sin asignar."}
+          confirmar="Sí, eliminar"
+          onCancelar={() => setPorEliminar(null)}
+          onConfirmar={() => { quitar(porEliminar.id); setPorEliminar(null); }}
+        />
+      )}
       {resultado && (
         <ResultadoModal
           resultado={resultado}

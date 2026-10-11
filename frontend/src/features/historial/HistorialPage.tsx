@@ -12,7 +12,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/features/auth/AuthContext";
 import { transformacionService, type Alcance } from "./historialService";
 import { useAvisos } from "@/components/ui/Avisos";
-import { describirError } from "@/lib/errores";
+import ConfirmarModal from "@/components/ui/ConfirmarModal";
 import type { Transformacion } from "@/types";
 import "./historial.css";
 
@@ -226,7 +226,6 @@ function Fila({ t, esMio }: { t: Transformacion; esMio: boolean }) {
   const { usuario } = useAuth();
   const avisos = useAvisos();
   const [confirmar, setConfirmar] = useState(false);
-  const [borrando, setBorrando] = useState(false);
 
   const empresa = empresaDe(t);
   const nombreVisible = t.nombre || t.nombre_origen;
@@ -246,17 +245,12 @@ function Fila({ t, esMio }: { t: Transformacion; esMio: boolean }) {
   // Puede borrar: el autor, o un gerente/superadmin.
   const puedeBorrar = esMio || usuario?.rol === "GERENTE" || usuario?.rol === "SUPERADMIN";
 
+  // Si falla, el error lo muestra la ventana de confirmación (sin cerrarse).
   async function eliminar() {
-    setBorrando(true);
-    try {
-      await transformacionService.eliminar(t.id);
-      queryClient.invalidateQueries({ queryKey: ["transformaciones"] });
-      avisos.exito("Transformación eliminada", `«${nombreVisible}» se quitó del historial.`);
-    } catch (e) {
-      avisos.error(describirError(e, "eliminar la transformación"));
-      setBorrando(false);
-      setConfirmar(false);
-    }
+    await transformacionService.eliminar(t.id);
+    setConfirmar(false);
+    queryClient.invalidateQueries({ queryKey: ["transformaciones"] });
+    avisos.exito("Transformación eliminada", `«${nombreVisible}» se quitó del historial.`);
   }
 
   return (
@@ -281,38 +275,37 @@ function Fila({ t, esMio }: { t: Transformacion; esMio: boolean }) {
       <td><Estado estado={t.estado} /></td>
       <td style={{ color: "var(--text-3)" }}>{formatFecha(t.creada)}</td>
       <td style={{ textAlign: "right" }}>
-        {confirmar ? (
-          <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-            <span style={{ fontSize: "var(--fs-sm)", color: "var(--text-2)" }} title={nombreVisible}>
-              ¿Eliminar «{recortar(nombreVisible, 24)}»?
-            </span>
-            <button className="btn" onClick={() => setConfirmar(false)} disabled={borrando}
-              style={{ padding: "4px 10px" }}>No</button>
-            <button className="btn" onClick={eliminar} disabled={borrando}
-              style={{ padding: "4px 10px", background: "var(--danger-500)", color: "#fff", borderColor: "var(--danger-500)" }}>
-              {borrando ? "…" : "Sí"}
-            </button>
-          </span>
-        ) : (
-          <span style={{ display: "inline-flex", gap: 6, alignItems: "center", justifyContent: "flex-end" }}>
-            {(t.estado === "EN_REVISION" || t.estado === "MAPEO_PROPUESTO" || t.estado === "APROBADO") && (
-              <button className="btn" onClick={() => navigate(`/transformar/${t.id}/mapeo`)}>
-                <i className="ti ti-eye" /> Revisar
-              </button>
-            )}
-            {t.estado === "GENERADO" && (
-              <button className="btn btn-primary" onClick={() => navigate(`/transformar/${t.id}/mapeo`)}>
-                <i className="ti ti-download" /> Ver
-              </button>
-            )}
-            {puedeBorrar && (
-              <button className="btn" title="Eliminar" onClick={() => setConfirmar(true)}
-                style={{ padding: "7px 10px" }}>
-                <i className="ti ti-trash" />
-              </button>
-            )}
-          </span>
+        {confirmar && (
+          <ConfirmarModal
+            titulo="¿Eliminar esta transformación?"
+            mensaje={`Se eliminará «${nombreVisible}» del historial, junto con su mapeo y su bitácora`
+              + `${t.estado === "GENERADO" ? ", y ya no podrás descargar el documento generado" : ""}. `
+              + "Esta acción no se puede deshacer."}
+            confirmar="Sí, eliminar"
+            procesando="Eliminando…"
+            accion="eliminar la transformación"
+            onCancelar={() => setConfirmar(false)}
+            onConfirmar={eliminar}
+          />
         )}
+        <span style={{ display: "inline-flex", gap: 6, alignItems: "center", justifyContent: "flex-end" }}>
+          {(t.estado === "EN_REVISION" || t.estado === "MAPEO_PROPUESTO" || t.estado === "APROBADO") && (
+            <button className="btn" onClick={() => navigate(`/transformar/${t.id}/mapeo`)}>
+              <i className="ti ti-eye" /> Revisar
+            </button>
+          )}
+          {t.estado === "GENERADO" && (
+            <button className="btn btn-primary" onClick={() => navigate(`/transformar/${t.id}/mapeo`)}>
+              <i className="ti ti-download" /> Ver
+            </button>
+          )}
+          {puedeBorrar && (
+            <button className="btn" title="Eliminar" onClick={() => setConfirmar(true)}
+              style={{ padding: "7px 10px" }}>
+              <i className="ti ti-trash" />
+            </button>
+          )}
+        </span>
       </td>
     </tr>
   );

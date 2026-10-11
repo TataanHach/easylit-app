@@ -5,7 +5,7 @@
  * topbar, y un <Outlet> donde React Router inserta la pantalla activa. El menú
  * de configuración solo aparece para gerentes y superadmin.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/features/auth/AuthContext";
 import "./layout.css";
@@ -14,6 +14,15 @@ export default function Layout() {
   const { usuario, logout } = useAuth();
   const navigate = useNavigate();
   const [navAbierto, setNavAbierto] = useState(false);
+  const cerrarNav = () => setNavAbierto(false);
+
+  // Con el menú abierto (pantalla angosta), Escape lo cierra.
+  useEffect(() => {
+    if (!navAbierto) return;
+    const alTeclear = (e: KeyboardEvent) => { if (e.key === "Escape") setNavAbierto(false); };
+    window.addEventListener("keydown", alTeclear);
+    return () => window.removeEventListener("keydown", alTeclear);
+  }, [navAbierto]);
 
   function cerrarSesion() {
     logout();
@@ -40,9 +49,14 @@ export default function Layout() {
             <div className="logo-text">EasyLit</div>
             <div className="logo-sub">v1.0 · Beta</div>
           </div>
+          {/* Solo en pantalla angosta: el menú tapa el botón ☰, así que lleva su propio cierre. */}
+          <button className="nav-cerrar" onClick={cerrarNav} aria-label="Cerrar menú">
+            <i className="ti ti-x" />
+          </button>
         </div>
 
-        <nav className="sidebar-nav">
+        {/* Elegir una sección también cierra el menú (en pantalla ancha no hace nada). */}
+        <nav className="sidebar-nav" onClick={(e) => { if ((e.target as HTMLElement).closest("a")) cerrarNav(); }}>
           <p className="nav-section">Principal</p>
           <NavLink to="/transformar" className={({ isActive }) => `nav-item ${isActive ? "activo" : ""}`}>
             <i className="ti ti-arrows-transfer-up" /> Transformar
@@ -74,10 +88,13 @@ export default function Layout() {
         </a>
       </aside>
 
+      {/* Fondo oscuro detrás del menú abierto: un clic afuera lo cierra. */}
+      {navAbierto && <div className="nav-fondo" onClick={cerrarNav} />}
+
       <div className="main-col">
         <header className="topbar">
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <button className="nav-toggle" onClick={() => setNavAbierto(!navAbierto)} aria-label="Menú">
+            <button className="nav-toggle" onClick={() => setNavAbierto(!navAbierto)} aria-label="Abrir menú" aria-expanded={navAbierto}>
               <i className="ti ti-menu-2" />
             </button>
             <span className="topbar-title">{usuario?.organizacion_nombre ?? "EasyLit"}</span>

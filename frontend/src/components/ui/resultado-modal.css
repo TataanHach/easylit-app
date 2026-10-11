@@ -12,7 +12,44 @@
   width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 50%;
   display: grid; place-items: center;
 }
-.resultado-icono i { font-size: 38px; }
+.resultado-svg { width: 40px; height: 40px; overflow: visible; }
+
+/* ── Animación: la ventana aparece, el círculo "rebota" y el ícono se dibuja ── */
+.resultado-overlay { animation: resultado-fondo .2s ease-out; }
+.resultado-modal { animation: resultado-entrada .28s cubic-bezier(.2, .9, .3, 1.2); }
+.resultado-icono { animation: resultado-pop .45s cubic-bezier(.2, .9, .3, 1.4) .08s both; }
+
+/* Trazo: con pathLength=1, dasharray/offset 1 lo ocultan entero y llevar el
+   offset a 0 lo "dibuja". Primero el contorno y después la marca. */
+.resultado-svg .trazo {
+  fill: none; stroke: currentColor; stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 1; stroke-dashoffset: 1;
+}
+.resultado-svg .contorno { animation: resultado-dibujar .5s ease-out .2s forwards; }
+.resultado-svg .marca { stroke-width: 3.8; animation: resultado-dibujar .35s ease-out .6s forwards; }
+.resultado-svg .punto { fill: currentColor; opacity: 0; animation: resultado-aparecer .2s ease-out .9s forwards; }
+
+/* Al terminar de dibujarse: el ✓ da un pequeño salto; el ⚠ y la ✗ se sacuden. */
+.resultado-exito .resultado-svg { animation: resultado-salto .35s ease-out .95s; }
+.resultado-advertencia .resultado-svg { animation: resultado-balanceo .6s ease-in-out 1.05s; }
+.resultado-error .resultado-svg { animation: resultado-sacudir .45s ease-in-out .95s; }
+
+@keyframes resultado-fondo { from { opacity: 0; } }
+@keyframes resultado-entrada { from { opacity: 0; transform: translateY(12px) scale(.96); } }
+@keyframes resultado-pop { from { transform: scale(.4); opacity: 0; } }
+@keyframes resultado-dibujar { to { stroke-dashoffset: 0; } }
+@keyframes resultado-aparecer { to { opacity: 1; } }
+@keyframes resultado-salto { 50% { transform: scale(1.15); } }
+@keyframes resultado-balanceo { 20%, 60% { transform: rotate(-8deg); } 40%, 80% { transform: rotate(8deg); } }
+@keyframes resultado-sacudir { 20%, 60% { transform: translateX(-4px); } 40%, 80% { transform: translateX(4px); } }
+
+/* Quien pidió menos animación en su sistema ve el ícono quieto y completo. */
+@media (prefers-reduced-motion: reduce) {
+  .resultado-overlay, .resultado-modal, .resultado-icono, .resultado-svg,
+  .resultado-svg .trazo, .resultado-svg .punto { animation: none !important; }
+  .resultado-svg .trazo { stroke-dashoffset: 0; }
+  .resultado-svg .punto { opacity: 1; }
+}
 .resultado-exito .resultado-icono { background: var(--dest-50); color: var(--dest-600); }
 .resultado-advertencia .resultado-icono { background: var(--warn-50); color: var(--warn-600); }
 .resultado-error .resultado-icono { background: var(--danger-50); color: var(--danger-600); }
