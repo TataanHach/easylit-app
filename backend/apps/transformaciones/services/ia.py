@@ -19,6 +19,8 @@ import re
 
 from django.conf import settings
 
+from .normalizacion import resuelto_por_reglas
+
 # Temperatura 0: con los mismos datos, la IA responde siempre lo mismo. Con la
 # temperatura por defecto, cada clic en "Limpiar con IA" daba un resultado distinto.
 CONFIG_IA = {"temperature": 0}
@@ -130,6 +132,31 @@ def _propuesta_heuristica(muestra, campos_destino):
     return resultado
 
 
+def _completar_por_nombre(propuesta, muestra, campos_destino):
+    """
+    Red de seguridad tras la IA: un campo que quedó sin dato se asigna si una
+    columna libre del origen tiene un nombre que claramente le corresponde
+    (puntaje 80+: "RUT" ⊂ "RUT Legal"). Así un campo obvio no queda vacío solo
+    porque la IA lo pasó por alto. Las coincidencias por una palabra suelta no
+    se usan: podrían asignar mal.
+    """
+    asignados = {p.get("destino") for p in propuesta if p.get("destino")}
+    usados = {p.get("origen") for p in propuesta if p.get("destino")}
+    for h in _propuesta_heuristica(muestra, campos_destino):
+        if (not h["destino"] or h["confianza"] < 80
+                or h["destino"] in asignados or h["origen"] in usados):
+            continue
+        nuevo = {**h, "motivo": "Asignado por coincidencia de nombre: la IA lo había dejado sin dato."}
+        existente = next((p for p in propuesta if p.get("origen") == h["origen"]), None)
+        if existente is not None:
+            existente.update(nuevo)
+        else:
+            propuesta.append(nuevo)
+        asignados.add(h["destino"])
+        usados.add(h["origen"])
+    return propuesta
+
+
 def proponer_mapeo(df, columnas_numericas, campos_destino, anonimizar=True):
     """
     Devuelve la lista de mapeos propuestos. Usa Gemini si hay clave; si no, la
@@ -154,7 +181,7 @@ def proponer_mapeo(df, columnas_numericas, campos_destino, anonimizar=True):
         # Quitar posibles vallas de markdown que a veces añade el modelo.
         texto = re.sub(r"^```(json)?|```$", "", texto, flags=re.MULTILINE).strip()
         propuesta = json.loads(texto)
-        return propuesta, getattr(settings, "IA_MODEL", "gemini")
+        return _completar_por_nombre(propuesta, muestra, campos_destino), getattr(settings, "IA_MODEL", "gemini")
     except Exception:
         # Si la IA falla por cualquier razón, no rompemos el flujo: caemos a la
         # heurística local y seguimos. El usuario igual revisa y aprueba.
@@ -229,6 +256,10 @@ def limpiar_con_ia(valores_campos):
         if formato in _FORMATOS_SENSIBLES:
             continue
         if valor is None or str(valor).strip() == "":
+            continue
+        # Fechas, RUT, correos y números ya los dejó listos la limpieza con
+        # pandas (normalizacion.py): mandarlos a la IA solo gasta cuota.
+        if resuelto_por_reglas(valor):
             continue
         a_limpiar.append({
             "n": i,  # índice original, para devolver en orden

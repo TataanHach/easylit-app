@@ -233,6 +233,12 @@ def limpiar_excel(ruta_archivo, opciones, catalogo_unidades=None, hoja=None,
             df[col] = df[col].apply(lambda x: str(x).strip() if pd.notna(x) else x)
             resumen["espacios_corregidos"] += int((antes != df[col]).sum())
 
+    # Limpieza con reglas (pandas): fechas, RUT, correos, plazos, nombres y
+    # tildes. Va antes que la IA, que queda solo para lo que esto no resuelve.
+    if opciones.get("normalizar", True):
+        from .normalizacion import limpiar_dataframe
+        df, resumen["normalizacion"] = limpiar_dataframe(df)
+
     if opciones.get("duplicados", True):
         n_antes = len(df)
         df = df.drop_duplicates().reset_index(drop=True)

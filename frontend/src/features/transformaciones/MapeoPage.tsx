@@ -26,6 +26,28 @@ interface EstadoCampo { campo: string; hoja: string; ok: boolean; valor: string 
  * Campos que se llenarán, agrupados por hoja ("Hoja «X»: 3 de 4 campos"), con
  * el valor que llevará cada uno. Los que quedan vacíos van en su propio grupo.
  */
+/**
+ * Lo que la limpieza automática (pandas, sin IA) corrigió al leer el archivo.
+ * Es informativo: no vuelve "amarilla" la ventana.
+ */
+function grupoLimpiezaAuto(resumen?: Record<string, number>) {
+  if (!resumen) return [];
+  const textos: Record<string, (n: number) => string> = {
+    fechas: (n) => `${n} fecha(s) al formato 15-08-2024`,
+    ruts: (n) => `${n} RUT con puntos y guion (dígito verificador comprobado)`,
+    correos: (n) => `${n} correo(s) sin espacios y en minúsculas`,
+    plazos: (n) => `${n} plazo(s) o cantidad(es) a número («sesenta (60) días» → 60)`,
+    nombres: (n) => `${n} nombre(s) de persona con mayúsculas iniciales`,
+    unidades: (n) => `${n} unidad(es) normalizada(s) («mts2» → m2)`,
+    tildes: (n) => `${n} texto(s) con tildes corregidas`,
+    errores_excel: (n) => `${n} error(es) de fórmula de Excel (#VALUE!…) dejados vacíos`,
+  };
+  const items = Object.entries(textos)
+    .filter(([clave]) => (resumen[clave] ?? 0) > 0)
+    .map(([clave, texto]) => texto(resumen[clave]));
+  return items.length ? [{ titulo: "Limpieza automática, sin IA", items }] : [];
+}
+
 function gruposPorHoja(estados: EstadoCampo[]) {
   const hojas = [...new Set(estados.map((e) => e.hoja))];
   return hojas.map((hoja) => {
@@ -191,6 +213,7 @@ export default function MapeoPage() {
     ];
 
     const porHoja = gruposPorHoja(estados);
+    const auto = grupoLimpiezaAuto(t.resultado_limpieza?.normalizacion as Record<string, number> | undefined);
 
     if (total > 0 && asignados === 0 && tablas.length === 0) {
       setResultado({
@@ -206,7 +229,7 @@ export default function MapeoPage() {
         titulo: "Transformación lista, con cosas por revisar",
         mensaje: "Los datos se procesaron, pero lo siguiente no quedará bien si generas ahora. Corrígelo en la vista previa y en «Mapeo propuesto», o genera igual.",
         cifras,
-        grupos: [...grupos, ...porHoja],
+        grupos: [...grupos, ...auto, ...porHoja],
       });
     } else {
       setResultado({
@@ -214,7 +237,7 @@ export default function MapeoPage() {
         titulo: "Transformación procesada con éxito",
         mensaje: `${total ? `Los ${total} datos tienen su campo destino` : "Las tablas se emparejaron completas"}${tablas.length ? ` y ${tablas.length === 1 ? "la tabla «" + tablas[0] + "» está lista" : `las ${tablas.length} tablas están listas`}` : ""}. Revisa la vista previa y genera el documento.`,
         cifras,
-        grupos: porHoja,
+        grupos: [...auto, ...porHoja],
       });
     }
   }

@@ -16,6 +16,8 @@ from datetime import date, datetime
 from openpyxl import load_workbook
 from openpyxl.utils import coordinate_to_tuple
 
+from .normalizacion import fecha, numero_en_palabras, resuelto_por_reglas, rut
+
 
 FORMATOS_EXCEL = {
     "ENTERO":     ("#,##0", False),
@@ -81,6 +83,9 @@ def _parece(nombre_o_etiqueta, palabras):
 
 
 def _limpiar_rut(v):
+    formateado = rut(v)
+    if formateado:
+        return formateado
     s = str(v).strip().replace(" ", "")
     if re.match(r"^[\d.\-]+[kK\d]$", s):
         return s
@@ -254,7 +259,18 @@ def _leer_itemizado_origen(ws):
                 break
     if not partidas:
         return None
-    return {"hoja": ws.title, "encabezados": [n for _, n in cols], "partidas": partidas}
+    return {"hoja": ws.title, "encabezados": [n for _, n in cols],
+            "partidas": _normalizar_partidas(partidas)}
+
+
+def _normalizar_partidas(partidas):
+    """Limpia las partidas con pandas (fechas, tildes, espacios…), columna por columna."""
+    import pandas as pd
+    from .normalizacion import limpiar_dataframe
+
+    df, _ = limpiar_dataframe(pd.DataFrame(partidas, dtype=object))
+    df = df.astype(object).where(df.notna(), None)
+    return df.to_dict("records")
 
 
 def clave_ia_tabla(hoja, columna):
@@ -343,13 +359,16 @@ def _limpiar_celda_tabla(valor, nombre_columna):
         return None
 
     tipo = _tipo_columna(nombre_columna)
-    if tipo == "fecha":
+    if tipo == "fecha" or re.fullmatch(r"\d{2}-\d{2}-\d{4}", s):
         f = _fecha_desde_texto(s)
         if f:
             return f
     if tipo in ("dinero", "cantidad"):
-        # En cantidades se toma el número aunque venga con palabras: "cien (100)" → 100.
+        # En cantidades se toma el número aunque venga con palabras: "cien (100)"
+        # → 100, y también "cien" a secas.
         num = _a_numero(_limpiar_cantidad(s) if tipo == "cantidad" else s)
+        if num is None and tipo == "cantidad":
+            num = numero_en_palabras(s)
         if num is not None:
             return _entero_si_exacto(num)
         return s
@@ -448,10 +467,11 @@ def textos_para_ia(datos_origen, maximo=300):
             continue   # privacidad: montos y cantidades no salen de la empresa
         for partida in datos_origen["partidas"]:
             crudo = partida.get(col)
-            if not isinstance(crudo, str) or not crudo.strip():
+            # Menos de 3 caracteres ("r", "da"): restos de celdas, no texto que corregir.
+            if not isinstance(crudo, str) or len(crudo.strip()) < 3:
                 continue
-            if not isinstance(_limpiar_celda_tabla(crudo, col), str):
-                continue   # ya quedó como número o fecha: no hace falta la IA
+            if not isinstance(_limpiar_celda_tabla(crudo, col), str) or resuelto_por_reglas(crudo):
+                continue   # ya quedó como número, fecha, RUT…: no hace falta la IA
             clave = clave_ia_tabla(hoja, col)
             if (clave, crudo.strip()) in vistos:
                 continue
@@ -624,6 +644,12 @@ def revisar_plantilla(ruta_plantilla, campos):
 def _escribir_valor(celda, valor, campo):
     valor = limpiar_valor(valor, campo)
     formato = getattr(campo, "formato_numero", "") or "NINGUNO"
+    if getattr(campo, "tipo", "") == "FECHA":
+        f = fecha(valor)
+        if isinstance(f, date):
+            celda.value = f
+            celda.number_format = "DD-MM-YYYY"
+            return
     if formato in FORMATOS_EXCEL:
         code, es_pct = FORMATOS_EXCEL[formato]
         num = _a_numero(valor)
@@ -758,7 +784,8 @@ def generar_documento(ruta_plantilla, mapeos_con_valor, ruta_origen=None, calcul
         valor = item["valor"]
         if valor is None:
             continue  # Sin dato: ya lo avisa campos_sin_escribir().
-        destino, _ = ubicar_campo(hoja_del_campo(wb, campo), campo)
+        ws = hoja_del_campo(wb, campo)
+        destino, _ = ubicar_campo(ws, campo)
         if destino is None:
             continue  # Sin casilla: ya lo avisa campos_sin_escribir().
         fila, col = destino

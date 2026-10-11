@@ -136,3 +136,50 @@ class RevisionPlantillaTest(TestCase):
         avisos = generacion.campos_sin_escribir(self.ruta, campos, {1: "12.345.678-5"})
         self.assertEqual(len(avisos), 1)
         self.assertIn("«Nombre» quedará vacío", avisos[0])
+
+
+class CompletarMapeoTest(TestCase):
+    def test_campo_obvio_que_la_ia_dejo_sin_dato_se_completa(self):
+        muestra = {"RUT": ["76.453.212-0"], "Representante Legal": ["Juan"], "Glosa": ["x"]}
+        campos = [{"nombre": "RUT Legal", "tipo": "TEXTO"}, {"nombre": "Representante", "tipo": "TEXTO"},
+                  {"nombre": "Observaciones", "tipo": "TEXTO"}]
+        propuesta = [
+            {"origen": "RUT", "destino": None, "confianza": 0, "motivo": ""},
+            {"origen": "Representante Legal", "destino": "Representante", "confianza": 100, "motivo": ""},
+        ]
+        resultado = ia._completar_por_nombre(propuesta, muestra, campos)
+        por_origen = {p["origen"]: p["destino"] for p in resultado}
+        self.assertEqual(por_origen["RUT"], "RUT Legal")
+        self.assertEqual(por_origen["Representante Legal"], "Representante")   # lo de la IA se respeta
+        self.assertNotIn("Glosa", por_origen)   # sin coincidencia fuerte: no se inventa
+
+
+class GenerarConValoresTest(TestCase):
+    """Genera un documento con campos con valor (el error de `ws` no tenía test)."""
+
+    def test_escribe_los_campos_junto_a_su_etiqueta(self):
+        import io
+        import os
+        import tempfile
+        from types import SimpleNamespace
+        from openpyxl import Workbook, load_workbook
+        from apps.transformaciones.services import generacion
+
+        wb = Workbook()
+        wb.active.title = "Identificación"
+        wb.active["A1"], wb.active["A2"] = "RUT:", "Fecha de apertura:"
+        fd, ruta = tempfile.mkstemp(suffix=".xlsx")
+        os.close(fd)
+        wb.save(ruta)
+        self.addCleanup(os.remove, ruta)
+
+        def campo(nombre, etiqueta, tipo="TEXTO"):
+            return SimpleNamespace(id=nombre, nombre=nombre, etiqueta_busqueda=etiqueta, hoja_destino="",
+                                   celda_destino="", tipo=tipo, formato_numero="NINGUNO")
+        contenido = generacion.generar_documento(ruta, [
+            {"campo": campo("RUT Legal", "RUT"), "valor": "12345678-5"},
+            {"campo": campo("Apertura", "Fecha de apertura", "FECHA"), "valor": "15-08-2024"},
+        ])
+        ws = load_workbook(io.BytesIO(contenido)).active
+        self.assertEqual(ws["B1"].value, "12.345.678-5")
+        self.assertEqual(ws["B2"].value.date().isoformat(), "2024-08-15")   # fecha real de Excel
