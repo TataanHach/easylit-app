@@ -6,6 +6,7 @@ Dos reglas de oro que se aplican en TODAS las consultas:
   1. Aislamiento por organización: un usuario solo ve datos de SU organización.
   2. Alcance por autor: el parámetro ?alcance= filtra Mías / Equipo / Todas.
 """
+from django.conf import settings
 from django.db.models import Q
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -130,8 +131,9 @@ class TransformacionViewSet(viewsets.ModelViewSet):
             for nombre in limpieza.hojas_itemizado(ruta):
                 datos = generacion._leer_itemizado_origen(wb_ori[nombre])
                 if datos:
-                    textos_tabla += generacion.textos_para_ia(datos, maximo=300 - len(textos_tabla))
-                if len(textos_tabla) >= 300:
+                    tope = settings.IA_MAX_TEXTOS_TABLA
+                    textos_tabla += generacion.textos_para_ia(datos, maximo=tope - len(textos_tabla))
+                if len(textos_tabla) >= settings.IA_MAX_TEXTOS_TABLA:
                     break
             wb_ori.close()
         except Exception:

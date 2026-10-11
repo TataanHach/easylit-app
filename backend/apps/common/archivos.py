@@ -1,13 +1,14 @@
 """
 Límite de peso de los archivos que se suben (plantillas y Excel de origen).
 
-Un solo número para todo el backend. El frontend tiene el mismo valor en
-src/lib/limites.ts (para avisar antes de subir) y nginx deja pasar un poco más
+Se configura con ARCHIVO_MAX_MB (settings/.env). El frontend lo lee de
+/api/config/ para avisar antes de subir, y nginx deja pasar un poco más
 (frontend/nginx.conf), para que el mensaje claro lo dé esta validación.
 """
+from django.conf import settings
 from rest_framework import serializers
 
-MAX_MB = 20
+MAX_MB = settings.ARCHIVO_MAX_MB
 MAX_BYTES = MAX_MB * 1024 * 1024
 
 

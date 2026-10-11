@@ -3,11 +3,12 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
-from apps.common.views import health
+from apps.common.views import configuracion, health
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/health/", health, name="health"),
+    path("api/config/", configuracion, name="configuracion"),
     path("api/auth/", include("apps.usuarios.api.urls")),
     path("api/", include("apps.transformaciones.api.urls")),
     path("api/", include("apps.plantillas.api.urls")),

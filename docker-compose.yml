@@ -14,7 +14,7 @@ services:
     environment:
       POSTGRES_DB: easylit
       POSTGRES_USER: easylit
-      POSTGRES_PASSWORD: easylit_local_pass
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-easylit_local_pass}
     volumes:
       - datos_db:/var/lib/postgresql/data
     ports:
@@ -31,8 +31,8 @@ services:
     build: ./backend
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
-      SECRET_KEY: clave-secreta-local-cambiar-en-produccion
-      DATABASE_URL: postgres://easylit:easylit_local_pass@db:5432/easylit
+      SECRET_KEY: ${SECRET_KEY:-clave-secreta-local-cambiar-en-produccion-0000000000000}
+      DATABASE_URL: postgres://easylit:${POSTGRES_PASSWORD:-easylit_local_pass}@db:5432/easylit
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       GEMINI_API_KEY: ${GEMINI_API_KEY}
@@ -60,8 +60,8 @@ services:
     build: ./backend
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
-      SECRET_KEY: clave-secreta-local-cambiar-en-produccion
-      DATABASE_URL: postgres://easylit:easylit_local_pass@db:5432/easylit
+      SECRET_KEY: ${SECRET_KEY:-clave-secreta-local-cambiar-en-produccion-0000000000000}
+      DATABASE_URL: postgres://easylit:${POSTGRES_PASSWORD:-easylit_local_pass}@db:5432/easylit
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       GEMINI_API_KEY: ${GEMINI_API_KEY}

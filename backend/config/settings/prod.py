@@ -56,13 +56,13 @@ REST_FRAMEWORK = {
 }
 
 # --- Cola de tareas: Redis ---
-REDIS_URL = config("REDIS_URL", default="redis://localhost:6379/0")
+# Obligatoria: sin Redis no hay cola de tareas, y es mejor que el servidor no
+# arranque a que arranque apuntando a un localhost que no existe.
+REDIS_URL = config("REDIS_URL")
 CELERY_BROKER_URL = config("CELERY_BROKER_URL", default=REDIS_URL)
 CELERY_RESULT_BACKEND = REDIS_URL
 
-# --- Credenciales de IA ---
-GEMINI_API_KEY = config("GEMINI_API_KEY", default="")
-IA_MODEL = config("IA_MODEL", default="gemini-flash-latest")
+# La IA (GEMINI_API_KEY, IA_MODEL) y las reglas de negocio se leen en base.py.
 
 # --- Almacenamiento de archivos ---
 # En Render, el disco persistente. En Docker local (u otros), una carpeta local.

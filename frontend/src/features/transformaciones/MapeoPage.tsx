@@ -12,6 +12,7 @@ import { plantillaService } from "@/features/plantillas/plantillaService";
 import { transformacionService } from "@/features/historial/historialService";
 import { useAvisos } from "@/components/ui/Avisos";
 import { describirError } from "@/lib/errores";
+import { useConfiguracion } from "@/lib/configuracion";
 import ResultadoModal, { type Resultado } from "@/components/ui/ResultadoModal";
 import "./mapeo.css";
 
@@ -60,13 +61,17 @@ function gruposPorHoja(estados: EstadoCampo[]) {
   }).filter((g) => g.items.length > 0);
 }
 
-const IVA_OPCIONES = [
-  { v: "NINGUNO", t: "Sin IVA" },
-  { v: "AGREGAR", t: "+ IVA (19%)" },
-  { v: "QUITAR", t: "Neto (−IVA)" },
-];
+/** Opciones del control de IVA; el porcentaje lo define el backend (IVA_TASA). */
+function opcionesIVA(porcentaje: number) {
+  return [
+    { v: "NINGUNO", t: "Sin IVA" },
+    { v: "AGREGAR", t: `+ IVA (${porcentaje.toLocaleString("es-CL")}%)` },
+    { v: "QUITAR", t: "Neto (−IVA)" },
+  ];
+}
 
 export default function MapeoPage() {
+  const IVA_OPCIONES = opcionesIVA(useConfiguracion().iva_porcentaje);
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const avisos = useAvisos();

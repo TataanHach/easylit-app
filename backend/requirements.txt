@@ -8,7 +8,7 @@ celery==5.4.0
 redis==5.2.1
 pandas==2.2.3
 openpyxl==3.1.5
-google-generativeai==0.8.3
+requests==2.34.2  # llamadas a la API REST de Gemini (sin gRPC)
 gunicorn==23.0.0
 python-decouple==3.8
 whitenoise==6.8.2

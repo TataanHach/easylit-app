@@ -15,8 +15,10 @@ propuesta heurística local, para poder desarrollar y probar sin gastar API ni
 exponer datos.
 """
 import json
+import logging
 import re
 
+import requests
 from django.conf import settings
 
 from .normalizacion import resuelto_por_reglas
@@ -24,6 +26,46 @@ from .normalizacion import resuelto_por_reglas
 # Temperatura 0: con los mismos datos, la IA responde siempre lo mismo. Con la
 # temperatura por defecto, cada clic en "Limpiar con IA" daba un resultado distinto.
 CONFIG_IA = {"temperature": 0}
+
+logger = logging.getLogger(__name__)
+
+_URL_GEMINI = "https://generativelanguage.googleapis.com/v1beta/{modelo}:generateContent"
+
+
+def _llamar_gemini(prompt, timeout=None):
+    """
+    Envía el prompt a Gemini y devuelve el texto de la respuesta.
+
+    Se llama a la API REST directo (HTTPS) en vez de usar la librería
+    google-generativeai: esa librería depende de gRPC, cuyo .dll lo bloquea el
+    Control de aplicaciones de Windows, y entonces la IA fallaba en silencio.
+    Lanza una excepción con el motivo si Google responde con error.
+    """
+    modelo = getattr(settings, "IA_MODEL", "gemini-flash-latest")
+    if not modelo.startswith("models/"):
+        modelo = f"models/{modelo}"
+    resp = requests.post(
+        _URL_GEMINI.format(modelo=modelo),
+        headers={"x-goog-api-key": settings.GEMINI_API_KEY},
+        json={
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": CONFIG_IA,
+        },
+        timeout=timeout or settings.IA_TIMEOUT_SEGUNDOS,
+    )
+    if resp.status_code != 200:
+        try:
+            motivo = resp.json().get("error", {}).get("message", "")
+        except ValueError:
+            motivo = resp.text[:200]
+        raise RuntimeError(f"Gemini respondió {resp.status_code}: {motivo}")
+    datos = resp.json()
+    try:
+        partes = datos["candidates"][0]["content"]["parts"]
+    except (KeyError, IndexError):
+        # Sin candidatos: suele ser un bloqueo por filtros de seguridad.
+        raise RuntimeError(f"Gemini no devolvió respuesta: {datos.get('promptFeedback', datos)}")
+    return "".join(p.get("text", "") for p in partes)
 
 
 def _muestra_segura(df, columnas_numericas, anonimizar, filas=5):
@@ -170,21 +212,17 @@ def proponer_mapeo(df, columnas_numericas, campos_destino, anonimizar=True):
         return _propuesta_heuristica(muestra, campos_destino), "heuristica-local"
 
     try:
-        import google.generativeai as genai
-
-        genai.configure(api_key=api_key)
-        modelo = genai.GenerativeModel(getattr(settings, "IA_MODEL", "gemini-flash-latest"))
         prompt = _construir_prompt(muestra, campos_destino)
-        respuesta = modelo.generate_content(prompt, generation_config=CONFIG_IA)
-
-        texto = respuesta.text.strip()
+        texto = _llamar_gemini(prompt).strip()
         # Quitar posibles vallas de markdown que a veces añade el modelo.
         texto = re.sub(r"^```(json)?|```$", "", texto, flags=re.MULTILINE).strip()
         propuesta = json.loads(texto)
         return _completar_por_nombre(propuesta, muestra, campos_destino), getattr(settings, "IA_MODEL", "gemini")
     except Exception:
         # Si la IA falla por cualquier razón, no rompemos el flujo: caemos a la
-        # heurística local y seguimos. El usuario igual revisa y aprueba.
+        # heurística local y seguimos. El usuario igual revisa y aprueba. El
+        # motivo queda en el log del worker para poder diagnosticarlo.
+        logger.exception("Falló el mapeo con Gemini; se usa la heurística local")
         return _propuesta_heuristica(muestra, campos_destino), "heuristica-respaldo"
 
 # ═════════════════════════════════════════════════════════════
@@ -277,14 +315,8 @@ def limpiar_con_ia(valores_campos):
         return resultado, "sin-clave-ia"
 
     try:
-        import google.generativeai as genai
-
-        genai.configure(api_key=api_key)
-        modelo = genai.GenerativeModel(getattr(settings, "IA_MODEL", "gemini-flash-latest"))
         prompt = _construir_prompt_limpieza(a_limpiar)
-        respuesta = modelo.generate_content(prompt, generation_config=CONFIG_IA)
-
-        texto = respuesta.text or ""
+        texto = _llamar_gemini(prompt) or ""
         texto = re.sub(r"```(json)?", "", texto).strip()
         inicio = texto.find("[")
         fin = texto.rfind("]")
@@ -303,5 +335,6 @@ def limpiar_con_ia(valores_campos):
 
         return resultado, getattr(settings, "IA_MODEL", "gemini")
     except Exception:
-        # Si la IA falla, devolver los valores sin cambios.
+        # Si la IA falla, devolver los valores sin cambios (el motivo va al log).
+        logger.exception("Falló la limpieza con Gemini")
         return resultado, "limpieza-ia-fallo"

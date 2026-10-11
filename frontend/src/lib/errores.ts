@@ -5,7 +5,7 @@
  * `accion` completa la frase "No se pudo …", ej. "eliminar la transformación".
  */
 import axios from "axios";
-import { ARCHIVO_MAX_MB } from "./limites";
+import { configuracionActual } from "./configuracion";
 
 export interface MensajeError {
   titulo: string;
@@ -88,7 +88,7 @@ export function describirError(e: unknown, accion: string): MensajeError {
     case 404:
       return { titulo, detalle: delBackend || "No se encontró lo que buscas. Puede que alguien lo haya eliminado; recarga la página." };
     case 413:
-      return { titulo, detalle: `El archivo es demasiado grande: el máximo es ${ARCHIVO_MAX_MB} MB. Quita hojas o filas que no sean necesarias (o guárdalo sin imágenes) y vuelve a subirlo.` };
+      return { titulo, detalle: `El archivo es demasiado grande: el máximo es ${configuracionActual().archivo_max_mb} MB. Quita hojas o filas que no sean necesarias (o guárdalo sin imágenes) y vuelve a subirlo.` };
     default:
       if (e.response.status >= 500) {
         return {

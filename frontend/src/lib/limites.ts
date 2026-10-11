@@ -3,6 +3,8 @@
  * modelos del backend, para que el usuario no pueda escribir más de lo que la
  * base de datos acepta.
  */
+import { configuracionActual } from "./configuracion";
+
 export const LIMITES = {
   email: 254,
   tokenInvitacion: 64,
@@ -16,16 +18,14 @@ export const LIMITES = {
 } as const;
 
 /**
- * Peso máximo de los archivos que se suben (plantillas y Excel de origen). Es el
- * mismo que valida el backend (apps/common/archivos.py).
+ * Problema de peso del archivo, en palabras del usuario, o "" si está bien.
+ * El máximo (ARCHIVO_MAX_MB) lo define el backend y llega por /api/config/.
  */
-export const ARCHIVO_MAX_MB = 20;
-
-/** Problema de peso del archivo, en palabras del usuario, o "" si está bien. */
 export function problemaTamano(f: File): string {
+  const maxMb = configuracionActual().archivo_max_mb;
   const mb = f.size / (1024 * 1024);
-  if (mb <= ARCHIVO_MAX_MB) return "";
-  return `«${f.name}» pesa ${mb.toFixed(1).replace(".", ",")} MB y el máximo es ${ARCHIVO_MAX_MB} MB. `
+  if (mb <= maxMb) return "";
+  return `«${f.name}» pesa ${mb.toFixed(1).replace(".", ",")} MB y el máximo es ${maxMb} MB. `
     + "Quita hojas o filas que no sean necesarias (o guárdalo sin imágenes) y vuelve a subirlo.";
 }
 

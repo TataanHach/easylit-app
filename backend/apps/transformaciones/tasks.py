@@ -8,7 +8,9 @@ from celery import shared_task
 from .models import Bitacora, EstadoTransformacion, Transformacion
 
 
-IVA = 1.19
+from django.conf import settings
+
+IVA = 1 + settings.IVA_TASA   # factor: 1.19 con IVA_TASA=0.19
 
 
 def _a_numero(valor):

@@ -5,12 +5,19 @@ Los valores sensibles y los que cambian por entorno (SECRET_KEY, base de datos,
 CORS, credenciales de Gemini) se leen de variables de entorno y se afinan en
 dev.py / prod.py. Nunca van hardcodeados aquí.
 """
+from datetime import timedelta
 from pathlib import Path
+
+from decouple import config
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-# Sobrescrito en dev/prod. Placeholder solo para poder correr comandos locales.
-SECRET_KEY = "dev-insecure-key-change-me"
+# En desarrollo se puede omitir (usa este valor solo-local, de 50+ caracteres para
+# que la firma de las sesiones no avise "clave corta"). prod.py la exige.
+SECRET_KEY = config(
+    "SECRET_KEY",
+    default="dev-solo-local-no-usar-en-produccion-8f3k2m9x7q4w1z6v5b0n",
+)
 DEBUG = False
 ALLOWED_HOSTS = []
 
@@ -45,11 +52,9 @@ REST_FRAMEWORK = {
     ),
 }
 
-from datetime import timedelta  # noqa: E402
-
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=config("JWT_ACCESS_MINUTOS", default=60, cast=int)),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=config("JWT_REFRESH_DIAS", default=7, cast=int)),
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
@@ -114,8 +119,18 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# --- Integración de IA (se usa en el bloque del worker) ---
-# El proveedor y la clave se leen del entorno. anonimizar por defecto ON.
+# --- Integración de IA ---
+# Sin GEMINI_API_KEY el sistema usa el modo simulado (heurística local).
 IA_PROVIDER = "gemini"
-IA_MODEL = "models/gemini-3.5-flash-lite"
-GEMINI_API_KEY = ""  # se inyecta por variable de entorno en prod
+GEMINI_API_KEY = config("GEMINI_API_KEY", default="")
+IA_MODEL = config("IA_MODEL", default="models/gemini-3.5-flash-lite")
+IA_TIMEOUT_SEGUNDOS = config("IA_TIMEOUT_SEGUNDOS", default=60, cast=int)
+# Tope de textos distintos de tablas que se mandan en un "Limpiar con IA" (cuota).
+IA_MAX_TEXTOS_TABLA = config("IA_MAX_TEXTOS_TABLA", default=300, cast=int)
+
+# --- Reglas de negocio (el frontend las lee de /api/config/) ---
+IVA_TASA = config("IVA_TASA", default=0.19, cast=float)          # 19% en Chile
+CONTRASENA_MIN = config("CONTRASENA_MIN", default=6, cast=int)
+CONTRASENA_MAX = config("CONTRASENA_MAX", default=18, cast=int)
+ARCHIVO_MAX_MB = config("ARCHIVO_MAX_MB", default=20, cast=int)  # nginx.conf deja pasar un poco más
+INVITACION_DIAS_VIGENCIA = config("INVITACION_DIAS_VIGENCIA", default=7, cast=int)

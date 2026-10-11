@@ -14,11 +14,12 @@ import { useAuth } from "./AuthContext";
 import { authService } from "./authService";
 import "./auth.css";
 import { LIMITES, limpiarTexto } from "@/lib/limites";
-import { CONTRASENA_MAX } from "@/lib/contrasena";
+import { useConfiguracion } from "@/lib/configuracion";
 import { describirError } from "@/lib/errores";
 import { problemaCorreo } from "@/lib/validar";
 
 export default function LoginPage() {
+  const { contrasena_max: CONTRASENA_MAX } = useConfiguracion();
   const { usuario, login } = useAuth();
   const navigate = useNavigate();
 

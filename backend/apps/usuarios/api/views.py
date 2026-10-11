@@ -7,6 +7,7 @@ fijando la contraseña (primer ingreso). Todo lo que cambia estado deja además
 un registro en la bitácora cuando corresponde.
 """
 import secrets
+from django.conf import settings
 from datetime import timedelta
 
 from django.utils import timezone
@@ -30,7 +31,7 @@ from .serializers import (
 )
 
 # Cuántos días vale una invitación antes de expirar.
-DIAS_VIGENCIA_INVITACION = 7
+DIAS_VIGENCIA_INVITACION = settings.INVITACION_DIAS_VIGENCIA
 
 
 class LoginView(TokenObtainPairView):

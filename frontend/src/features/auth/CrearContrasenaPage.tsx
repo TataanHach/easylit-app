@@ -11,10 +11,15 @@ import { useAuth } from "./AuthContext";
 import { formatearRut, rutValido } from "@/lib/rut";
 import "./auth.css";
 import { limpiarTexto, LIMITES } from "@/lib/limites";
-import { CONTRASENA_MAX, CONTRASENA_MIN, REQUISITOS_CONTRASENA, contrasenaValida } from "@/lib/contrasena";
+import { requisitosContrasena } from "@/lib/contrasena";
+import { useConfiguracion } from "@/lib/configuracion";
 import { describirError } from "@/lib/errores";
 
 export default function CrearContrasenaPage() {
+  const cfg = useConfiguracion();
+  const REQUISITOS_CONTRASENA = requisitosContrasena(cfg);
+  const CONTRASENA_MIN = cfg.contrasena_min;
+  const CONTRASENA_MAX = cfg.contrasena_max;
   const { crearContrasena } = useAuth();
   const navigate = useNavigate();
   const location = useLocation() as { state?: { email?: string; token?: string } };
@@ -29,7 +34,7 @@ export default function CrearContrasenaPage() {
 
   // La barra muestra cuántos requisitos se cumplen (0 a 4).
   const nivel = password ? REQUISITOS_CONTRASENA.filter((r) => r.cumple(password)).length : 0;
-  const pwOk = contrasenaValida(password);
+  const pwOk = REQUISITOS_CONTRASENA.every((r) => r.cumple(password));
   const coinciden = password2.length > 0 && password === password2;
   const rutOk = rut === "" || rutValido(rut);
 

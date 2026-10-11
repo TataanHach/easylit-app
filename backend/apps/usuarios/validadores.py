@@ -7,8 +7,11 @@ La misma regla está en el frontend (src/lib/contrasena.ts) para avisar en vivo.
 """
 from django.core.exceptions import ValidationError
 
-MIN_LARGO = 6
-MAX_LARGO = 18
+from django.conf import settings
+
+# Se configuran con CONTRASENA_MIN / CONTRASENA_MAX (settings/.env).
+MIN_LARGO = settings.CONTRASENA_MIN
+MAX_LARGO = settings.CONTRASENA_MAX
 
 
 def _es_especial(c):
