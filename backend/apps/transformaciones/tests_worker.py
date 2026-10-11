@@ -76,3 +76,63 @@ class ValidacionTest(TestCase):
         partidas = [P("1.1", "1", False, Decimal("1"), Decimal("100"), Decimal("100"), unidad=None)]
         r = validacion.validar(partidas)
         self.assertFalse(r["todo_ok"])
+
+
+class RevisionPlantillaTest(TestCase):
+    """
+    Caso real: 3 hojas de formulario con sus campos y una cuarta hoja que es una
+    tabla, a la que se le agregó un campo inventado. Antes pasaba sin aviso.
+    """
+
+    def setUp(self):
+        import os
+        import tempfile
+        from openpyxl import Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Identificación"
+        ws["A1"], ws["A2"] = "RUT del oferente", "Nombre del oferente"
+        tabla = wb.create_sheet("Oferta")
+        tabla.append(["Ítem", "Descripción", "Unidad", "Cantidad", "Precio unitario", "Total"])
+        fd, self.ruta = tempfile.mkstemp(suffix=".xlsx")
+        os.close(fd)
+        wb.save(self.ruta)
+
+    def tearDown(self):
+        import os
+        os.remove(self.ruta)
+
+    def _campo(self, id, nombre, hoja, etiqueta=""):
+        from types import SimpleNamespace
+        return SimpleNamespace(id=id, nombre=nombre, hoja_destino=hoja,
+                               etiqueta_busqueda=etiqueta, celda_destino="")
+
+    def test_detecta_hoja_tabla_y_campos_que_no_se_podran_llenar(self):
+        from apps.transformaciones.services import generacion
+        campos = [
+            self._campo(1, "RUT", "Identificación", "RUT del oferente"),
+            self._campo(2, "Inventado", "Oferta", "Campo que no existe"),
+            self._campo(3, "Total", "Oferta"),  # cae en el encabezado de la tabla
+            self._campo(4, "Monto garantía extra", "Identificación"),  # 1 palabra en común no basta
+        ]
+        r = generacion.revisar_plantilla(self.ruta, campos)
+        tipos = {h["nombre"]: h["tipo"] for h in r["hojas"]}
+        self.assertEqual(tipos, {"Identificación": "formulario", "Oferta": "tabla"})
+        self.assertNotIn("1", r["problemas"])
+        self.assertEqual(r["ubicaciones"]["1"],
+                         {"hoja": "Identificación", "celda": "B1",
+                          "etiqueta": "RUT del oferente", "exacta": True})
+        self.assertIn("no se encontró", r["problemas"]["2"])
+        self.assertIn("dentro de la tabla", r["problemas"]["3"])
+        self.assertIn("no se encontró", r["problemas"]["4"])
+
+    def test_avisa_campos_sin_dato(self):
+        from apps.transformaciones.services import generacion
+        campos = [
+            self._campo(1, "RUT", "Identificación", "RUT del oferente"),
+            self._campo(2, "Nombre", "Identificación", "Nombre del oferente"),
+        ]
+        avisos = generacion.campos_sin_escribir(self.ruta, campos, {1: "12.345.678-5"})
+        self.assertEqual(len(avisos), 1)
+        self.assertIn("«Nombre» quedará vacío", avisos[0])

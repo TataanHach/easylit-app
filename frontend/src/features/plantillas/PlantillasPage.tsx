@@ -46,16 +46,19 @@ export default function PlantillasPage() {
     return data.filter((p) => p.mandante === mandanteFiltro);
   }, [data, mandanteFiltro]);
 
-  function trasGuardar(nombre: string) {
+  function trasGuardar(nombre: string, creada?: Plantilla) {
     avisos.exito(
       editando ? "Plantilla actualizada" : "Plantilla creada",
       editando
         ? `Se guardaron los cambios de «${nombre}».`
-        : `«${nombre}» ya está disponible. Configura sus campos con «Editar campos».`
+        : `«${nombre}» ya está disponible. Revisa sus hojas y agrega los campos; al terminar, presiona «Listo» para validarla.`
     );
     setModalCrear(false);
     setEditando(null);
     refetch();
+    // Plantilla nueva: directo al editor de campos, que muestra qué hojas son
+    // tablas (se llenan solas) y cuáles son formularios (necesitan campos).
+    if (creada) setEditandoCampos(creada);
   }
   function trasEliminar() {
     if (eliminando) avisos.exito("Plantilla eliminada", `«${eliminando.nombre}» se quitó de tus plantillas.`);

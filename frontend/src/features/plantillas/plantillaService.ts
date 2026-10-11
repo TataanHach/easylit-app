@@ -8,6 +8,22 @@
 import { api } from "@/api/client";
 import type { Plantilla } from "@/types";
 
+export interface HojaPlantilla {
+  nombre: string;
+  tipo: "tabla" | "formulario";
+  columnas: string[]; // solo en las de tabla
+}
+
+export interface RevisionHojas {
+  hojas: string[];
+  detalle: HojaPlantilla[];
+  problemas: Record<string, string>; // campo_id → por qué no se podrá escribir
+  /** campo_id → dónde se escribirá: celda y etiqueta encontrada (puede ser parecida). */
+  ubicaciones: Record<string, { hoja: string; celda: string; etiqueta: string; exacta: boolean }>;
+  /** Si el Excel no se pudo leer: el motivo. "" si se revisó bien. */
+  error: string;
+}
+
 export const plantillaService = {
   async listar(): Promise<Plantilla[]> {
     const { data } = await api.get<Plantilla[]>("/plantillas/");
@@ -18,10 +34,14 @@ export const plantillaService = {
     const { data } = await api.get<Plantilla>(`/plantillas/${id}/`);
     return data;
   },
-  async hojas(id: string): Promise<{ hojas: string[] }> {
-      const { data } = await api.get(`/plantillas/${id}/hojas/`);
-      return data;
-    },
+  /**
+   * Hojas del Excel y su revisión: qué hojas son tablas (se llenan solas) y qué
+   * campos no se podrán escribir, con el motivo.
+   */
+  async hojas(id: string): Promise<RevisionHojas> {
+    const { data } = await api.get<RevisionHojas>(`/plantillas/${id}/hojas/`);
+    return data;
+  },
 
   /** Crea una plantilla. Incluye el archivo, así que va como multipart. */
   async crear(payload: {

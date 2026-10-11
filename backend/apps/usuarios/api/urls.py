@@ -7,11 +7,13 @@ from .views import (
     EstadoCorreoView,
     InvitarUsuarioView,
     LoginView,
+    LogoutView,
     PerfilView,
 )
 
 urlpatterns = [
     path("login/", LoginView.as_view(), name="login"),
+    path("logout/", LogoutView.as_view(), name="logout"),
     path("refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("estado-correo/", EstadoCorreoView.as_view(), name="estado_correo"),
     path("invitar/", InvitarUsuarioView.as_view(), name="invitar"),

@@ -21,6 +21,14 @@ const CAMPOS: Record<string, string> = {
   archivo: "Archivo",
   campo: "Campo",
   destino_campo: "Campo destino",
+  sector: "Sector",
+  etiqueta_busqueda: "Etiqueta de búsqueda",
+  email: "Correo",
+  password: "Contraseña",
+  password2: "Confirmar contraseña",
+  token: "Código de invitación",
+  rut: "RUT",
+  telefono: "Teléfono",
 };
 
 /** Junta los mensajes de un cuerpo de error de DRF en un solo texto. */

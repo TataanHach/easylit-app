@@ -52,8 +52,14 @@ export const authService = {
     return data;
   },
 
-  /** Cierra la sesión borrando los tokens. */
+  /**
+   * Cierra la sesión: invalida el token en el servidor (para que una copia
+   * robada no sirva) y lo borra del navegador. Si el servidor no responde, la
+   * sesión local se cierra igual.
+   */
   logout() {
+    const refresh = tokenStore.refresh;
+    if (refresh) api.post("/auth/logout/", { refresh }).catch(() => {});
     tokenStore.clear();
   },
 };

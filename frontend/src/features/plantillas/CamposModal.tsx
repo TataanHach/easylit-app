@@ -13,7 +13,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useAvisos } from "@/components/ui/Avisos";
 import { describirError } from "@/lib/errores";
-import { campoService, plantillaService } from "./plantillaService";
+import { campoService, plantillaService, type RevisionHojas } from "./plantillaService";
+import ResultadoModal, { type Resultado } from "@/components/ui/ResultadoModal";
 import type { Plantilla } from "@/types";
 import { LIMITES, limpiarTexto } from "@/lib/limites";
 
@@ -40,18 +41,22 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
   const avisos = useAvisos();
   const [campos, setCampos] = useState<any[]>([]);
   const [hojas, setHojas] = useState<string[]>([]);
+  const [revision, setRevision] = useState<RevisionHojas | null>(null);
   const [hojaActiva, setHojaActiva] = useState<string>("");
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
+  const [revisando, setRevisando] = useState(false);
+  const [resultado, setResultado] = useState<Resultado | null>(null);
 
   useEffect(() => {
     // Cargar campos y hojas en paralelo.
     Promise.all([
       campoService.listar(plantilla.id),
-      plantillaService.hojas(plantilla.id).catch(() => ({ hojas: [] })),
+      plantillaService.hojas(plantilla.id).catch(() => null),
     ])
       .then(([listaCampos, resp]) => {
         setCampos(listaCampos);
+        setRevision(resp);
         const hs: string[] = resp?.hojas ?? [];
         setHojas(hs);
         // Hoja activa inicial: la primera del Excel, o "" si no hay hojas.
@@ -67,16 +72,126 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
     ? campos.filter((c) => (c.hoja_destino || "") === hojaActiva)
     : campos;
 
+  // Nombre libre para un campo nuevo: Nuevo_Campo, Nuevo_Campo_2, … (el
+  // backend no acepta dos campos con el mismo nombre en una plantilla).
+  function nombreLibre() {
+    const usados = new Set(campos.map((c) => String(c.nombre).toLowerCase()));
+    let nombre = "Nuevo_Campo";
+    for (let i = 2; usados.has(nombre.toLowerCase()); i++) nombre = `Nuevo_Campo_${i}`;
+    return nombre;
+  }
+
+  // Tras cada cambio se vuelve a revisar la plantilla: así el aviso de un campo
+  // (ej. "no se encontró la etiqueta") aparece o desaparece al momento.
+  function revisar() {
+    plantillaService.hojas(plantilla.id).then(setRevision).catch(() => {});
+  }
+  const infoHoja = (h: string) => revision?.detalle.find((d) => d.nombre === h);
+  const esTabla = (h: string) => infoHoja(h)?.tipo === "tabla";
+  const conProblema = (h: string) =>
+    campos.some((c) => (c.hoja_destino || "") === h && revision?.problemas[c.id]);
+
+  /**
+   * "Listo": revisa la plantilla completa y muestra el resultado en una
+   * ventana: ✓ todo correcto, ⚠ campos con problemas (cuáles, en qué hoja y por
+   * qué) o ✗ la plantilla no se pudo revisar.
+   */
+  async function terminar() {
+    setRevisando(true);
+    let r: RevisionHojas;
+    try {
+      r = await plantillaService.hojas(plantilla.id);
+      setRevision(r);
+    } catch (e) {
+      const { detalle } = describirError(e, "revisar la plantilla");
+      setResultado({ estado: "error", titulo: "No se pudo revisar la plantilla", mensaje: detalle });
+      return;
+    } finally {
+      setRevisando(false);
+    }
+
+    if (r.error) {
+      setResultado({ estado: "error", titulo: "No se pudo leer el Excel de la plantilla", mensaje: r.error });
+      return;
+    }
+    const tablas = r.detalle.filter((h) => h.tipo === "tabla");
+    const formularios = r.detalle.filter((h) => h.tipo === "formulario");
+    if (campos.length === 0 && tablas.length === 0) {
+      setResultado({
+        estado: "error",
+        titulo: "La plantilla no tiene nada que llenar",
+        mensaje: "No tiene campos y en su Excel no se reconoció ninguna tabla, así que el documento "
+          + "saldría igual al original. Agrega un campo por cada casilla que deba llenarse.",
+      });
+      return;
+    }
+
+    const cifras = [
+      { etiqueta: campos.length === 1 ? "campo" : "campos", valor: campos.length },
+      { etiqueta: formularios.length === 1 ? "hoja formulario" : "hojas formulario", valor: formularios.length },
+      { etiqueta: tablas.length === 1 ? "hoja tabla" : "hojas tabla", valor: tablas.length },
+    ];
+
+    // Problemas agrupados por hoja, en el orden del Excel. Un campo sin hoja va
+    // a la primera (la activa del Excel), igual que al generar.
+    const hojaDe = (c: any) => c.hoja_destino || r.hojas[0];
+    const grupos = r.detalle
+      .map((h) => {
+        const items = campos
+          .filter((c) => hojaDe(c) === h.nombre && r.problemas[c.id])
+          .map((c) => `«${c.nombre}»: ${r.problemas[c.id]}`);
+        if (h.tipo === "formulario" && !campos.some((c) => hojaDe(c) === h.nombre)) {
+          items.push("No tiene campos, así que no se llenará nada en ella. Si es una portada o "
+            + "instrucciones, puedes ignorar este aviso.");
+        }
+        return { titulo: `Hoja «${h.nombre}»`, items };
+      })
+      .filter((g) => g.items.length > 0);
+    // Campos cuya hoja ya no existe en el Excel.
+    const huerfanos = campos.filter((c) => r.problemas[c.id] && c.hoja_destino && !r.hojas.includes(c.hoja_destino));
+    if (huerfanos.length) {
+      grupos.push({ titulo: "Hojas que ya no existen", items: huerfanos.map((c) => `«${c.nombre}»: ${r.problemas[c.id]}`) });
+    }
+
+    if (grupos.length > 0) {
+      const malos = campos.filter((c) => r.problemas[c.id]).length;
+      setResultado({
+        estado: "advertencia",
+        titulo: "La plantilla tiene cosas por revisar",
+        mensaje: malos > 0
+          ? `${campos.length - malos} de ${campos.length} campos están bien. Los de abajo no se podrán llenar al transformar:`
+          : "Todos los campos encontraron su casilla, pero revisa lo siguiente:",
+        cifras,
+        grupos,
+      });
+      return;
+    }
+
+    const textoTablas = tablas.length
+      ? ` ${tablas.length === 1 ? "La hoja" : "Las hojas"} ${tablas.map((h) => `«${h.nombre}»`).join(", ")} `
+        + `${tablas.length === 1 ? "es una tabla y se llenará sola" : "son tablas y se llenarán solas"}.`
+      : "";
+    setResultado({
+      estado: "exito",
+      titulo: "Todo está correcto",
+      mensaje: (campos.length
+        ? `Los ${campos.length} campos encontraron su casilla en el Excel.`
+        : "La plantilla no tiene campos de formulario.") + textoTablas,
+      cifras,
+    });
+  }
+
   async function agregar() {
     setGuardando(true);
     try {
       const nuevo = await campoService.crear({
-        plantilla: plantilla.id, nombre: "Nuevo_Campo", tipo: "TEXTO",
+        plantilla: plantilla.id, nombre: nombreLibre(), tipo: "TEXTO",
         etiqueta_busqueda: "", orden: camposVisibles.length,
         // Asociar el campo a la hoja activa (si hay hojas).
         hoja_destino: hayHojas ? hojaActiva : "",
       });
       setCampos([...campos, nuevo]);
+      revisar();
     } catch (e) {
       avisos.error(describirError(e, "añadir el campo"));
     } finally { setGuardando(false); }
@@ -93,6 +208,7 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
     try {
       await campoService.editar(id, cambios);
       guardados.current[id] = { ...guardados.current[id], ...cambios };
+      revisar();
     } catch (e) {
       const anterior = guardados.current[id];
       if (anterior) setCampos((lista) => lista.map((c) => (c.id === id ? anterior : c)));
@@ -117,6 +233,7 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
     setCampos(campos.filter((c) => c.id !== id));
     try {
       await campoService.eliminar(id);
+      revisar();
     } catch (e) {
       setCampos(lista);
       avisos.error(describirError(e, "quitar el campo"));
@@ -130,8 +247,8 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
   const contarHoja = (h: string) => campos.filter((c) => (c.hoja_destino || "") === h).length;
 
   return (
-    <div className="modal-overlay" onClick={onCerrar}>
-      <div className="modal campos-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal campos-modal">
         <div className="modal-head">
           <h2>Campos de "{plantilla.nombre}"</h2>
           <button className="modal-close" onClick={onCerrar}><i className="ti ti-x" /></button>
@@ -156,10 +273,24 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
                       className={`hoja-tab ${h === hojaActiva ? "activa" : ""}`}
                       onClick={() => setHojaActiva(h)}
                     >
-                      <i className="ti ti-file-spreadsheet" /> {h}
+                      <i className={esTabla(h) ? "ti ti-table" : "ti ti-forms"} /> {h}
+                      {esTabla(h) && <span className="hoja-tab-tipo">tabla</span>}
                       <span className="hoja-tab-count">{contarHoja(h)}</span>
+                      {conProblema(h) && <i className="ti ti-alert-triangle hoja-tab-alerta" title="Hay campos con problemas" />}
                     </button>
                   ))}
+                </div>
+              )}
+
+              {esTabla(hojaActiva) && (
+                <div className="hoja-aviso">
+                  <i className="ti ti-table" />
+                  <div>
+                    <strong>Esta hoja es una tabla: se llena sola.</strong> Sus columnas
+                    ({infoHoja(hojaActiva)!.columnas.join(", ")}) se completan con la tabla del
+                    archivo de origen, así que no necesitan campos. Agrega campos aquí solo para
+                    casillas que estén <em>arriba</em> de la tabla (ej. nombre del oferente).
+                  </div>
                 </div>
               )}
 
@@ -171,7 +302,7 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
                 <span></span>
               </div>
               {camposVisibles.map((c) => (
-                <div className="campo-fila" key={c.id}>
+                <div className={`campo-fila ${revision?.problemas[c.id] ? "con-problema" : ""}`} key={c.id}>
                   <input value={c.nombre} maxLength={LIMITES.nombreCampo}
                     onChange={(e) => setCampos(campos.map((x) => x.id === c.id ? { ...x, nombre: e.target.value } : x))}
                     onBlur={(e) => guardarNombre(c.id, e.target.value)} />
@@ -196,6 +327,19 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
                   <button className="campo-del" title="Quitar" onClick={() => quitar(c.id)}>
                     <i className="ti ti-trash" />
                   </button>
+                  {revision?.problemas[c.id] && (
+                    <p className="campo-problema">
+                      <i className="ti ti-alert-triangle" /> Este campo no se podrá llenar: {revision.problemas[c.id]}
+                    </p>
+                  )}
+                  {revision?.ubicaciones?.[c.id] && (
+                    // Dónde se escribirá: así se ve que basta una etiqueta parecida.
+                    <p className="campo-ubicacion">
+                      <i className="ti ti-circle-check" /> Se escribirá en la celda <strong>{revision.ubicaciones[c.id].celda}</strong>
+                      {revision.ubicaciones[c.id].etiqueta && <>, junto a «{revision.ubicaciones[c.id].etiqueta}»</>}
+                      {revision.ubicaciones[c.id].etiqueta && !revision.ubicaciones[c.id].exacta && <> (etiqueta parecida)</>}
+                    </p>
+                  )}
                 </div>
               ))}
               {camposVisibles.length === 0 && (
@@ -212,9 +356,22 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
           )}
         </div>
         <div className="modal-foot">
-          <button className="btn btn-primary" onClick={onCerrar}>Listo</button>
+          {/* Los cambios ya se guardaron al hacerlos: "Cerrar" sale sin revisar. */}
+          <button className="btn" onClick={onCerrar}>Cerrar</button>
+          <button className="btn btn-primary" onClick={terminar} disabled={revisando || cargando}>
+            {revisando ? <><i className="ti ti-loader-2" /> Revisando…</> : "Listo"}
+          </button>
         </div>
       </div>
+      {resultado && (
+        <ResultadoModal
+          resultado={resultado}
+          // ✓: listo, se cierra todo. ⚠/✗: "Aceptar" cierra igual; "Corregir" vuelve al editor.
+          onAceptar={() => { setResultado(null); onCerrar(); }}
+          secundario={resultado.estado === "exito" ? undefined
+            : { texto: "Corregir campos", onClick: () => setResultado(null) }}
+        />
+      )}
     </div>
   );
 }

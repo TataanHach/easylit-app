@@ -38,3 +38,25 @@ class ReglasContrasenaValidator:
             f"La contraseña debe tener entre {MIN_LARGO} y {MAX_LARGO} caracteres, con al "
             "menos una mayúscula, un número y un carácter especial."
         )
+
+
+def normalizar_rut(valor):
+    """
+    Valida un RUT chileno y lo devuelve normalizado sin puntos ni guion
+    ("12.345.678-5" → "123456785"). Lanza ValidationError con el motivo si no
+    es válido. Es la misma regla que src/lib/rut.ts en el frontend.
+    """
+    limpio = valor.replace(".", "").replace("-", "").replace(" ", "").upper()
+    cuerpo, dv = limpio[:-1], limpio[-1:]
+    if len(limpio) < 2 or not cuerpo.isdigit():
+        raise ValidationError("El RUT debe tener el formato 12.345.678-9.")
+
+    suma, mult = 0, 2
+    for digito in reversed(cuerpo):
+        suma += int(digito) * mult
+        mult = 2 if mult == 7 else mult + 1
+    resto = 11 - (suma % 11)
+    esperado = {11: "0", 10: "K"}.get(resto, str(resto))
+    if dv != esperado:
+        raise ValidationError("El dígito verificador del RUT no corresponde. Revisa que esté bien escrito.")
+    return limpio

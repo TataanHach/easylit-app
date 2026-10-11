@@ -19,6 +19,10 @@ import re
 
 from django.conf import settings
 
+# Temperatura 0: con los mismos datos, la IA responde siempre lo mismo. Con la
+# temperatura por defecto, cada clic en "Limpiar con IA" daba un resultado distinto.
+CONFIG_IA = {"temperature": 0}
+
 
 def _muestra_segura(df, columnas_numericas, anonimizar, filas=5):
     """
@@ -144,7 +148,7 @@ def proponer_mapeo(df, columnas_numericas, campos_destino, anonimizar=True):
         genai.configure(api_key=api_key)
         modelo = genai.GenerativeModel(getattr(settings, "IA_MODEL", "gemini-flash-latest"))
         prompt = _construir_prompt(muestra, campos_destino)
-        respuesta = modelo.generate_content(prompt)
+        respuesta = modelo.generate_content(prompt, generation_config=CONFIG_IA)
 
         texto = respuesta.text.strip()
         # Quitar posibles vallas de markdown que a veces añade el modelo.
@@ -247,7 +251,7 @@ def limpiar_con_ia(valores_campos):
         genai.configure(api_key=api_key)
         modelo = genai.GenerativeModel(getattr(settings, "IA_MODEL", "gemini-flash-latest"))
         prompt = _construir_prompt_limpieza(a_limpiar)
-        respuesta = modelo.generate_content(prompt)
+        respuesta = modelo.generate_content(prompt, generation_config=CONFIG_IA)
 
         texto = respuesta.text or ""
         texto = re.sub(r"```(json)?", "", texto).strip()

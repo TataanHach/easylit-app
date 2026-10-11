@@ -84,7 +84,7 @@ def es_hoja_itemizado(ws):
     2 de ellas son palabras típicas de tabla de partidas (Descripción, Cantidad,
     Precio...). Esas hojas NO se leen como campos: las vuelca el generador.
     """
-    for fila in ws.iter_rows(values_only=True):
+    for fila in ws.iter_rows(max_row=100, values_only=True):
         celdas = [_texto(c) for c in fila]
         con_texto = [c for c in celdas if c]
         if len(con_texto) >= 3:
@@ -97,7 +97,7 @@ def es_hoja_itemizado(ws):
 def hojas_itemizado(ruta_archivo):
     """Nombres de las hojas del Excel que son tablas de itemizado."""
     try:
-        wb = load_workbook(ruta_archivo, data_only=True)
+        wb = load_workbook(ruta_archivo, data_only=True, read_only=True)
         nombres = [n for n in wb.sheetnames if es_hoja_itemizado(wb[n])]
         wb.close()
         return nombres
@@ -105,9 +105,23 @@ def hojas_itemizado(ruta_archivo):
         return []
 
 
+def _filas_con_datos(ws, max_vacias=50):
+    """Filas no vacías de la hoja. Se detiene tras `max_vacias` filas seguidas
+    vacías: hay Excel que declaran 1.048.576 filas solo por tener formato."""
+    vacias = 0
+    for fila in ws.iter_rows(values_only=True):
+        if any(_texto(c) for c in fila):
+            vacias = 0
+            yield fila
+        else:
+            vacias += 1
+            if vacias >= max_vacias:
+                return
+
+
 def _detectar_formato(ws):
     """Decide si una hoja es TABLA o VERTICAL."""
-    filas = [f for f in ws.iter_rows(values_only=True) if any(_texto(c) for c in f)]
+    filas = list(_filas_con_datos(ws))
     if not filas:
         return "vacia"
     ancho = max(sum(1 for c in f if _texto(c)) for f in filas)
@@ -119,7 +133,7 @@ def _detectar_formato(ws):
 
 def _leer_vertical(ws):
     datos = {}
-    for fila in ws.iter_rows(values_only=True):
+    for fila in _filas_con_datos(ws):
         celdas = [_texto(c) for c in fila if _texto(c)]
         if len(celdas) >= 2:
             etiqueta = celdas[0].rstrip(":").strip()
@@ -131,7 +145,7 @@ def _leer_vertical(ws):
 
 def _leer_una_hoja(ruta_archivo, hoja):
     try:
-        wb = load_workbook(ruta_archivo, data_only=True)
+        wb = load_workbook(ruta_archivo, data_only=True, read_only=True)
         ws = wb[hoja] if (hoja and hoja in wb.sheetnames) else wb.active
         tipo = _detectar_formato(ws)
         if tipo == "vertical":
@@ -154,7 +168,7 @@ def _leer_todas_las_hojas(ruta_archivo):
     # Primero, detectar qué hojas son itemizado (para saltarlas).
     itemizados = set()
     try:
-        wb = load_workbook(ruta_archivo, data_only=True)
+        wb = load_workbook(ruta_archivo, data_only=True, read_only=True)
         for nombre in wb.sheetnames:
             if es_hoja_itemizado(wb[nombre]):
                 itemizados.add(nombre)

@@ -67,3 +67,47 @@ class FlujoAuthTest(TestCase):
         r = self.c.post("/api/auth/invitar/",
             {"email": "otro@test.cl", "nombre_completo": "Otro"}, format="json")
         self.assertEqual(r.status_code, 403)
+
+
+class ValidacionesAuthTest(TestCase):
+    """Validaciones mínimas: espacios, mayúsculas, largos, RUT y cierre de sesión."""
+
+    def setUp(self):
+        self.org = Organizacion.objects.create(nombre="Test SpA", rut="761234567")
+        Usuario.objects.create_user(
+            email="gerente@test.cl", password="ClaveGerente1!",
+            nombre_completo="Gerente Test", rol=Rol.GERENTE, organizacion=self.org)
+        self.c = APIClient()
+
+    def _login(self, email, password="ClaveGerente1!"):
+        return self.c.post("/api/auth/login/", {"email": email, "password": password}, format="json")
+
+    def test_login_ignora_espacios_y_mayusculas_del_correo(self):
+        self.assertEqual(self._login("  Gerente@Test.CL  ").status_code, 200)
+
+    def test_login_fallido_da_mensaje_claro(self):
+        r = self._login("gerente@test.cl", "Incorrecta1!")
+        self.assertEqual(r.status_code, 401)
+        self.assertIn("Correo o contraseña incorrectos", r.data["detail"])
+
+    def test_correo_demasiado_largo_se_rechaza(self):
+        r = self.c.post("/api/auth/estado-correo/", {"email": "a" * 250 + "@x.cl"}, format="json")
+        self.assertEqual(r.status_code, 400)
+
+    def test_logout_invalida_el_refresh(self):
+        refresh = self._login("gerente@test.cl").data["refresh"]
+        self.assertEqual(self.c.post("/api/auth/logout/", {"refresh": refresh}, format="json").status_code, 204)
+        r = self.c.post("/api/auth/refresh/", {"refresh": refresh}, format="json")
+        self.assertEqual(r.status_code, 401)
+
+    def test_rut_con_digito_incorrecto_se_rechaza(self):
+        login = self._login("gerente@test.cl")
+        self.c.credentials(HTTP_AUTHORIZATION=f"Bearer {login.data['access']}")
+        malo = self.c.post("/api/auth/invitar/",
+            {"email": "t1@test.cl", "nombre_completo": "T", "rut": "12.345.678-9"}, format="json")
+        self.assertEqual(malo.status_code, 400)
+        self.assertIn("rut", malo.data)
+        bueno = self.c.post("/api/auth/invitar/",
+            {"email": "t2@test.cl", "nombre_completo": "T", "rut": "12.345.678-5"}, format="json")
+        self.assertEqual(bueno.status_code, 201)
+        self.assertEqual(bueno.data["usuario"]["rut"], "123456785")

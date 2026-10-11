@@ -24,6 +24,8 @@ INSTALLED_APPS = [
 
     # Terceros
     "rest_framework",
+    # Lista negra de tokens JWT: al cerrar sesión el refresh deja de servir.
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
 
     # Propias

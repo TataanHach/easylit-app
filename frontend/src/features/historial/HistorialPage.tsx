@@ -20,8 +20,8 @@ const POR_PAGINA = 15;
 const MAX_NOMBRE = 40;   // caracteres visibles del nombre en la tabla
 
 const TABS: { clave: Alcance; label: string; icono: string }[] = [
-  { clave: "mine", label: "Mías", icono: "ti ti-user" },
-  { clave: "team", label: "De mi equipo", icono: "ti ti-users" },
+  { clave: "mine", label: "Propias", icono: "ti ti-user" },
+  { clave: "team", label: "Equipo", icono: "ti ti-users" },
   { clave: "all", label: "Todas", icono: "ti ti-building" },
 ];
 

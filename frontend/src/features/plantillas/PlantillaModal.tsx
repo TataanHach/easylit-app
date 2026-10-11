@@ -14,7 +14,8 @@ import type { Plantilla } from "@/types";
 interface Props {
   plantilla?: Plantilla | null; // si viene, es edición
   onCerrar: () => void;
-  onGuardado: (nombre: string) => void;
+  /** `creada` viene solo al crear: la plantilla nueva, para abrir sus campos. */
+  onGuardado: (nombre: string, creada?: Plantilla) => void;
 }
 
 export default function PlantillaModal({ plantilla, onCerrar, onGuardado }: Props) {
@@ -37,11 +38,12 @@ export default function PlantillaModal({ plantilla, onCerrar, onGuardado }: Prop
     if (!datos.nombre) { setError("Falta el nombre de la plantilla. Escríbelo para poder guardarla."); return; }
     if (!esEdicion && !archivo) { setError("Falta el archivo del formato. Sube el Excel del mandante para crear la plantilla."); return; }
     setGuardando(true);
+    let creada: Plantilla | undefined;
     try {
       if (esEdicion) {
         await plantillaService.editar(plantilla!.id, datos);
       } else {
-        await plantillaService.crear({ ...datos, formato, archivo: archivo! });
+        creada = await plantillaService.crear({ ...datos, formato, archivo: archivo! });
       }
     } catch (e) {
       const { titulo, detalle } = describirError(e, "guardar la plantilla");
@@ -51,17 +53,17 @@ export default function PlantillaModal({ plantilla, onCerrar, onGuardado }: Prop
     }
     // Fuera del try: la plantilla ya quedó guardada, así que un fallo al cerrar
     // el modal no debe decir "No se pudo guardar" (eso llevaba a crearla dos veces).
-    onGuardado(datos.nombre);
+    onGuardado(datos.nombre, creada);
   }
 
   return (
-    <div className="modal-overlay" onClick={onCerrar}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal">
         <div className="modal-head">
           <h2>{esEdicion ? "Editar plantilla" : "Nueva plantilla"}</h2>
           <button className="modal-close" onClick={onCerrar}><i className="ti ti-x" /></button>
         </div>
-        <form onSubmit={guardar}>
+        <form onSubmit={guardar} noValidate>
           <div className="modal-body">
             {error && <div className="modal-error">{error}</div>}
 
@@ -114,7 +116,7 @@ export default function PlantillaModal({ plantilla, onCerrar, onGuardado }: Prop
           <div className="modal-foot">
             <button type="button" className="btn" onClick={onCerrar}>Cancelar</button>
             <button type="submit" className="btn btn-primary" disabled={guardando}>
-              {guardando ? "Guardando…" : esEdicion ? "Guardar cambios" : "Crear plantilla"}
+              {guardando ? "Guardando…" : esEdicion ? "Guardar cambios" : "Crear y agregar campos"}
             </button>
           </div>
         </form>

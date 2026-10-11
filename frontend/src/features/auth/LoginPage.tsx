@@ -8,15 +8,18 @@
  * Así el trabajador recién invitado no se topa con "contraseña incorrecta".
  */
 import { FormEvent, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
+import axios from "axios";
 import { useAuth } from "./AuthContext";
 import { authService } from "./authService";
 import "./auth.css";
 import { LIMITES, limpiarTexto } from "@/lib/limites";
-import { CONTRASENA_MAX, CONTRASENA_MIN } from "@/lib/contrasena";
+import { CONTRASENA_MAX } from "@/lib/contrasena";
+import { describirError } from "@/lib/errores";
+import { problemaCorreo } from "@/lib/validar";
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { usuario, login } = useAuth();
   const navigate = useNavigate();
 
   const [paso, setPaso] = useState<"correo" | "password">("correo");
@@ -24,26 +27,36 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [verPw, setVerPw] = useState(false);
   const [error, setError] = useState("");
+  // Error de un campo concreto: se muestra bajo ese campo y lo marca en rojo.
+  const [errorEmail, setErrorEmail] = useState("");
+  const [errorPw, setErrorPw] = useState("");
   const [cargando, setCargando] = useState(false);
+
+  // Con la sesión abierta no tiene sentido volver a pedir el login.
+  if (usuario) return <Navigate to="/" replace />;
 
   async function continuarConCorreo(e: FormEvent) {
     e.preventDefault();
     setError("");
     const correo = limpiarTexto(email);
     setEmail(correo);
+    const problema = problemaCorreo(correo);
+    setErrorEmail(problema);
+    if (problema) return;
     setCargando(true);
     try {
       const estado = await authService.estadoCorreo(correo);
       if (!estado.existe) {
-        setError("Correo no registrado.");
+        setErrorEmail("Este correo no tiene una cuenta en EasyLit. Revisa que esté bien escrito o pide a tu gerente que te invite.");
       } else if (estado.necesita_contrasena) {
         // Fue invitado y aún no tiene contraseña → a crearla.
         navigate("/crear-contrasena", { state: { email: correo } });
       } else {
         setPaso("password");
       }
-    } catch {
-      setError("No se pudo verificar el correo. Revisa tu conexión.");
+    } catch (err) {
+      const { titulo, detalle } = describirError(err, "verificar el correo");
+      setError(`${titulo}. ${detalle}`);
     } finally {
       setCargando(false);
     }
@@ -52,12 +65,20 @@ export default function LoginPage() {
   async function iniciarSesion(e: FormEvent) {
     e.preventDefault();
     setError("");
+    if (!password) { setErrorPw("Escribe tu contraseña para entrar."); return; }
+    setErrorPw("");
     setCargando(true);
     try {
       await login(limpiarTexto(email), password);
       navigate("/");
-    } catch {
-      setError("Contraseña incorrectos.");
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 401) {
+        // Solo la contraseña puede estar mal: el correo ya se verificó en el paso 1.
+        setErrorPw("La contraseña no es correcta. Revisa las mayúsculas y vuelve a intentarlo.");
+      } else {
+        const { titulo, detalle } = describirError(err, "iniciar sesión");
+        setError(`${titulo}. ${detalle}`);
+      }
     } finally {
       setCargando(false);
     }
@@ -108,25 +129,27 @@ export default function LoginPage() {
           )}
 
           {paso === "correo" ? (
-            <form onSubmit={continuarConCorreo}>
+            <form onSubmit={continuarConCorreo} noValidate>
               <div className="field">
                 <label htmlFor="email">Correo electrónico</label>
                 <div className="input-wrap">
                   <i className="ti ti-mail" />
                   <input
-                    id="email" type="email" className="auth-input" autoComplete="email"
-                    placeholder="nombre@empresa.cl" required autoFocus maxLength={LIMITES.email}
-                    value={email} onChange={(e) => setEmail(e.target.value)}
+                    id="email" type="email" className={`auth-input ${errorEmail ? "error" : ""}`} autoComplete="email"
+                    placeholder="nombre@empresa.cl" autoFocus maxLength={LIMITES.email}
+                    aria-invalid={!!errorEmail} aria-describedby={errorEmail ? "email-error" : undefined}
+                    value={email} onChange={(e) => { setEmail(e.target.value); setErrorEmail(""); }}
                     onBlur={(e) => setEmail(limpiarTexto(e.target.value))}
                   />
                 </div>
+                {errorEmail && <p id="email-error" className="hint error">{errorEmail}</p>}
               </div>
               <button className="auth-btn" type="submit" disabled={cargando}>
                 {cargando ? "Verificando…" : <>Continuar <i className="ti ti-arrow-right" /></>}
               </button>
             </form>
           ) : (
-            <form onSubmit={iniciarSesion}>
+            <form onSubmit={iniciarSesion} noValidate>
               <div className="field">
                 <label htmlFor="email2">Correo electrónico</label>
                 <div className="input-wrap">
@@ -140,22 +163,23 @@ export default function LoginPage() {
                   <i className="ti ti-lock" />
                   <input
                     id="password" type={verPw ? "text" : "password"}
-                    className="auth-input has-toggle" autoComplete="current-password"
-                    placeholder="Tu contraseña" required autoFocus
-                    minLength={CONTRASENA_MIN} maxLength={CONTRASENA_MAX}
-                    value={password} onChange={(e) => setPassword(e.target.value)}
+                    className={`auth-input has-toggle ${errorPw ? "error" : ""}`} autoComplete="current-password"
+                    placeholder="Tu contraseña" autoFocus maxLength={CONTRASENA_MAX}
+                    aria-invalid={!!errorPw} aria-describedby={errorPw ? "password-error" : undefined}
+                    value={password} onChange={(e) => { setPassword(e.target.value); setErrorPw(""); }}
                   />
                   <button type="button" className="toggle-pw" onClick={() => setVerPw(!verPw)}
                     aria-label={verPw ? "Ocultar" : "Mostrar"}>
                     <i className={verPw ? "ti ti-eye-off" : "ti ti-eye"} />
                   </button>
                 </div>
+                {errorPw && <p id="password-error" className="hint error">{errorPw}</p>}
               </div>
               <button className="auth-btn" type="submit" disabled={cargando}>
                 {cargando ? "Ingresando…" : <><i className="ti ti-login-2" /> Iniciar sesión</>}
               </button>
               <p className="auth-alt">
-                <button type="button" onClick={() => { setPaso("correo"); setPassword(""); setError(""); }}
+                <button type="button" onClick={() => { setPaso("correo"); setPassword(""); setError(""); setErrorPw(""); }}
                   style={{ background: "none", border: "none", color: "var(--brand-600)", cursor: "pointer", fontWeight: 600 }}>
                   ← Usar otro correo
                 </button>

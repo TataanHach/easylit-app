@@ -20,6 +20,9 @@ class CampoPlantillaSerializer(serializers.ModelSerializer):
             "formato_numero",
         )
         read_only_fields = ("id",)
+        # La unicidad (plantilla, nombre) se revisa en validate() con un mensaje
+        # claro; el validador automático de DRF dice "deben formar un conjunto único".
+        validators = []
 
     def validate_plantilla(self, plantilla):
         # El campo debe pertenecer a una plantilla de la organización del usuario.
@@ -27,6 +30,20 @@ class CampoPlantillaSerializer(serializers.ModelSerializer):
         if request and plantilla.organizacion_id != request.user.organizacion_id:
             raise serializers.ValidationError("Esa plantilla no es de tu organización.")
         return plantilla
+
+    def validate(self, attrs):
+        plantilla = attrs.get("plantilla") or getattr(self.instance, "plantilla", None)
+        nombre = attrs.get("nombre", getattr(self.instance, "nombre", None))
+        if plantilla and nombre:
+            repetido = CampoPlantilla.objects.filter(plantilla=plantilla, nombre__iexact=nombre)
+            if self.instance:
+                repetido = repetido.exclude(pk=self.instance.pk)
+            if repetido.exists():
+                raise serializers.ValidationError({
+                    "nombre": f"Ya hay un campo llamado «{nombre}» en esta plantilla. "
+                              "Usa otro nombre para poder distinguirlos."
+                })
+        return attrs
 
 
 class PlantillaSerializer(serializers.ModelSerializer):
@@ -44,6 +61,21 @@ class PlantillaSerializer(serializers.ModelSerializer):
             "creada",
         )
         read_only_fields = ("id", "usos", "creada")
+
+    EXTENSIONES = (".xlsx", ".xlsm", ".xls", ".csv")
+
+    def validate_archivo(self, archivo):
+        if not archivo.name.lower().endswith(self.EXTENSIONES):
+            raise serializers.ValidationError(
+                f"El archivo «{archivo.name}» no es un Excel ni un CSV. Sube el formato "
+                "del mandante como .xlsx, .xls o .csv."
+            )
+        if archivo.size == 0:
+            raise serializers.ValidationError(
+                f"El archivo «{archivo.name}» está vacío. Revisa que se haya guardado "
+                "bien y vuelve a subirlo."
+            )
+        return archivo
 
 
 class PlantillaListaSerializer(serializers.ModelSerializer):

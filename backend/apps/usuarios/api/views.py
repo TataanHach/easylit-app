@@ -14,6 +14,7 @@ from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
@@ -36,6 +37,24 @@ class LoginView(TokenObtainPairView):
     """POST /api/auth/login/  → { access, refresh, usuario }"""
     serializer_class = LoginSerializer
     permission_classes = [AllowAny]
+
+
+class LogoutView(APIView):
+    """
+    POST /api/auth/logout/  { refresh }  → invalida el refresh token.
+
+    Sin esto, cerrar sesión solo borraba el token del navegador y una copia del
+    token seguía sirviendo para entrar hasta que venciera. AllowAny porque basta
+    con tener el refresh: el access puede haber vencido ya.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        try:
+            RefreshToken(request.data.get("refresh", "")).blacklist()
+        except TokenError:
+            pass  # Ya vencido o inválido: la sesión ya no sirve, no hay nada que hacer.
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class EstadoCorreoView(APIView):

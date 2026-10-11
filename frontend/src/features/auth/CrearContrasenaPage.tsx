@@ -36,6 +36,9 @@ export default function CrearContrasenaPage() {
   async function enviar(e: FormEvent) {
     e.preventDefault();
     setError("");
+    const codigo = limpiarTexto(token);
+    setToken(codigo);
+    if (!codigo) { setError("Falta el código de invitación. Cópialo desde el correo que te llegó y pégalo en el primer campo."); return; }
     if (!pwOk) {
       const faltan = REQUISITOS_CONTRASENA.filter((r) => !r.cumple(password)).map((r) => r.texto.toLowerCase());
       setError(`La contraseña no cumple los requisitos. Le falta: ${faltan.join(", ")}.`);
@@ -45,7 +48,7 @@ export default function CrearContrasenaPage() {
     if (!rutOk) { setError("El RUT no es válido: el dígito verificador no corresponde. Revísalo o deja el campo vacío."); return; }
     setCargando(true);
     try {
-      await crearContrasena({ token: limpiarTexto(token), password, password2, rut: limpiarTexto(rut) || undefined });
+      await crearContrasena({ token: codigo, password, password2, rut: limpiarTexto(rut) || undefined });
       navigate("/");
     } catch (e) {
       const { titulo, detalle } = describirError(e, "crear la contraseña");
@@ -85,14 +88,14 @@ export default function CrearContrasenaPage() {
             </div>
           )}
 
-          <form onSubmit={enviar}>
+          <form onSubmit={enviar} noValidate>
             {!location.state?.token && (
               <div className="field">
                 <label htmlFor="token">Código de invitación</label>
                 <div className="input-wrap">
                   <i className="ti ti-key" />
                   <input id="token" type="text" className="auth-input"
-                    placeholder="Pega aquí el código de tu invitación" required maxLength={LIMITES.tokenInvitacion}
+                    placeholder="Pega aquí el código de tu invitación" maxLength={LIMITES.tokenInvitacion}
                     value={token} onChange={(e) => setToken(e.target.value)}
                     onBlur={(e) => setToken(limpiarTexto(e.target.value))} />
                 </div>
@@ -106,7 +109,7 @@ export default function CrearContrasenaPage() {
                 <i className="ti ti-lock" />
                 <input id="pw" type={verPw ? "text" : "password"}
                   className="auth-input has-toggle" autoComplete="new-password"
-                  placeholder="Entre 6 y 18 caracteres" required minLength={CONTRASENA_MIN} maxLength={CONTRASENA_MAX}
+                  placeholder={`Entre ${CONTRASENA_MIN} y ${CONTRASENA_MAX} caracteres`} maxLength={CONTRASENA_MAX}
                   value={password} onChange={(e) => setPassword(e.target.value)} />
                 <button type="button" className="toggle-pw" onClick={() => setVerPw(!verPw)}>
                   <i className={verPw ? "ti ti-eye-off" : "ti ti-eye"} />
@@ -133,8 +136,8 @@ export default function CrearContrasenaPage() {
                 <i className="ti ti-lock-check" />
                 <input id="pw2" type={verPw ? "text" : "password"}
                   className={`auth-input ${password2 ? (coinciden ? "ok" : "error") : ""}`}
-                  autoComplete="new-password" placeholder="Repite la contraseña" required
-                  minLength={CONTRASENA_MIN} maxLength={CONTRASENA_MAX} value={password2} onChange={(e) => setPassword2(e.target.value)} />
+                  autoComplete="new-password" placeholder="Repite la contraseña"
+                  maxLength={CONTRASENA_MAX} value={password2} onChange={(e) => setPassword2(e.target.value)} />
               </div>
               {password2 && (
                 <p className={`hint ${coinciden ? "ok" : "error"}`}>
@@ -155,7 +158,7 @@ export default function CrearContrasenaPage() {
               {rut && !rutOk && <p className="hint error">El dígito verificador no corresponde</p>}
             </div>
 
-            <button className="auth-btn" type="submit" disabled={cargando || !coinciden || !pwOk}>
+            <button className="auth-btn" type="submit" disabled={cargando}>
               {cargando ? "Creando…" : <><i className="ti ti-check" /> Crear contraseña y entrar</>}
             </button>
           </form>

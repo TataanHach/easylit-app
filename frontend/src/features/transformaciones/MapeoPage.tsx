@@ -12,7 +12,31 @@ import { plantillaService } from "@/features/plantillas/plantillaService";
 import { transformacionService } from "@/features/historial/historialService";
 import { useAvisos } from "@/components/ui/Avisos";
 import { describirError } from "@/lib/errores";
+import ResultadoModal, { type Resultado } from "@/components/ui/ResultadoModal";
 import "./mapeo.css";
+
+/** Lista para la ventana de resultado: hasta `max` ítems y "… y N más". */
+function resumir(items: string[], max = 8): string[] {
+  return items.length <= max ? items : [...items.slice(0, max), `… y ${items.length - max} más.`];
+}
+
+interface EstadoCampo { campo: string; hoja: string; ok: boolean; valor: string }
+
+/**
+ * Campos que se llenarán, agrupados por hoja ("Hoja «X»: 3 de 4 campos"), con
+ * el valor que llevará cada uno. Los que quedan vacíos van en su propio grupo.
+ */
+function gruposPorHoja(estados: EstadoCampo[]) {
+  const hojas = [...new Set(estados.map((e) => e.hoja))];
+  return hojas.map((hoja) => {
+    const deLaHoja = estados.filter((e) => e.hoja === hoja);
+    const llenos = deLaHoja.filter((e) => e.ok);
+    return {
+      titulo: `Hoja «${hoja}»: ${llenos.length} de ${deLaHoja.length} campos se llenarán`,
+      items: resumir(llenos.map((e) => `✓ «${e.campo}»: ${e.valor || "(vacío)"}`)),
+    };
+  }).filter((g) => g.items.length > 0);
+}
 
 const IVA_OPCIONES = [
   { v: "NINGUNO", t: "Sin IVA" },
@@ -31,6 +55,8 @@ export default function MapeoPage() {
   const [limpiando, setLimpiando] = useState(false);
   const [hojaActiva, setHojaActiva] = useState(0);
   const [hojaMapeo, setHojaMapeo] = useState(0);   // hoja visible en «Mapeo propuesto»
+  // Ventana emergente con el resultado del procesamiento o de la generación.
+  const [resultado, setResultado] = useState<Resultado | null>(null);
 
   const { data: t, isLoading, isFetchedAfterMount, refetch } = useQuery({
     queryKey: ["transformacion", id],
@@ -78,15 +104,24 @@ export default function MapeoPage() {
     if (enProceso) vioProceso.current = true;
     if (vioProceso.current && t?.estado === "ERROR") {
       vioProceso.current = false;
-      avisos.error(
-        "El mapeo no se pudo completar",
-        t.detalle_error || "Ocurrió un problema al procesar el archivo. Abajo verás qué hacer."
-      );
+      setResultado({
+        estado: "error",
+        titulo: "La transformación falló",
+        mensaje: t.detalle_error || "Ocurrió un problema al procesar el archivo. Puede que no sea un Excel válido o que esté dañado.",
+        grupos: [{
+          titulo: "¿Qué puedes hacer?",
+          items: ["Corrige el archivo según lo indicado y crea una nueva transformación.",
+                  "Esta quedará en el historial con estado «Error»."],
+        }],
+      });
     }
-  }, [enProceso, t?.estado, t?.detalle_error, avisos]);
+  }, [enProceso, t?.estado, t?.detalle_error]);
 
-  /** Al terminar la animación: pasar a revisión y contar cómo salió el mapeo. */
-  function terminarProceso() {
+  /**
+   * Al terminar la animación: pasar a revisión y mostrar en una ventana cómo
+   * salió: ✓ todo listo, ⚠ qué hay que revisar (y dónde), ✗ por qué falló.
+   */
+  async function terminarProceso() {
     setAnimandoProceso(false);
     vioProceso.current = false;
     if (!t || t.estado !== "EN_REVISION") return;
@@ -102,47 +137,85 @@ export default function MapeoPage() {
     const emparejadas = (t.resultado_limpieza?.tablas_emparejadas ?? {}) as Record<
       string, { columnas: number; emparejadas: number; sin_pareja: string[] }
     >;
-    const sinPareja = Object.entries(emparejadas).flatMap(([hoja, info]) =>
-      info.sin_pareja.map((c) => `${c} (${hoja})`)
-    );
     const colsTotal = Object.values(emparejadas).reduce((s, i) => s + i.columnas, 0);
     const colsOk = Object.values(emparejadas).reduce((s, i) => s + i.emparejadas, 0);
 
-    if (total === 0 && tablas.length > 0 && sinPareja.length > 0) {
-      avisos.advertencia(
-        "Tablas listas, pero faltan columnas",
-        `Se emparejaron ${colsOk} de ${colsTotal} columnas (${confianza}% de confianza). Estas no tienen columna en el origen y quedarán vacías: ${sinPareja.join(", ")}.`
-      );
-    } else if (total === 0 && tablas.length > 0) {
-      avisos.exito(
-        "Tablas listas para copiar",
-        `Las ${colsTotal || ""} columnas de ${tablas.length === 1 ? "la tabla" : "las tablas"} «${tablas.join("», «")}» se emparejaron (${confianza}% de confianza). Revisa la vista previa y genera el documento.`
-      );
-    } else if (total === 0) {
-      avisos.error(
-        "El mapeo terminó sin datos",
-        "No se encontraron columnas ni etiquetas en el archivo de origen. Revisa que el Excel tenga encabezados y valores, y crea una nueva transformación."
-      );
-    } else if (asignados === 0) {
-      avisos.error(
-        "El mapeo terminó, pero no se asignó ningún campo",
-        "No se encontró a qué campo de la plantilla corresponde cada dato. Asígnalos a mano abajo, en «Mapeo propuesto», antes de generar."
-      );
-    } else if (avisoIA) {
-      avisos.advertencia(
-        "Mapeo listo, pero sin IA",
-        `${asignados} de ${total} datos tienen campo destino. ${avisoIA}`
-      );
-    } else if (asignados < total || confianza < 60) {
-      avisos.advertencia(
-        "Mapeo listo: revisa algunos campos",
-        `${asignados} de ${total} datos tienen campo destino, con ${confianza}% de confianza promedio. Revisa los que están sin asignar o con confianza baja antes de generar.`
-      );
+    if (total === 0 && tablas.length === 0) {
+      setResultado({
+        estado: "error",
+        titulo: "El archivo no tiene datos que usar",
+        mensaje: "No se encontraron columnas, etiquetas ni tablas en el archivo de origen, así que no hay nada que pasar a la plantilla.",
+        grupos: [{ titulo: "¿Qué puedes hacer?", items: [
+          "Revisa que el Excel tenga encabezados y valores (no solo imágenes o celdas vacías).",
+          "Corrígelo y crea una nueva transformación.",
+        ] }],
+      });
+      return;
+    }
+
+    // Lo que quedará vacío en el documento y el estado de cada campo: lo
+    // calcula la vista previa.
+    const previa = await refetchPreview();
+    const pendientes: string[] = previa.data?.avisos ?? [];
+    const estados: EstadoCampo[] = previa.data?.campos_estado ?? [];
+    const llenos = estados.filter((e) => e.ok).length;
+    const hojasConCampos = new Set(estados.map((e) => e.hoja)).size;
+
+    const grupos: { titulo: string; items: string[] }[] = [];
+    if (pendientes.length) {
+      grupos.push({ titulo: "Campos que quedarán vacíos en el documento", items: resumir(pendientes) });
+    }
+    Object.entries(emparejadas).forEach(([hoja, info]) => {
+      if (info.sin_pareja.length) {
+        grupos.push({
+          titulo: `Tabla «${hoja}»: columnas sin pareja en el origen`,
+          items: resumir(info.sin_pareja.map((c) => `«${c}» quedará vacía: el origen no tiene una columna parecida.`)),
+        });
+      }
+    });
+    const bajas = lista.filter((m) => m.destino_campo && m.confianza < 60);
+    if (bajas.length) {
+      grupos.push({
+        titulo: "Asignaciones con confianza baja (revísalas en el mapeo)",
+        items: resumir(bajas.map((m) => `«${m.origen_columna}» (${m.confianza}%)${m.motivo ? `: ${m.motivo}` : ""}`)),
+      });
+    }
+    if (avisoIA) grupos.push({ titulo: "Inteligencia artificial", items: [avisoIA] });
+
+    const cifras = [
+      ...(estados.length ? [{ etiqueta: "campos llenos", valor: `${llenos} de ${estados.length}` }] : []),
+      ...(hojasConCampos ? [{ etiqueta: hojasConCampos === 1 ? "hoja con campos" : "hojas con campos", valor: hojasConCampos }] : []),
+      ...(total ? [{ etiqueta: "datos asignados", valor: `${asignados} de ${total}` }] : []),
+      ...(colsTotal ? [{ etiqueta: "columnas de tabla", valor: `${colsOk} de ${colsTotal}` }] : []),
+      { etiqueta: "confianza", valor: `${confianza}%` },
+    ];
+
+    const porHoja = gruposPorHoja(estados);
+
+    if (total > 0 && asignados === 0 && tablas.length === 0) {
+      setResultado({
+        estado: "error",
+        titulo: "No se pudo asignar ningún dato",
+        mensaje: "No se encontró a qué campo de la plantilla corresponde cada dato del archivo, así que el documento saldría vacío. Asígnalos a mano en «Mapeo propuesto» antes de generar.",
+        cifras,
+        grupos,
+      });
+    } else if (grupos.length > 0) {
+      setResultado({
+        estado: "advertencia",
+        titulo: "Transformación lista, con cosas por revisar",
+        mensaje: "Los datos se procesaron, pero lo siguiente no quedará bien si generas ahora. Corrígelo en la vista previa y en «Mapeo propuesto», o genera igual.",
+        cifras,
+        grupos: [...grupos, ...porHoja],
+      });
     } else {
-      avisos.exito(
-        "Mapeo realizado con éxito",
-        `Los ${total} datos tienen campo destino, con ${confianza}% de confianza promedio. Revisa la vista previa y genera el documento.`
-      );
+      setResultado({
+        estado: "exito",
+        titulo: "Transformación procesada con éxito",
+        mensaje: `${total ? `Los ${total} datos tienen su campo destino` : "Las tablas se emparejaron completas"}${tablas.length ? ` y ${tablas.length === 1 ? "la tabla «" + tablas[0] + "» está lista" : `las ${tablas.length} tablas están listas`}` : ""}. Revisa la vista previa y genera el documento.`,
+        cifras,
+        grupos: porHoja,
+      });
     }
   }
 
@@ -209,41 +282,65 @@ export default function MapeoPage() {
     }
   }
 
+  /**
+   * Limpia con IA los textos y fechas, y muestra el resultado en una ventana:
+   * ✓ qué cambió (antes → después), ⚠ no había nada que limpiar, ✗ por qué falló.
+   */
   async function limpiarConIA() {
     if (!id) return;
     setLimpiando(true);
     try {
       const r = await transformacionService.limpiarIA(id);
+      const listaCambios = (cs: { campo: string; antes: string; despues: string }[] = []) =>
+        resumir(cs.map((c) => `«${c.campo}»: «${c.antes || "(vacío)"}» → «${c.despues || "(vacío)"}»`), 10);
+
       if (r.modelo && (r.modelo.startsWith("gemini") || r.modelo.startsWith("models/"))) {
-        const partes = [
-          r.campos > 0 ? `${r.campos} campo(s)` : "",
-          r.textos_tabla > 0 ? `${r.textos_tabla} texto(s) de tablas` : "",
-        ].filter(Boolean);
-        avisos.exito(
-          "Limpieza con IA lista",
-          partes.length > 0
-            ? `Se limpiaron ${partes.join(" y ")}. Están marcados con ✦ en la vista previa; revísalos antes de generar.`
-            : "La IA revisó los datos y no encontró nada que corregir."
-        );
+        const grupos = [
+          ...(r.cambios?.length ? [{ titulo: "Campos corregidos", items: listaCambios(r.cambios) }] : []),
+          ...(r.cambios_tabla?.length ? [{ titulo: "Textos de tablas corregidos", items: listaCambios(r.cambios_tabla) }] : []),
+        ];
+        setResultado({
+          estado: "exito",
+          titulo: grupos.length ? "Limpieza con IA lista" : "Los datos ya estaban limpios",
+          mensaje: (r.repetida
+            ? "Estos mismos datos ya se habían limpiado, así que se muestra ese resultado sin volver a consultar a la IA. "
+            : "")
+            + (grupos.length
+              ? "La IA corrigió los textos y fechas de abajo. En la vista previa están marcados con ✦: revísalos antes de generar."
+              : "La IA revisó los textos y fechas y no encontró nada que corregir."),
+          cifras: [
+            { etiqueta: "campos corregidos", valor: `${r.campos ?? 0} de ${r.campos_revisados ?? 0}` },
+            { etiqueta: "textos de tablas", valor: `${r.textos_tabla ?? 0} de ${r.textos_tabla_revisados ?? 0}` },
+          ],
+          grupos,
+        });
       } else if (r.modelo === "sin-limpieza-ia") {
-        avisos.info(
-          "No había nada que limpiar",
-          "Ni los campos mapeados ni las tablas tienen textos o fechas por limpiar. Los montos y cantidades nunca se envían a la IA."
-        );
+        setResultado({
+          estado: "advertencia",
+          titulo: "No había nada que limpiar",
+          mensaje: "Ni los campos con dato asignado ni las tablas tienen textos o fechas que limpiar. Los montos y cantidades nunca se envían a la IA, por privacidad.",
+        });
       } else if (r.modelo === "sin-clave-ia") {
-        avisos.error(
-          "La IA no está configurada",
-          "Falta la clave de Gemini en el servidor (GEMINI_API_KEY). Pídele al administrador que la configure. Puedes generar el documento igual."
-        );
+        setResultado({
+          estado: "error",
+          titulo: "La IA no está configurada",
+          mensaje: "Falta la clave de Gemini en el servidor (GEMINI_API_KEY), así que no se limpió nada. Pídele al administrador que la configure. Puedes generar el documento igual."
+            + (r.conserva_anterior ? " Se mantiene la limpieza que ya habías hecho." : ""),
+        });
       } else {
-        avisos.error(
-          "La IA no pudo limpiar los datos",
-          "Puede que se haya agotado la cuota de Gemini o no haya conexión. Los datos quedaron como estaban: puedes generar igual o intentarlo más tarde."
-        );
+        setResultado({
+          estado: "error",
+          titulo: "La IA no pudo limpiar los datos",
+          mensaje: "Puede que se haya agotado la cuota de Gemini (si apretaste el botón varias veces seguidas, espera un minuto) o que no haya conexión. "
+            + (r.conserva_anterior
+              ? "Se mantiene la limpieza que ya habías hecho, sin cambios."
+              : "Los datos quedaron como estaban: puedes generar igual o intentarlo más tarde."),
+        });
       }
       await refetchPreview();
     } catch (e) {
-      avisos.error(describirError(e, "limpiar los datos con IA"));
+      const { detalle } = describirError(e, "limpiar los datos con IA");
+      setResultado({ estado: "error", titulo: "No se pudieron limpiar los datos con IA", mensaje: detalle });
     } finally {
       setLimpiando(false);
     }
@@ -253,12 +350,24 @@ export default function MapeoPage() {
     if (!id) return;
     setGenerando(true);
     try {
-      await transformacionService.generar(id);
+      const r = await transformacionService.generar(id);
       await refetch();
       setGenerado(true);
-      avisos.exito("Transformación realizada con éxito", "El documento está listo para descargar.");
+      const pendientes = r.avisos ?? [];
+      // Se generó, pero si quedó algo sin llenar no basta con un "éxito".
+      setResultado(pendientes.length > 0 ? {
+        estado: "advertencia",
+        titulo: "Documento generado, pero incompleto",
+        mensaje: `${pendientes.length === 1 ? "1 dato quedó" : `${pendientes.length} datos quedaron`} sin llenar. Puedes descargarlo igual, o corregir y generar otra transformación.`,
+        grupos: [{ titulo: "Lo que quedó vacío y por qué", items: resumir(pendientes, 12) }],
+      } : {
+        estado: "exito",
+        titulo: "Documento generado con éxito",
+        mensaje: "Todos los campos y tablas se llenaron. El documento está listo para descargar.",
+      });
     } catch (e) {
-      avisos.error(describirError(e, "generar el documento"));
+      const { detalle } = describirError(e, "generar el documento");
+      setResultado({ estado: "error", titulo: "No se pudo generar el documento", mensaje: detalle });
       await refetch();
     } finally {
       setGenerando(false);
@@ -306,6 +415,7 @@ export default function MapeoPage() {
   if (t.estado === "ERROR") {
     return (
       <div style={{ maxWidth: 640 }}>
+      {resultado && <ResultadoModal resultado={resultado} onAceptar={() => setResultado(null)} />}
         <div className="mapeo-header"><h1>Hubo un problema</h1></div>
         <div style={{
           background: "var(--danger-50)", border: "1px solid #f2c9c9",
@@ -335,6 +445,7 @@ export default function MapeoPage() {
   if (generado || t.estado === "GENERADO") {
     return (
       <div style={{ maxWidth: 640 }}>
+      {resultado && <ResultadoModal resultado={resultado} onAceptar={() => setResultado(null)} />}
         <div className="mapeo-header"><h1>Transformación realizada con éxito</h1></div>
         <div className="exito-caja">
           <i className="ti ti-circle-check" />
@@ -399,6 +510,25 @@ export default function MapeoPage() {
         <p>{t.nombre || t.nombre_origen} → {t.plantilla_nombre}. Revisa la vista previa, ajusta y genera.</p>
       </div>
 
+      {resultado && <ResultadoModal resultado={resultado} onAceptar={() => setResultado(null)} />}
+      {/* ───── LO QUE QUEDARÁ SIN LLENAR (antes de la vista previa) ───── */}
+      {(preview?.avisos?.length ?? 0) > 0 && (
+        <div className="pendientes-caja" role="status">
+          <p className="pendientes-titulo">
+            <i className="ti ti-alert-triangle" />
+            {generado ? "Revisa antes de descargar" : "Revisa antes de generar"}: {preview.avisos.length === 1
+              ? "1 dato quedará sin llenar" : `${preview.avisos.length} datos quedarán sin llenar`} en el documento
+          </p>
+          <ul>
+            {preview.avisos.map((a: string, i: number) => <li key={i}>{a}</li>)}
+          </ul>
+          <p className="pendientes-pie">
+            Puedes generar igual, pero esas casillas quedarán vacías. Los campos se corrigen en
+            Plantillas → Campos; los datos, en el mapeo de abajo.
+          </p>
+        </div>
+      )}
+
       {/* ───── VISTA PREVIA POR HOJAS (arriba) ───── */}
       {hojas.length > 0 && (
         <div className="mapeo-panel" style={{ marginBottom: 14 }}>
@@ -420,7 +550,8 @@ export default function MapeoPage() {
             </button>
           </div>
 
-          {hoja?.tipo === "formulario" && (
+          {/* Campos de la hoja (también en hojas con tabla: casillas sobre la tabla) */}
+          {hoja?.campos?.length > 0 && (
             <table className="preview-tabla">
               <thead><tr><th>Campo</th><th>Valor final</th><th>IVA</th><th></th></tr></thead>
               <tbody>

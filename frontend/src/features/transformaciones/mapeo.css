@@ -245,3 +245,13 @@
 /* Celdas de tabla limpiadas por la IA */
 .celda-ia { background: var(--ai-50); color: var(--ai-600); }
 .celda-ia-icono { font-size: 12px; margin-left: 4px; vertical-align: 1px; }
+
+/* Lista de lo que quedará sin llenar en el documento */
+.pendientes-caja {
+  margin-bottom: 14px; padding: 12px 16px; border-radius: var(--r-lg);
+  background: var(--warn-50); border: 1px solid var(--warn-100); color: var(--warn-700);
+}
+.pendientes-titulo { display: flex; gap: 8px; align-items: center; font-weight: 600; margin: 0 0 6px; }
+.pendientes-titulo i { font-size: 18px; }
+.pendientes-caja ul { margin: 0 0 6px; padding-left: 26px; line-height: 1.5; font-size: var(--fs-md); }
+.pendientes-pie { margin: 0; font-size: var(--fs-sm); color: var(--text-2); }

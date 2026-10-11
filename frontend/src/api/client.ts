@@ -20,23 +20,32 @@ export const api = axios.create({
 
 // Almacenamiento de tokens. Se centraliza aquí para poder cambiarlo luego
 // (p. ej. a cookies httpOnly) tocando un solo archivo.
+//
+// Va en sessionStorage, no en localStorage: al cerrar la pestaña o el navegador
+// los tokens se borran y hay que volver a iniciar sesión. Así nadie entra con la
+// sesión de otro por abrir el navegador después.
 const ACCESS = "easylit_access";
 const REFRESH = "easylit_refresh";
 
+// Versiones anteriores guardaban los tokens en localStorage: se borran para que
+// esas sesiones "recordadas" no sigan vivas.
+localStorage.removeItem(ACCESS);
+localStorage.removeItem(REFRESH);
+
 export const tokenStore = {
   get access() {
-    return localStorage.getItem(ACCESS);
+    return sessionStorage.getItem(ACCESS);
   },
   get refresh() {
-    return localStorage.getItem(REFRESH);
+    return sessionStorage.getItem(REFRESH);
   },
   set(access: string, refresh?: string) {
-    localStorage.setItem(ACCESS, access);
-    if (refresh) localStorage.setItem(REFRESH, refresh);
+    sessionStorage.setItem(ACCESS, access);
+    if (refresh) sessionStorage.setItem(REFRESH, refresh);
   },
   clear() {
-    localStorage.removeItem(ACCESS);
-    localStorage.removeItem(REFRESH);
+    sessionStorage.removeItem(ACCESS);
+    sessionStorage.removeItem(REFRESH);
   },
 };
 

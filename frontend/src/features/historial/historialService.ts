@@ -36,8 +36,9 @@ export const transformacionService = {
   },
 
   /** Dispara la generación del documento final. */
-  async generar(id: string): Promise<Transformacion> {
-    const { data } = await api.post<Transformacion>(`/transformaciones/${id}/generar/`);
+  /** Genera el documento. `avisos` = lo que quedó sin llenar y por qué. */
+  async generar(id: string): Promise<Transformacion & { avisos?: string[] }> {
+    const { data } = await api.post<Transformacion & { avisos?: string[] }>(`/transformaciones/${id}/generar/`);
     return data;
   },
 
@@ -116,7 +117,9 @@ export const transformacionService = {
   /** Limpia con IA los valores de texto/fecha (no montos). Opcional. */
   async limpiarIA(id: string) {
     const { data } = await api.post(`/transformaciones/${id}/limpiar_ia/`);
-    return data;  // { ok, modelo, campos, valores }
+    // { ok, modelo, campos, campos_revisados, textos_tabla, textos_tabla_revisados,
+    //   valores, cambios, cambios_tabla }  (cambios = [{campo, antes, despues}])
+    return data;
   },
   /** Vista previa de los valores finales (cómo quedarán en el documento). */
   async vistaPrevia(id: string) {

@@ -249,11 +249,18 @@ def generar_documento_tarea(transformacion_id):
                 con_valor += 1
             mapeos_con_valor.append({"campo": campo, "valor": valor})
 
+        # Campos que quedarán vacíos y por qué (sin dato, sin casilla, dentro de
+        # una tabla…): se guardan en la bitácora y se le muestran al usuario.
+        avisos = generacion.campos_sin_escribir(
+            t.plantilla.archivo.path, list(t.plantilla.campos.all()),
+            {m["campo"].id: m["valor"] for m in mapeos_con_valor},
+        )
         contenido = generacion.generar_documento(
             t.plantilla.archivo.path, mapeos_con_valor,
             ruta_origen=t.archivo_origen.path,
             calcular_totales=bool((t.resultado_limpieza or {}).get("calcular_totales")),
             valores_ia_tablas=(t.resultado_limpieza or {}).get("valores_ia_tablas"),
+            avisos=avisos,
         )
 
         nombre = f"generado_{t.id}.xlsx"
@@ -267,6 +274,7 @@ def generar_documento_tarea(transformacion_id):
                 "archivo": nombre,
                 "campos_con_destino": len(mapeos_con_valor),
                 "campos_con_valor": con_valor,
+                "avisos": avisos,
             },
         )
     except Exception as e:

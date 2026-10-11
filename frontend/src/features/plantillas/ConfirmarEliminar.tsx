@@ -23,8 +23,8 @@ export default function ConfirmarEliminar({ plantilla, onCerrar, onEliminado }: 
   }
 
   return (
-    <div className="modal-overlay" onClick={onCerrar}>
-      <div className="modal" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal" style={{ maxWidth: 400 }}>
         <div className="modal-head">
           <h2>Eliminar plantilla</h2>
           <button className="modal-close" onClick={onCerrar}><i className="ti ti-x" /></button>

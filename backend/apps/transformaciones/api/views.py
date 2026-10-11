@@ -126,7 +126,7 @@ class TransformacionViewSet(viewsets.ModelViewSet):
         textos_tabla = []
         try:
             ruta = transformacion.archivo_origen.path
-            wb_ori = load_workbook(ruta, data_only=True)
+            wb_ori = load_workbook(ruta, data_only=True, read_only=True)
             for nombre in limpieza.hojas_itemizado(ruta):
                 datos = generacion._leer_itemizado_origen(wb_ori[nombre])
                 if datos:
@@ -140,27 +140,66 @@ class TransformacionViewSet(viewsets.ModelViewSet):
             pseudo = SimpleNamespace(nombre=col, tipo=tipo, formato_numero="NINGUNO")
             valores_campos.append({"campo": pseudo, "valor": valor})
 
+        # Huella de lo que se le enviaría a la IA. Si es la misma de la última
+        # limpieza buena, se devuelve ese resultado sin volver a llamar a la IA:
+        # así apretar el botón dos veces dice lo mismo y no gasta cuota.
+        import hashlib
+        import json as _json
+        huella = hashlib.sha256(_json.dumps(
+            [[getattr(v["campo"], "nombre", ""), str(v["valor"])] for v in valores_campos],
+            ensure_ascii=False,
+        ).encode("utf-8")).hexdigest()
+        previo = transformacion.resultado_limpieza or {}
+        if previo.get("ia_huella") == huella and previo.get("ia_respuesta"):
+            return Response({**previo["ia_respuesta"], "repetida": True}, status=status.HTTP_200_OK)
+
         # Una sola llamada a la IA para campos y tablas.
         limpios, modelo = ia.limpiar_con_ia(valores_campos)
         n_campos = len(indice_a_columna)
 
-        valores_ia, campos_cambiados = {}, 0
+        # Si la IA falló o no está configurada, devuelve los valores originales:
+        # guardarlos borraría una limpieza buena hecha antes. Se avisa y no se toca nada.
+        if modelo in ("sin-clave-ia", "limpieza-ia-fallo", "limpieza-ia-sin-formato"):
+            return Response(
+                {"ok": False, "modelo": modelo,
+                 "conserva_anterior": bool(previo.get("valores_ia") or previo.get("valores_ia_tablas"))},
+                status=status.HTTP_200_OK,
+            )
+
+        def corto(v):
+            texto = "" if v is None else str(v).strip()
+            return texto if len(texto) <= 60 else texto[:57] + "…"
+
+        # `cambios`: qué cambió la IA (antes → después), para mostrárselo al usuario.
+        valores_ia, campos_cambiados, cambios = {}, 0, []
         for i, col in enumerate(indice_a_columna):
             limpio = limpios[i]
             if limpio is not None:
                 valores_ia[col] = limpio
-                if str(limpio).strip() != str(valores_campos[i]["valor"]).strip():
+                antes = valores_campos[i]["valor"]
+                if str(limpio).strip() != str(antes).strip():
                     campos_cambiados += 1
+                    cambios.append({"campo": valores_campos[i]["campo"].nombre,
+                                    "antes": corto(antes), "despues": corto(limpio)})
 
-        valores_ia_tablas, celdas_cambiadas = {}, 0
-        for (clave, _col, _tipo, original), limpio in zip(textos_tabla, limpios[n_campos:]):
+        valores_ia_tablas, celdas_cambiadas, cambios_tabla = {}, 0, []
+        for (clave, col, _tipo, original), limpio in zip(textos_tabla, limpios[n_campos:]):
             if limpio is not None and str(limpio).strip() != original:
                 valores_ia_tablas.setdefault(clave, {})[original] = str(limpio).strip()
                 celdas_cambiadas += 1
+                cambios_tabla.append({"campo": col, "antes": corto(original), "despues": corto(limpio)})
 
+        respuesta = {
+            "ok": True, "modelo": modelo, "campos": campos_cambiados,
+            "campos_revisados": n_campos,
+            "textos_tabla": celdas_cambiadas, "textos_tabla_revisados": len(textos_tabla),
+            "valores": valores_ia, "cambios": cambios, "cambios_tabla": cambios_tabla,
+        }
         resultado = transformacion.resultado_limpieza or {}
         resultado["valores_ia"] = valores_ia
         resultado["valores_ia_tablas"] = valores_ia_tablas
+        resultado["ia_huella"] = huella
+        resultado["ia_respuesta"] = respuesta
         transformacion.resultado_limpieza = resultado
         transformacion.save(update_fields=["resultado_limpieza"])
 
@@ -173,12 +212,7 @@ class TransformacionViewSet(viewsets.ModelViewSet):
                      "textos_tabla_limpiados": celdas_cambiadas},
         )
 
-        return Response(
-            {"ok": True, "modelo": modelo, "campos": campos_cambiados,
-             "textos_tabla": celdas_cambiadas, "textos_tabla_revisados": len(textos_tabla),
-             "valores": valores_ia},
-            status=status.HTTP_200_OK,
-        )
+        return Response(respuesta, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["get"])
     def vista_previa(self, request, pk=None):
@@ -204,6 +238,7 @@ class TransformacionViewSet(viewsets.ModelViewSet):
 
         # --- 1. Campos de formulario, agrupados por hoja ---
         campos_por_hoja = {}
+        valores_por_campo = {}
         for mapeo in transformacion.mapeos.select_related("destino_campo").all():
             campo = mapeo.destino_campo
             if campo is None:
@@ -220,6 +255,7 @@ class TransformacionViewSet(viewsets.ModelViewSet):
             else:
                 ajuste = getattr(campo, "ajuste_iva", "") or "NINGUNO"
             valor = _aplicar_iva(valor, ajuste)
+            valores_por_campo[campo.id] = valor
             valor_final = generacion.limpiar_valor(valor, campo)
 
             # ¿Es campo de moneda? (para mostrar el control de IVA)
@@ -235,13 +271,32 @@ class TransformacionViewSet(viewsets.ModelViewSet):
                 "ajuste_iva": ajuste,
             })
 
+        # Lo que quedará vacío en el documento y por qué. Mismo cálculo que al
+        # generar, para que el usuario lo vea ANTES y no se entere después.
+        try:
+            estados = generacion.estado_campos(
+                transformacion.plantilla.archivo.path,
+                list(transformacion.plantilla.campos.all()), valores_por_campo,
+            )
+        except Exception:
+            estados = []
+        avisos = [e["aviso"] for e in estados if e["aviso"]]
+        # Resumen campo por campo (hoja, valor final y si se llenará), para la
+        # ventana de resultado del frontend.
+        campos_estado = [
+            {"campo": e["campo"].nombre, "hoja": e["hoja"], "ok": not e["aviso"],
+             "valor": "" if e["aviso"] else str(generacion.limpiar_valor(
+                 valores_por_campo.get(e["campo"].id), e["campo"]))[:60]}
+            for e in estados
+        ]
+
         # --- 2. Itemizados: leer las tablas del origen y limpiarlas ---
         itemizados_por_hoja = {}
         try:
             ruta_plantilla = transformacion.plantilla.archivo.path
             ruta_origen = transformacion.archivo_origen.path
             wb_dest = load_workbook(ruta_plantilla)
-            wb_ori = load_workbook(ruta_origen, data_only=True)
+            wb_ori = load_workbook(ruta_origen, data_only=True, read_only=True)
 
             for nombre_hoja in wb_dest.sheetnames:
                 ws_dest = wb_dest[nombre_hoja]
@@ -259,6 +314,7 @@ class TransformacionViewSet(viewsets.ModelViewSet):
                             datos = d
                             break
                 if not datos:
+                    avisos.append(generacion.aviso_tabla_sin_origen(nombre_hoja))
                     continue
 
                 # Encabezados del destino; filas limpias (y totales si se pidió).
@@ -285,7 +341,7 @@ class TransformacionViewSet(viewsets.ModelViewSet):
             wb_dest.close()
             wb_ori.close()
         except Exception:
-            pass
+            avisos.append(generacion.AVISO_TABLAS_FALLARON)
 
         # --- 3. Armar la lista de hojas en orden ---
         try:
@@ -302,6 +358,7 @@ class TransformacionViewSet(viewsets.ModelViewSet):
                     "nombre": nombre,
                     "tipo": "itemizado",
                     "tabla": itemizados_por_hoja[nombre],
+                    "campos": campos_por_hoja.get(nombre, []),
                 })
             elif nombre in campos_por_hoja:
                 hojas.append({
@@ -324,7 +381,9 @@ class TransformacionViewSet(viewsets.ModelViewSet):
             texto = "" if valor is None or str(valor) == "nan" else str(valor).strip()
             datos_origen.append({"columna": mapeo.origen_columna, "valor": texto[:80]})
 
-        return Response({"hojas": hojas, "datos_origen": datos_origen}, status=status.HTTP_200_OK)
+        return Response({"hojas": hojas, "datos_origen": datos_origen, "avisos": avisos,
+                         "campos_estado": campos_estado},
+                        status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"])
     def asignar_dato(self, request, pk=None):
@@ -512,8 +571,11 @@ class TransformacionViewSet(viewsets.ModelViewSet):
             transformacion.save(update_fields=["estado"])
             return Response({"detail": motivo}, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = self.get_serializer(transformacion)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        # Lo que no se pudo escribir, para avisar aunque la generación funcionó.
+        evento = transformacion.bitacora.filter(evento=Bitacora.Evento.GENERACION).last()
+        data = dict(self.get_serializer(transformacion).data)
+        data["avisos"] = (evento.detalle.get("avisos", []) if evento else [])
+        return Response(data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["get"])
     def descargar(self, request, pk=None):

@@ -206,12 +206,19 @@ def _texto(c):
     return "" if c is None else str(c).strip()
 
 
+# Límites de lectura. Hay Excel que "declaran" 1.048.576 filas (formato aplicado
+# a columnas enteras): recorrerlas todas tardaba minutos. El encabezado se busca
+# solo arriba, y la tabla termina tras varias filas seguidas vacías.
+_MAX_FILAS_ENCABEZADO = 100
+_MAX_FILAS_VACIAS = 50
+
+
 def _detectar_encabezado_tabla(ws):
     """
     Busca la fila que parece ENCABEZADO de una tabla (3+ columnas con texto, y
     al menos 2 palabras típicas de itemizado). Devuelve (fila, [columnas]) o None.
     """
-    for i, fila in enumerate(ws.iter_rows(values_only=True), start=1):
+    for i, fila in enumerate(ws.iter_rows(max_row=_MAX_FILAS_ENCABEZADO, values_only=True), start=1):
         celdas = [_texto(c) for c in fila]
         con_texto = [c for c in celdas if c]
         if len(con_texto) >= 3:
@@ -229,11 +236,22 @@ def _leer_itemizado_origen(ws):
     fila_enc, encabezados = r
     cols = [(idx, nom) for idx, nom in enumerate(encabezados) if nom]
     partidas = []
+    vacias = 0
     for fila in ws.iter_rows(min_row=fila_enc + 1, values_only=True):
         # Se guarda el valor ORIGINAL (fecha, número o texto), no su texto:
         # convertir todo a str perdía las fechas y los números.
-        if cols and len(fila) > cols[0][0] and _texto(fila[cols[0][0]]):
-            partidas.append({nom: (fila[idx] if idx < len(fila) else None) for idx, nom in cols})
+        valores = {nom: (fila[idx] if idx < len(fila) else None) for idx, nom in cols}
+        # Una fila cuenta si CUALQUIER columna trae dato: antes se exigía la
+        # primera, y una primera columna vacía ("Columna1") descartaba la tabla.
+        # Un 0 solo no es dato: las tablas de Excel arrastran fórmulas (Total =
+        # Precio*Cantidad) hasta el final de la hoja, y en filas vacías dan 0.
+        if any(_texto(v) and v != 0 for v in valores.values()):
+            partidas.append(valores)
+            vacias = 0
+        else:
+            vacias += 1
+            if vacias >= _MAX_FILAS_VACIAS:
+                break
     if not partidas:
         return None
     return {"hoja": ws.title, "encabezados": [n for _, n in cols], "partidas": partidas}
@@ -507,7 +525,9 @@ def _buscar_etiqueta(ws, texto):
                 return celda.row, celda.column + 1
             valor_clave = palabras_clave(celda.value)
             comunes = objetivo_clave & valor_clave
-            if comunes:
+            # Al menos la mitad de las palabras de la etiqueta: con una sola en
+            # común, "Monto garantía extra" caía en la columna "Monto" de una tabla.
+            if comunes and len(comunes) * 2 >= len(objetivo_clave):
                 puntaje = len(comunes)
                 if objetivo_clave and objetivo_clave <= valor_clave:
                     puntaje += 10
@@ -516,6 +536,89 @@ def _buscar_etiqueta(ws, texto):
                     mejor_pos = (celda.row, celda.column + 1)
 
     return mejor_pos
+
+
+def hoja_del_campo(wb, campo):
+    """Hoja donde va el campo: la indicada, o la activa si no tiene. None si la
+    hoja indicada ya no existe en el Excel de la plantilla."""
+    if not campo.hoja_destino:
+        return wb.active
+    return wb[campo.hoja_destino] if campo.hoja_destino in wb.sheetnames else None
+
+
+def ubicar_campo(ws, campo, tabla=False):
+    """
+    Celda donde se escribe un campo de formulario. Devuelve ((fila, col), "") o
+    (None, motivo) con el motivo en palabras del usuario.
+
+    `tabla` es el encabezado de tabla de la hoja si ya se calculó (False = calcularlo).
+    """
+    if ws is None:
+        return None, (f"su hoja «{campo.hoja_destino}» no existe en el Excel de la plantilla. "
+                      "Asígnalo a otra hoja o elimínalo.")
+    destino = None
+    if campo.celda_destino:
+        try:
+            destino = coordinate_to_tuple(campo.celda_destino)
+        except ValueError:
+            return None, (f"la celda «{campo.celda_destino}» no es válida. Usa una "
+                          "referencia como B4.")
+    if destino is None and campo.etiqueta_busqueda:
+        destino = _buscar_etiqueta(ws, campo.etiqueta_busqueda)
+    if destino is None:
+        destino = _buscar_etiqueta(ws, campo.nombre.replace("_", " "))
+    if destino is None:
+        buscado = campo.etiqueta_busqueda or campo.nombre.replace("_", " ")
+        return None, (f"no se encontró el texto «{buscado}» en la hoja «{ws.title}». "
+                      "Escribe en «Etiqueta de búsqueda» el texto exacto de la casilla, "
+                      "o elimina el campo si no corresponde.")
+
+    if tabla is False:
+        tabla = _detectar_encabezado_tabla(ws)
+    if tabla and destino[0] >= tabla[0]:
+        return None, (f"cae dentro de la tabla de la hoja «{ws.title}». Las columnas de "
+                      "una tabla se llenan solas con la tabla del archivo de origen: "
+                      "este campo sobra y se puede eliminar.")
+    return destino, ""
+
+
+def revisar_plantilla(ruta_plantilla, campos):
+    """
+    Revisión de la plantilla para el editor de campos. Por hoja: si es tabla
+    (con sus columnas) o formulario; qué campos no se podrán escribir y por qué;
+    y dónde se escribirá cada uno de los demás (celda y etiqueta encontrada, para
+    que el usuario vea que no hace falta escribir el texto exacto de la casilla).
+      {"hojas": [{nombre, tipo, columnas}], "problemas": {campo_id: motivo},
+       "ubicaciones": {campo_id: {hoja, celda, etiqueta, exacta}}}
+    """
+    from openpyxl.utils import get_column_letter
+
+    wb = load_workbook(ruta_plantilla)
+    tablas = {ws.title: _detectar_encabezado_tabla(ws) for ws in wb.worksheets}
+    hojas = [
+        {"nombre": nombre, "tipo": "tabla" if enc else "formulario",
+         "columnas": [c for c in enc[1] if c] if enc else []}
+        for nombre, enc in tablas.items()
+    ]
+    problemas, ubicaciones = {}, {}
+    for campo in campos:
+        ws = hoja_del_campo(wb, campo)
+        destino, motivo = ubicar_campo(ws, campo, tablas.get(ws.title) if ws is not None else None)
+        if motivo:
+            problemas[str(campo.id)] = motivo
+            continue
+        fila, col = destino
+        # La etiqueta está a la izquierda de la casilla (salvo celda fija).
+        etiqueta = "" if campo.celda_destino or col < 2 else _texto(ws.cell(row=fila, column=col - 1).value)
+        buscado = campo.etiqueta_busqueda or campo.nombre.replace("_", " ")
+        ubicaciones[str(campo.id)] = {
+            "hoja": ws.title,
+            "celda": f"{get_column_letter(col)}{fila}",
+            "etiqueta": etiqueta,
+            "exacta": _normalizar(etiqueta) == _normalizar(buscado),
+        }
+    wb.close()
+    return {"hojas": hojas, "problemas": problemas, "ubicaciones": ubicaciones}
 
 
 def _escribir_valor(celda, valor, campo):
@@ -547,6 +650,56 @@ def buscar_tabla_origen(wb_origen, nombre_hoja):
     return None
 
 
+AVISO_TABLAS_FALLARON = (
+    "No se pudieron copiar las tablas del archivo de origen; las hojas de tabla "
+    "pueden quedar vacías. Revisa que el origen sea un Excel válido y vuelve a intentarlo."
+)
+
+
+def aviso_tabla_sin_origen(nombre_hoja):
+    return (f"La hoja «{nombre_hoja}» es una tabla, pero el archivo de origen no tiene "
+            "ninguna tabla reconocible para llenarla, así que quedará vacía. Revisa que "
+            "el origen tenga una fila de encabezados (Descripción, Cantidad, Precio…).")
+
+
+def estado_campos(ruta_plantilla, campos, valores):
+    """
+    Estado de cada campo de formulario en el documento: su hoja y, si quedará
+    vacío, el aviso con el motivo ("" si se llenará). `valores` = {campo_id: valor}
+    de los campos que tienen un dato asignado; un campo que no está ahí no
+    recibió ningún dato del origen.
+    """
+    wb = load_workbook(ruta_plantilla)
+    tablas = {ws.title: _detectar_encabezado_tabla(ws) for ws in wb.worksheets}
+    estados = []
+    for campo in campos:
+        valor = valores.get(campo.id)
+        ws = hoja_del_campo(wb, campo)
+        _, motivo = ubicar_campo(ws, campo, tablas.get(ws.title) if ws is not None else None)
+        if motivo:
+            aviso = f"«{campo.nombre}» no se escribirá: {motivo}"
+        elif campo.id not in valores:
+            aviso = (f"«{campo.nombre}» quedará vacío: no tiene ningún dato del origen "
+                     "asignado. Asígnale uno en el mapeo de abajo.")
+        elif valor is None or str(valor).strip() in ("", "nan"):
+            aviso = (f"«{campo.nombre}» quedará vacío: el dato que tiene asignado "
+                     "no trae valor en el archivo de origen.")
+        else:
+            aviso = ""
+        hoja = ws.title if ws is not None else campo.hoja_destino
+        estados.append({"campo": campo, "hoja": hoja, "aviso": aviso})
+    wb.close()
+    return estados
+
+
+def campos_sin_escribir(ruta_plantilla, campos, valores):
+    """
+    Avisos de los campos de formulario que quedarán vacíos en el documento, con
+    el motivo. Lo usan la vista previa y la generación, para que digan lo mismo.
+    """
+    return [e["aviso"] for e in estado_campos(ruta_plantilla, campos, valores) if e["aviso"]]
+
+
 def emparejamiento_tablas(ruta_plantilla, ruta_origen):
     """
     Qué tan bien se emparejan las columnas de cada tabla de la plantilla con las
@@ -556,7 +709,7 @@ def emparejamiento_tablas(ruta_plantilla, ruta_origen):
     resultado = {}
     try:
         wb_dest = load_workbook(ruta_plantilla)
-        wb_ori = load_workbook(ruta_origen, data_only=True)
+        wb_ori = load_workbook(ruta_origen, data_only=True, read_only=True)
     except Exception:
         return resultado
     for nombre in wb_dest.sheetnames:
@@ -584,35 +737,30 @@ def emparejamiento_tablas(ruta_plantilla, ruta_origen):
 
 
 def generar_documento(ruta_plantilla, mapeos_con_valor, ruta_origen=None, calcular_totales=False,
-                      valores_ia_tablas=None):
+                      valores_ia_tablas=None, avisos=None):
     """
     ruta_plantilla: .xlsx de la plantilla destino.
     mapeos_con_valor: lista de {campo, valor} para los campos de FORMULARIO.
     ruta_origen: (opcional) .xlsx del origen, para volcar los ITEMIZADOS.
                  Si se pasa, busca tablas en el origen y las vuelca a las hojas
                  del destino que tengan tabla.
+    avisos: (opcional) lista donde se agrega, en palabras del usuario, todo lo
+            que no se pudo escribir (campos sin valor o sin casilla, tablas vacías).
     """
     wb = load_workbook(ruta_plantilla)
+    if avisos is None:
+        avisos = []
 
-    # 1. Escribir los campos de formulario (como siempre).
+    # 1. Escribir los campos de formulario. Lo que no se puede escribir no se
+    #    salta en silencio: queda en `avisos` para mostrárselo al usuario.
     for item in mapeos_con_valor:
         campo = item["campo"]
         valor = item["valor"]
         if valor is None:
-            continue
-        if campo.hoja_destino and campo.hoja_destino in wb.sheetnames:
-            ws = wb[campo.hoja_destino]
-        else:
-            ws = wb.active
-        destino = None
-        if campo.celda_destino:
-            destino = coordinate_to_tuple(campo.celda_destino)
-        if destino is None and campo.etiqueta_busqueda:
-            destino = _buscar_etiqueta(ws, campo.etiqueta_busqueda)
+            continue  # Sin dato: ya lo avisa campos_sin_escribir().
+        destino, _ = ubicar_campo(hoja_del_campo(wb, campo), campo)
         if destino is None:
-            destino = _buscar_etiqueta(ws, campo.nombre.replace("_", " "))
-        if destino is None:
-            continue
+            continue  # Sin casilla: ya lo avisa campos_sin_escribir().
         fila, col = destino
         celda = ws.cell(row=fila, column=col)
         _escribir_valor(celda, valor, campo)
@@ -621,7 +769,7 @@ def generar_documento(ruta_plantilla, mapeos_con_valor, ruta_origen=None, calcul
     #    buscar en el origen una tabla (preferir la hoja del mismo nombre).
     if ruta_origen:
         try:
-            wb_origen = load_workbook(ruta_origen, data_only=True)
+            wb_origen = load_workbook(ruta_origen, data_only=True, read_only=True)
             for nombre_hoja in wb.sheetnames:
                 ws_dest = wb[nombre_hoja]
                 # ¿La hoja destino tiene una tabla de itemizado?
@@ -630,10 +778,13 @@ def generar_documento(ruta_plantilla, mapeos_con_valor, ruta_origen=None, calcul
                 datos = buscar_tabla_origen(wb_origen, nombre_hoja)
                 if datos:
                     _volcar_itemizado(ws_dest, datos, calcular_totales, valores_ia_tablas)
+                else:
+                    avisos.append(aviso_tabla_sin_origen(nombre_hoja))
             wb_origen.close()
         except Exception:
-            # Si falla el volcado de itemizados, no rompe la generación de campos.
-            pass
+            # Si falla el volcado de itemizados, no rompe la generación de campos,
+            # pero se avisa: las tablas pueden haber quedado vacías.
+            avisos.append(AVISO_TABLAS_FALLARON)
 
     buffer = io.BytesIO()
     wb.save(buffer)

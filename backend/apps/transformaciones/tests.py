@@ -104,3 +104,84 @@ class AlcanceYAislamientoTest(TestCase):
             "plantilla": str(self.plant_b.id),
         }, format="multipart")
         self.assertEqual(r.status_code, 400)  # rechazado por validación
+
+
+
+class LimpiezaIAEstableTest(TestCase):
+    """
+    "Limpiar con IA" apretado varias veces: con los mismos datos debe decir lo
+    mismo (sin volver a llamar a la IA), y un fallo no debe borrar la limpieza.
+    """
+
+    def setUp(self):
+        import io
+        import shutil
+        import tempfile
+        from django.test import override_settings
+        from openpyxl import Workbook
+        from apps.plantillas.models import CampoPlantilla
+        from apps.transformaciones.models import EstadoTransformacion, MapeoCampo
+
+        self.media = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.media, ignore_errors=True)
+        ajuste = override_settings(MEDIA_ROOT=self.media)
+        ajuste.enable()
+        self.addCleanup(ajuste.disable)
+
+        def excel(filas):
+            wb = Workbook()
+            for fila in filas:
+                wb.active.append(fila)
+            buf = io.BytesIO()
+            wb.save(buf)
+            return buf.getvalue()
+
+        org = Organizacion.objects.create(nombre="Org", rut="333333333")
+        Usuario.objects.create_user(email="u@o.cl", password="Clave1234!", nombre_completo="U",
+                                    rol=Rol.GERENTE, organizacion=org)
+        plantilla = Plantilla.objects.create(
+            organizacion=org, nombre="P",
+            archivo=SimpleUploadedFile("p.xlsx", excel([["Nombre del oferente", None]])))
+        campo = CampoPlantilla.objects.create(plantilla=plantilla, nombre="Nombre",
+                                              etiqueta_busqueda="Nombre del oferente")
+        self.t = Transformacion.objects.create(
+            organizacion=org, autor=Usuario.objects.get(email="u@o.cl"), plantilla=plantilla,
+            estado=EstadoTransformacion.EN_REVISION, nombre_origen="o.xlsx",
+            archivo_origen=SimpleUploadedFile("o.xlsx", excel([["Oferente"], ["JUAN PEREZ"]])))
+        MapeoCampo.objects.create(transformacion=self.t, origen_columna="Oferente", destino_campo=campo)
+
+        self.c = APIClient()
+        r = self.c.post("/api/auth/login/", {"email": "u@o.cl", "password": "Clave1234!"}, format="json")
+        self.c.credentials(HTTP_AUTHORIZATION=f"Bearer {r.data['access']}")
+
+    def _limpiar(self):
+        return self.c.post(f"/api/transformaciones/{self.t.id}/limpiar_ia/")
+
+    def test_mismos_datos_mismo_resultado_sin_llamar_otra_vez(self):
+        from unittest.mock import patch
+        with patch("apps.transformaciones.services.ia.limpiar_con_ia",
+                   return_value=(["Juan Pérez"], "models/gemini")) as llamada:
+            primera = self._limpiar()
+            segunda = self._limpiar()
+        self.assertEqual(llamada.call_count, 1)
+        self.assertEqual(primera.data["cambios"],
+                         [{"campo": "Nombre", "antes": "JUAN PEREZ", "despues": "Juan Pérez"}])
+        self.assertTrue(segunda.data["repetida"])
+        self.assertEqual(segunda.data["cambios"], primera.data["cambios"])
+
+    def test_un_fallo_no_borra_la_limpieza_anterior(self):
+        from unittest.mock import patch
+        with patch("apps.transformaciones.services.ia.limpiar_con_ia",
+                   return_value=(["Juan Pérez"], "models/gemini")):
+            self._limpiar()
+        # Simula que el origen cambió (otra huella) y la IA falla.
+        self.t.refresh_from_db()
+        self.t.resultado_limpieza["ia_huella"] = "otra"
+        self.t.save()
+        with patch("apps.transformaciones.services.ia.limpiar_con_ia",
+                   return_value=(["JUAN PEREZ"], "limpieza-ia-fallo")):
+            r = self._limpiar()
+        self.assertFalse(r.data["ok"])
+        self.assertTrue(r.data["conserva_anterior"])
+        self.t.refresh_from_db()
+        self.assertEqual(self.t.resultado_limpieza["valores_ia"], {"Oferente": "Juan Pérez"})

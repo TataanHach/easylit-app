@@ -67,23 +67,41 @@ class PlantillaViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def hojas(self, request, pk=None):
         """
-        Devuelve la lista de hojas del Excel de la plantilla, para que el editor
-        de campos pueda asignar cada campo a su hoja. Ej: ["Identificación",
-        "Experiencia", "Oferta"].
+        Hojas del Excel de la plantilla y una revisión para el editor de campos:
+          hojas:     ["Identificación", "Experiencia", "Oferta"]
+          detalle:   por hoja, si es "tabla" (se llena sola con la tabla del
+                     origen; trae sus columnas) o "formulario" (necesita campos).
+          problemas: {campo_id: motivo} de los campos que no se podrán escribir
+                     (etiqueta que no está en la hoja, campo dentro de una tabla…).
 
-        Si el archivo no es un Excel legible, devuelve lista vacía (no rompe: el
+        Si el archivo no es un Excel legible, devuelve listas vacías (no rompe: el
         editor simplemente no mostrará hojas y el campo irá a la hoja activa).
         """
+        from apps.transformaciones.services.generacion import revisar_plantilla
+
         plantilla = self.get_object()
-        hojas = []
+        error = ""
         try:
-            from openpyxl import load_workbook
-            wb = load_workbook(plantilla.archivo.path, read_only=True)
-            hojas = wb.sheetnames
-            wb.close()
+            revision = revisar_plantilla(plantilla.archivo.path, list(plantilla.campos.all()))
+        except FileNotFoundError:
+            revision, error = None, (
+                "No se encontró el archivo Excel de la plantilla en el servidor. Vuelve a "
+                "crear la plantilla subiendo el archivo de nuevo."
+            )
         except Exception:
-            hojas = []
-        return Response({"hojas": hojas})
+            revision, error = None, (
+                "El archivo de la plantilla no se pudo leer como Excel (.xlsx). Puede estar "
+                "dañado, protegido con contraseña o ser de otro formato. Ábrelo en Excel, "
+                "guárdalo como .xlsx y vuelve a crear la plantilla."
+            )
+        revision = revision or {"hojas": [], "problemas": {}, "ubicaciones": {}}
+        return Response({
+            "hojas": [h["nombre"] for h in revision["hojas"]],
+            "detalle": revision["hojas"],
+            "problemas": revision["problemas"],
+            "ubicaciones": revision["ubicaciones"],
+            "error": error,
+        })
 
 
 class UnidadCanonicaViewSet(viewsets.ModelViewSet):
