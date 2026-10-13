@@ -218,24 +218,90 @@ _MAX_FILAS_ENCABEZADO = 100
 _MAX_FILAS_VACIAS = 50
 
 
-def _detectar_encabezado_tabla(ws):
+TIPOS_HOJA = ("TABLA", "FORMULARIO")
+
+
+def abrir_plantilla(ruta_plantilla, tipos_hoja=None, **kwargs):
     """
-    Busca la fila que parece ENCABEZADO de una tabla (3+ columnas con texto, y
-    al menos 2 palabras típicas de itemizado). Devuelve (fila, [columnas]) o None.
+    Abre el Excel de una plantilla recordando qué hojas marcó el usuario a mano
+    como "TABLA" o "FORMULARIO" (Plantilla.tipos_hoja). Así toda la detección de
+    tablas sobre ese libro respeta la marca sin pasarla función por función.
     """
-    for i, fila in enumerate(ws.iter_rows(max_row=_MAX_FILAS_ENCABEZADO, values_only=True), start=1):
+    wb = load_workbook(ruta_plantilla, **kwargs)
+    wb._tipos_hoja = tipos_hoja or {}
+    return wb
+
+
+def _tipo_manual(ws):
+    return getattr(getattr(ws, "parent", None), "_tipos_hoja", {}).get(ws.title, "")
+
+
+def _es_dato(v):
+    """Números y fechas no pueden ser encabezados de columna."""
+    return isinstance(v, (int, float, date, datetime)) and not isinstance(v, bool)
+
+
+def _encabezado_por_forma(filas):
+    """
+    Encabezado reconocido por la FORMA de la tabla, digan lo que digan sus
+    textos: una fila con 3+ títulos distintos (sin números ni «:» de etiqueta)
+    seguida de al menos 2 filas con datos en la mayoría de esas columnas.
+    Solo sirve en el origen, donde la tabla trae filas llenas.
+    """
+    for i, fila in enumerate(filas):
+        celdas = [_texto(c) for c in fila]
+        cols = [j for j, c in enumerate(celdas) if c]
+        if len(cols) < 3:
+            continue
+        textos = [celdas[j] for j in cols]
+        if (any(_es_dato(fila[j]) for j in cols)
+                or any(t.endswith(":") for t in textos)
+                or len({_normalizar(t) for t in textos}) < len(textos)):
+            continue
+        minimo = (len(cols) + 1) // 2
+        con_datos = sum(
+            1 for f in filas[i + 1:i + 6]
+            if sum(1 for j in cols if j < len(f) and _texto(f[j])) >= minimo
+        )
+        if con_datos >= 2:
+            return i + 1, celdas
+    return None
+
+
+def _detectar_encabezado_tabla(ws, origen=False):
+    """
+    Busca la fila ENCABEZADO de una tabla. Devuelve (fila, [columnas]) o None.
+      1. Marca manual de la plantilla: "FORMULARIO" = nunca es tabla.
+      2. Palabras típicas: 3+ títulos y 2 de ellos como Cantidad, Precio, Total…
+      3. Solo en el origen: la forma de la tabla (encabezado + filas con datos).
+      4. Marca manual "TABLA": la primera fila con 2+ títulos es el encabezado.
+    """
+    tipo = _tipo_manual(ws)
+    if tipo == "FORMULARIO":
+        return None
+    filas = list(ws.iter_rows(max_row=_MAX_FILAS_ENCABEZADO, values_only=True))
+    for i, fila in enumerate(filas, start=1):
         celdas = [_texto(c) for c in fila]
         con_texto = [c for c in celdas if c]
         if len(con_texto) >= 3:
             coinc = sum(1 for c in con_texto if any(p in _normalizar(c) for p in _PALABRAS_TABLA))
             if coinc >= 2:
                 return i, celdas
+    if origen:
+        por_forma = _encabezado_por_forma(filas)
+        if por_forma:
+            return por_forma
+    if tipo == "TABLA":
+        for i, fila in enumerate(filas, start=1):
+            celdas = [_texto(c) for c in fila]
+            if sum(1 for c in celdas if c) >= 2:
+                return i, celdas
     return None
 
 
 def _leer_itemizado_origen(ws):
     """Lee una tabla de partidas del origen. Devuelve dict o None."""
-    r = _detectar_encabezado_tabla(ws)
+    r = _detectar_encabezado_tabla(ws, origen=True)
     if not r:
         return None
     fila_enc, encabezados = r
@@ -597,12 +663,12 @@ def ubicar_campo(ws, campo, tabla=False):
         tabla = _detectar_encabezado_tabla(ws)
     if tabla and destino[0] >= tabla[0]:
         return None, (f"cae dentro de la tabla de la hoja «{ws.title}». Las columnas de "
-                      "una tabla se llenan solas con la tabla del archivo de origen: "
+                      "una tabla se llenan automáticamente con la tabla del archivo de origen: "
                       "este campo sobra y se puede eliminar.")
     return destino, ""
 
 
-def revisar_plantilla(ruta_plantilla, campos):
+def revisar_plantilla(ruta_plantilla, campos, tipos_hoja=None):
     """
     Revisión de la plantilla para el editor de campos. Por hoja: si es tabla
     (con sus columnas) o formulario; qué campos no se podrán escribir y por qué;
@@ -613,11 +679,13 @@ def revisar_plantilla(ruta_plantilla, campos):
     """
     from openpyxl.utils import get_column_letter
 
-    wb = load_workbook(ruta_plantilla)
+    wb = abrir_plantilla(ruta_plantilla, tipos_hoja)
     tablas = {ws.title: _detectar_encabezado_tabla(ws) for ws in wb.worksheets}
     hojas = [
         {"nombre": nombre, "tipo": "tabla" if enc else "formulario",
-         "columnas": [c for c in enc[1] if c] if enc else []}
+         "columnas": [c for c in enc[1] if c] if enc else [],
+         # "" = detectado automáticamente; "TABLA"/"FORMULARIO" = marcado a mano.
+         "tipo_manual": (tipos_hoja or {}).get(nombre, "")}
         for nombre, enc in tablas.items()
     ]
     problemas, ubicaciones = {}, {}
@@ -688,14 +756,14 @@ def aviso_tabla_sin_origen(nombre_hoja):
             "el origen tenga una fila de encabezados (Descripción, Cantidad, Precio…).")
 
 
-def estado_campos(ruta_plantilla, campos, valores):
+def estado_campos(ruta_plantilla, campos, valores, tipos_hoja=None):
     """
     Estado de cada campo de formulario en el documento: su hoja y, si quedará
     vacío, el aviso con el motivo ("" si se llenará). `valores` = {campo_id: valor}
     de los campos que tienen un dato asignado; un campo que no está ahí no
     recibió ningún dato del origen.
     """
-    wb = load_workbook(ruta_plantilla)
+    wb = abrir_plantilla(ruta_plantilla, tipos_hoja)
     tablas = {ws.title: _detectar_encabezado_tabla(ws) for ws in wb.worksheets}
     estados = []
     for campo in campos:
@@ -718,15 +786,15 @@ def estado_campos(ruta_plantilla, campos, valores):
     return estados
 
 
-def campos_sin_escribir(ruta_plantilla, campos, valores):
+def campos_sin_escribir(ruta_plantilla, campos, valores, tipos_hoja=None):
     """
     Avisos de los campos de formulario que quedarán vacíos en el documento, con
     el motivo. Lo usan la vista previa y la generación, para que digan lo mismo.
     """
-    return [e["aviso"] for e in estado_campos(ruta_plantilla, campos, valores) if e["aviso"]]
+    return [e["aviso"] for e in estado_campos(ruta_plantilla, campos, valores, tipos_hoja) if e["aviso"]]
 
 
-def emparejamiento_tablas(ruta_plantilla, ruta_origen):
+def emparejamiento_tablas(ruta_plantilla, ruta_origen, tipos_hoja=None):
     """
     Qué tan bien se emparejan las columnas de cada tabla de la plantilla con las
     del origen. Por hoja: {columnas, emparejadas, sin_pareja, puntajes}, donde
@@ -734,7 +802,7 @@ def emparejamiento_tablas(ruta_plantilla, ruta_origen):
     """
     resultado = {}
     try:
-        wb_dest = load_workbook(ruta_plantilla)
+        wb_dest = abrir_plantilla(ruta_plantilla, tipos_hoja)
         wb_ori = load_workbook(ruta_origen, data_only=True, read_only=True)
     except Exception:
         return resultado
@@ -763,7 +831,7 @@ def emparejamiento_tablas(ruta_plantilla, ruta_origen):
 
 
 def generar_documento(ruta_plantilla, mapeos_con_valor, ruta_origen=None, calcular_totales=False,
-                      valores_ia_tablas=None, avisos=None):
+                      valores_ia_tablas=None, avisos=None, tipos_hoja=None):
     """
     ruta_plantilla: .xlsx de la plantilla destino.
     mapeos_con_valor: lista de {campo, valor} para los campos de FORMULARIO.
@@ -773,7 +841,7 @@ def generar_documento(ruta_plantilla, mapeos_con_valor, ruta_origen=None, calcul
     avisos: (opcional) lista donde se agrega, en palabras del usuario, todo lo
             que no se pudo escribir (campos sin valor o sin casilla, tablas vacías).
     """
-    wb = load_workbook(ruta_plantilla)
+    wb = abrir_plantilla(ruta_plantilla, tipos_hoja)
     if avisos is None:
         avisos = []
 

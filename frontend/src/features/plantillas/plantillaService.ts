@@ -12,6 +12,8 @@ export interface HojaPlantilla {
   nombre: string;
   tipo: "tabla" | "formulario";
   columnas: string[]; // solo en las de tabla
+  /** "" = detectado automáticamente; si no, lo que el usuario marcó a mano. */
+  tipo_manual?: "" | "TABLA" | "FORMULARIO";
 }
 
 export interface RevisionHojas {
@@ -35,11 +37,17 @@ export const plantillaService = {
     return data;
   },
   /**
-   * Hojas del Excel y su revisión: qué hojas son tablas (se llenan solas) y qué
+   * Hojas del Excel y su revisión: qué hojas son tablas (se llenan automáticamente) y qué
    * campos no se podrán escribir, con el motivo.
    */
   async hojas(id: string): Promise<RevisionHojas> {
     const { data } = await api.get<RevisionHojas>(`/plantillas/${id}/hojas/`);
+    return data;
+  },
+
+  /** Marca a mano si una hoja es tabla o formulario ("AUTO" = detección automática). */
+  async tipoHoja(id: string, hoja: string, tipo: "AUTO" | "TABLA" | "FORMULARIO"): Promise<RevisionHojas> {
+    const { data } = await api.post<RevisionHojas>(`/plantillas/${id}/tipo_hoja/`, { hoja, tipo });
     return data;
   },
 

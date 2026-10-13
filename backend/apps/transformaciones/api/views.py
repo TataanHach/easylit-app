@@ -279,6 +279,7 @@ class TransformacionViewSet(viewsets.ModelViewSet):
             estados = generacion.estado_campos(
                 transformacion.plantilla.archivo.path,
                 list(transformacion.plantilla.campos.all()), valores_por_campo,
+                transformacion.plantilla.tipos_hoja,
             )
         except Exception:
             estados = []
@@ -297,7 +298,7 @@ class TransformacionViewSet(viewsets.ModelViewSet):
         try:
             ruta_plantilla = transformacion.plantilla.archivo.path
             ruta_origen = transformacion.archivo_origen.path
-            wb_dest = load_workbook(ruta_plantilla)
+            wb_dest = generacion.abrir_plantilla(ruta_plantilla, transformacion.plantilla.tipos_hoja)
             wb_ori = load_workbook(ruta_origen, data_only=True, read_only=True)
 
             for nombre_hoja in wb_dest.sheetnames:

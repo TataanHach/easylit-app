@@ -65,34 +65,19 @@ def _texto(c):
     return "" if c is None else str(c).strip()
 
 
-def _norm_tabla(s):
-    s = str(s).lower().strip()
-    s = "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
-    return re.sub(r"[^a-z0-9]", " ", s).strip()
 
 
-# Palabras que delatan el encabezado de una tabla de itemizado.
-_PALABRAS_TABLA = [
-    "descripcion", "cantidad", "precio", "valor", "total", "unidad",
-    "cargo", "rol", "remuneracion", "item", "detalle", "personas", "monto", "pagar",
-]
 
 
 def es_hoja_itemizado(ws):
     """
-    Una hoja es ITEMIZADO si tiene una fila con 3+ columnas de texto y al menos
-    2 de ellas son palabras típicas de tabla de partidas (Descripción, Cantidad,
-    Precio...). Esas hojas NO se leen como campos: las vuelca el generador.
+    Una hoja del origen es ITEMIZADO (tabla) si tiene un encabezado de tabla:
+    por sus palabras típicas (Cantidad, Precio…) o por su forma (encabezado +
+    filas con datos). Esas hojas NO se leen como campos: las vuelca el
+    generador. La regla vive en generacion._detectar_encabezado_tabla.
     """
-    for fila in ws.iter_rows(max_row=100, values_only=True):
-        celdas = [_texto(c) for c in fila]
-        con_texto = [c for c in celdas if c]
-        if len(con_texto) >= 3:
-            coinc = sum(1 for c in con_texto if any(p in _norm_tabla(c) for p in _PALABRAS_TABLA))
-            if coinc >= 2:
-                return True
-    return False
-
+    from .generacion import _detectar_encabezado_tabla
+    return _detectar_encabezado_tabla(ws, origen=True) is not None
 
 def hojas_itemizado(ruta_archivo):
     """Nombres de las hojas del Excel que son tablas de itemizado."""

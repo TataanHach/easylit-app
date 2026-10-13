@@ -93,6 +93,26 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
   }
   const infoHoja = (h: string) => revision?.detalle.find((d) => d.nombre === h);
   const esTabla = (h: string) => infoHoja(h)?.tipo === "tabla";
+
+  const [cambiandoTipo, setCambiandoTipo] = useState(false);
+  async function cambiarTipoHoja(hoja: string, tipo: "AUTO" | "TABLA" | "FORMULARIO") {
+    setCambiandoTipo(true);
+    try {
+      const r = await plantillaService.tipoHoja(plantilla.id, hoja, tipo);
+      setRevision(r);
+      const nuevo = r.detalle.find((d) => d.nombre === hoja)?.tipo;
+      avisos.exito(
+        "Tipo de hoja actualizado",
+        tipo === "AUTO"
+          ? `«${hoja}» vuelve a detectarse sola: hoy se ve como ${nuevo === "tabla" ? "tabla" : "formulario"}.`
+          : `«${hoja}» se tratará siempre como ${tipo === "TABLA" ? "tabla (se llena automáticamente con la tabla del origen)" : "formulario (necesita campos)"}.`
+      );
+    } catch (e) {
+      avisos.error(describirError(e, "cambiar el tipo de la hoja"));
+    } finally {
+      setCambiandoTipo(false);
+    }
+  }
   const conProblema = (h: string) =>
     campos.some((c) => (c.hoja_destino || "") === h && revision?.problemas[c.id]);
 
@@ -174,7 +194,7 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
 
     const textoTablas = tablas.length
       ? ` ${tablas.length === 1 ? "La hoja" : "Las hojas"} ${tablas.map((h) => `«${h.nombre}»`).join(", ")} `
-        + `${tablas.length === 1 ? "es una tabla y se llenará sola" : "son tablas y se llenarán solas"}.`
+        + `${tablas.length === 1 ? "es una tabla y se llenará automáticamente" : "son tablas y se llenarán automáticamente"}.`
       : "";
     setResultado({
       estado: "exito",
@@ -295,11 +315,28 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
                 </div>
               )}
 
+              {infoHoja(hojaActiva) && (
+                <div className="hoja-tipo">
+                  <label htmlFor="tipo-hoja">Tipo de esta hoja</label>
+                  <select id="tipo-hoja" disabled={cambiandoTipo}
+                    value={infoHoja(hojaActiva)!.tipo_manual || "AUTO"}
+                    onChange={(e) => cambiarTipoHoja(hojaActiva, e.target.value as "AUTO" | "TABLA" | "FORMULARIO")}>
+                    <option value="AUTO">
+                      Automático{!infoHoja(hojaActiva)!.tipo_manual
+                        ? ` (detectado: ${esTabla(hojaActiva) ? "tabla" : "formulario"})` : ""}
+                    </option>
+                    <option value="TABLA">Tabla: se llena automáticamente</option>
+                    <option value="FORMULARIO">Formulario: necesita campos</option>
+                  </select>
+                  <span className="hoja-tipo-ayuda">Cámbialo solo si EasyLit se equivocó al reconocerla.</span>
+                </div>
+              )}
+
               {esTabla(hojaActiva) && (
                 <div className="hoja-aviso">
                   <i className="ti ti-table" />
                   <div>
-                    <strong>Esta hoja es una tabla: se llena sola.</strong> Sus columnas
+                    <strong>Esta hoja es una tabla: se llena automáticamente.</strong> Sus columnas
                     ({infoHoja(hojaActiva)!.columnas.join(", ")}) se completan con la tabla del
                     archivo de origen, así que no necesitan campos. Agrega campos aquí solo para
                     casillas que estén <em>arriba</em> de la tabla (ej. nombre del oferente).

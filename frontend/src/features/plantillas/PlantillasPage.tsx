@@ -57,7 +57,7 @@ export default function PlantillasPage() {
     setEditando(null);
     refetch();
     // Plantilla nueva: directo al editor de campos, que muestra qué hojas son
-    // tablas (se llenan solas) y cuáles son formularios (necesitan campos).
+    // tablas (se llenan automáticamente) y cuáles son formularios (necesitan campos).
     if (creada) setEditandoCampos(creada);
   }
   function trasEliminar() {

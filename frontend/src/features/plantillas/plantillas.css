@@ -203,3 +203,15 @@
   grid-column: 1 / -1; margin: -2px 0 0; font-size: var(--fs-sm); color: var(--dest-700);
 }
 .campo-ubicacion i { margin-right: 2px; }
+
+/* Tipo de hoja (automático / tabla / formulario) */
+.hoja-tipo {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 12px; font-size: var(--fs-md);
+}
+.hoja-tipo label { font-weight: 600; color: var(--text-2); }
+.hoja-tipo select {
+  font: inherit; font-size: var(--fs-md); padding: 5px 8px;
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); color: var(--text);
+}
+.hoja-tipo-ayuda { font-size: var(--fs-sm); color: var(--text-3); }

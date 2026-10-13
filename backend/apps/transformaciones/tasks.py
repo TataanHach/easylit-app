@@ -65,7 +65,7 @@ def _plantilla_tiene_tablas(plantilla):
     from openpyxl import load_workbook
     from .services import generacion
     try:
-        wb = load_workbook(plantilla.archivo.path)
+        wb = generacion.abrir_plantilla(plantilla.archivo.path, plantilla.tipos_hoja)
         hay = any(generacion._detectar_encabezado_tabla(ws) for ws in wb.worksheets)
         wb.close()
         return hay
@@ -175,7 +175,9 @@ def procesar_transformacion(transformacion_id):
         # licitación que solo trae tablas quedaba en 0% aunque calzara perfecto.
         if itemizados:
             from .services import generacion
-            tablas = generacion.emparejamiento_tablas(t.plantilla.archivo.path, t.archivo_origen.path)
+            tablas = generacion.emparejamiento_tablas(
+                t.plantilla.archivo.path, t.archivo_origen.path, t.plantilla.tipos_hoja
+            )
             for info in tablas.values():
                 confianzas.extend(info.pop("puntajes"))
             t.resultado_limpieza["tablas_emparejadas"] = tablas
@@ -256,6 +258,7 @@ def generar_documento_tarea(transformacion_id):
         avisos = generacion.campos_sin_escribir(
             t.plantilla.archivo.path, list(t.plantilla.campos.all()),
             {m["campo"].id: m["valor"] for m in mapeos_con_valor},
+            t.plantilla.tipos_hoja,
         )
         contenido = generacion.generar_documento(
             t.plantilla.archivo.path, mapeos_con_valor,
@@ -263,6 +266,7 @@ def generar_documento_tarea(transformacion_id):
             calcular_totales=bool((t.resultado_limpieza or {}).get("calcular_totales")),
             valores_ia_tablas=(t.resultado_limpieza or {}).get("valores_ia_tablas"),
             avisos=avisos,
+            tipos_hoja=t.plantilla.tipos_hoja,
         )
 
         nombre = f"generado_{t.id}.xlsx"

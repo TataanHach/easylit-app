@@ -69,7 +69,7 @@ class PlantillaViewSet(viewsets.ModelViewSet):
         """
         Hojas del Excel de la plantilla y una revisión para el editor de campos:
           hojas:     ["Identificación", "Experiencia", "Oferta"]
-          detalle:   por hoja, si es "tabla" (se llena sola con la tabla del
+          detalle:   por hoja, si es "tabla" (se llena automáticamente con la tabla del
                      origen; trae sus columnas) o "formulario" (necesita campos).
           problemas: {campo_id: motivo} de los campos que no se podrán escribir
                      (etiqueta que no está en la hoja, campo dentro de una tabla…).
@@ -82,7 +82,9 @@ class PlantillaViewSet(viewsets.ModelViewSet):
         plantilla = self.get_object()
         error = ""
         try:
-            revision = revisar_plantilla(plantilla.archivo.path, list(plantilla.campos.all()))
+            revision = revisar_plantilla(
+                plantilla.archivo.path, list(plantilla.campos.all()), plantilla.tipos_hoja
+            )
         except FileNotFoundError:
             revision, error = None, (
                 "No se encontró el archivo Excel de la plantilla en el servidor. Vuelve a "
@@ -102,6 +104,34 @@ class PlantillaViewSet(viewsets.ModelViewSet):
             "ubicaciones": revision["ubicaciones"],
             "error": error,
         })
+
+
+    @action(detail=True, methods=["post"])
+    def tipo_hoja(self, request, pk=None):
+        """
+        Marca a mano si una hoja es tabla o formulario, cuando la detección
+        automática se equivoca. Body: { "hoja": "Registro", "tipo": "TABLA" |
+        "FORMULARIO" | "AUTO" } (AUTO = volver a la detección automática).
+        """
+        from apps.transformaciones.services.generacion import TIPOS_HOJA
+
+        plantilla = self.get_object()
+        hoja = (request.data.get("hoja") or "").strip()
+        tipo = (request.data.get("tipo") or "").strip().upper()
+        if not hoja:
+            return Response({"detail": "No se indicó la hoja. Recarga la página e intenta de nuevo."},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if tipo not in TIPOS_HOJA + ("AUTO",):
+            return Response({"detail": f"El tipo «{tipo}» no es válido. Elige Automático, Tabla o Formulario."},
+                            status=status.HTTP_400_BAD_REQUEST)
+        tipos = dict(plantilla.tipos_hoja or {})
+        if tipo == "AUTO":
+            tipos.pop(hoja, None)
+        else:
+            tipos[hoja] = tipo
+        plantilla.tipos_hoja = tipos
+        plantilla.save(update_fields=["tipos_hoja"])
+        return self.hojas(request, pk=pk)
 
 
 class UnidadCanonicaViewSet(viewsets.ModelViewSet):

@@ -62,6 +62,9 @@ class Plantilla(models.Model):
 
     nombre = models.CharField(max_length=200)
     mandante = models.CharField(max_length=200, blank=True)
+    # Hojas que el usuario marcó a mano: {"Hoja": "TABLA" | "FORMULARIO"}. Las que
+    # no están aquí se detectan solas (palabras típicas del encabezado).
+    tipos_hoja = models.JSONField(default=dict, blank=True)
     sector = models.CharField(max_length=100, blank=True)
     formato = models.CharField(max_length=8, choices=Formato.choices, default=Formato.XLSX)
 

@@ -33,6 +33,8 @@ function MiniExcel({ filas, columnas = ["A", "B", "C"], pie }: {
   );
 }
 
+// 4 pasos cortos: qué es un campo, cuándo agregarlo, cómo llenarlo y tipo/formato.
+// Cada paso debe leerse de un vistazo; los detalles van en una nota de una línea.
 const PASOS: { titulo: string; icono: string; contenido: ReactNode }[] = [
   {
     titulo: "¿Qué es un campo?",
@@ -40,189 +42,91 @@ const PASOS: { titulo: string; icono: string; contenido: ReactNode }[] = [
     contenido: (
       <>
         <p>
-          Un <strong>campo</strong> es una casilla del Excel de la plantilla que EasyLit llena con un dato
-          del archivo de la licitación. Por ejemplo: el RUT, la razón social o la fecha de apertura.
-        </p>
-        <p>
-          Cada campo le dice al sistema <strong>dónde</strong> escribir (buscando su etiqueta en la hoja) y
-          <strong> qué</strong> escribir (la IA elige el dato del origen que corresponde, y tú puedes
-          cambiarlo en el mapeo).
+          Una <strong>casilla del Excel</strong> que EasyLit llena con un dato de la licitación: el RUT, la razón
+          social, la fecha de apertura…
         </p>
         <MiniExcel
           filas={[
             { celdas: [{ texto: "RUT:", clase: "etiqueta" }, { texto: "76.453.212-0", clase: "dato" }, {}] },
             { celdas: [{ texto: "Razón social:", clase: "etiqueta" }, { texto: "Constructora SpA", clase: "dato" }, {}] },
           ]}
-          pie={<><span className="mx-marca etiqueta" /> Etiqueta (ya está en tu Excel) · <span className="mx-marca dato" /> Lo que llena EasyLit</>}
-        />
-      </>
-    ),
-  },
-  {
-    titulo: "Formulario o tabla: ¿qué hojas necesitan campos?",
-    icono: "ti ti-table",
-    contenido: (
-      <>
-        <p>Arriba ves una pestaña por cada hoja del Excel. EasyLit las reconoce solo:</p>
-        <ul>
-          <li>
-            <strong><i className="ti ti-forms" /> Formulario</strong>: casillas sueltas con su etiqueta
-            («RUT:», «Dirección:»). <strong>Necesitan un campo por casilla.</strong>
-          </li>
-          <li>
-            <strong><i className="ti ti-table" /> Tabla</strong> (con la etiqueta «tabla»): una fila de
-            encabezados como Ítem, Descripción, Cantidad, Precio. <strong>Se llena sola</strong> con la tabla del
-            archivo de origen, fila por fila. <strong>No le agregues campos</strong> a sus columnas.
-          </li>
-        </ul>
-        <MiniExcel
-          columnas={["A", "B", "C", "D"]}
-          filas={[
-            { celdas: [{ texto: "Ítem", clase: "encabezado" }, { texto: "Descripción", clase: "encabezado" }, { texto: "Cantidad", clase: "encabezado" }, { texto: "Precio", clase: "encabezado" }] },
-            { celdas: [{ texto: "1", clase: "auto" }, { texto: "Cemento", clase: "auto" }, { texto: "40", clase: "auto" }, { texto: "$ 6.990", clase: "auto" }] },
-            { celdas: [{ texto: "2", clase: "auto" }, { texto: "Fierro 12 mm", clase: "auto" }, { texto: "120", clase: "auto" }, { texto: "$ 8.450", clase: "auto" }] },
-          ]}
-          pie={<><span className="mx-marca auto" /> Las filas de la tabla se copian solas desde el origen: sin campos</>}
+          pie={<><span className="mx-marca etiqueta" /> Ya está en tu Excel · <span className="mx-marca dato" /> Lo llena EasyLit</>}
         />
         <p className="ayuda-nota">
-          <i className="ti ti-info-circle" /> Si una hoja con tabla tiene casillas <strong>encima</strong> de la tabla
-          (por ejemplo «Nombre del oferente»), esas sí llevan campo.
+          <i className="ti ti-table" /> Las hojas de <strong>tabla</strong> (Ítem, Descripción, Cantidad…) se llenan automáticamente
+          con la tabla del origen: <strong>no necesitan campos</strong>.
         </p>
       </>
     ),
   },
   {
-    titulo: "Qué agregar y qué no",
+    titulo: "¿Cuándo agregar un campo?",
     icono: "ti ti-checklist",
     contenido: (
       <div className="ayuda-dos">
         <div className="ayuda-si">
-          <p className="ayuda-sub"><i className="ti ti-circle-check" /> Sí agrega un campo para</p>
+          <p className="ayuda-sub"><i className="ti ti-circle-check" /> Sí</p>
           <ul>
-            <li>Cada casilla de un formulario que deba llenarse con un dato de la licitación.</li>
-            <li>Casillas que están encima de una tabla (datos del oferente, fecha, etc.).</li>
+            <li>Cada casilla de un formulario que se llena con un dato de la licitación.</li>
+            <li>Casillas sobre una tabla (oferente, fecha…).</li>
           </ul>
         </div>
         <div className="ayuda-no">
-          <p className="ayuda-sub"><i className="ti ti-circle-x" /> No agregues campos para</p>
+          <p className="ayuda-sub"><i className="ti ti-circle-x" /> No</p>
           <ul>
-            <li>Columnas de una hoja de <strong>tabla</strong>: se llenan solas.</li>
-            <li>Títulos o textos fijos del formato («FORMULARIO 1: IDENTIFICACIÓN»).</li>
-            <li>Celdas con <strong>fórmulas</strong> (totales, IVA calculado): Excel las calcula.</li>
-            <li>Casillas que el oferente completa a mano (firma, timbre).</li>
+            <li>Columnas de una tabla: se llenan automáticamente.</li>
+            <li>Títulos, fórmulas (totales, IVA) o casillas de firma y timbre.</li>
           </ul>
         </div>
       </div>
     ),
   },
   {
-    titulo: "Nombre del campo",
-    icono: "ti ti-tag",
-    contenido: (
-      <>
-        <p>
-          Es cómo identificas el campo, y <strong>la IA lo usa para encontrar el dato</strong> en el archivo de
-          la licitación. Por eso conviene que sea claro:
-        </p>
-        <ul>
-          <li><span className="ayuda-ok">✓ «RUT Empresa»</span>, <span className="ayuda-ok">✓ «Fecha de apertura»</span></li>
-          <li><span className="ayuda-mal">✗ «Campo1»</span>, <span className="ayuda-mal">✗ «Dato»</span></li>
-        </ul>
-        <p>No puede haber dos campos con el mismo nombre en una plantilla.</p>
-        <p className="ayuda-nota">
-          <i className="ti ti-sparkles" /> Algunas palabras activan una limpieza automática del dato: si el nombre
-          dice <strong>RUT</strong> (puntos y guion, si el dígito verificador es válido), <strong>correo</strong> (sin espacios),
-          <strong> teléfono</strong> (solo el primer número) o <strong>representante</strong> (sin el RUT pegado
-          al nombre).
-        </p>
-      </>
-    ),
-  },
-  {
-    titulo: "Etiqueta de búsqueda: dónde se escribe",
+    titulo: "Nombre y etiqueta",
     icono: "ti ti-search",
     contenido: (
       <>
-        <p>
-          Es el <strong>texto que ya está en tu Excel</strong>, al lado de la casilla. EasyLit busca ese texto en la
-          hoja y escribe el dato en la <strong>celda de su derecha</strong>.
-        </p>
+        <ul>
+          <li>
+            <strong>Nombre:</strong> claro, porque la IA lo usa para encontrar el dato.{" "}
+            <span className="ayuda-ok">✓ «RUT Empresa»</span> <span className="ayuda-mal">✗ «Campo1»</span>
+          </li>
+          <li>
+            <strong>Etiqueta de búsqueda:</strong> el texto que ya está en tu Excel. El dato se escribe en la
+            celda de su <strong>derecha</strong>.
+          </li>
+        </ul>
         <MiniExcel
           filas={[
             { celdas: [{ texto: "RUT del oferente:", clase: "etiqueta" }, { texto: "← aquí", clase: "dato" }, {}] },
             { celdas: [{ texto: "Dirección:" }, {}, {}] },
           ]}
-          pie={<>Etiqueta de búsqueda <strong>«RUT del oferente»</strong> → el dato se escribe en <strong>B1</strong></>}
+          pie={<>Etiqueta <strong>«RUT del oferente»</strong> → se escribe en <strong>B1</strong></>}
         />
-        <ul>
-          <li><strong>No tiene que ser exacta:</strong> basta con que coincida al menos la mitad de las palabras, sin
-            importar mayúsculas, tildes ni los dos puntos. «rut oferente» encuentra «RUT del oferente:».</li>
-          <li><strong>Si la dejas vacía</strong>, se busca el nombre del campo.</li>
-          <li>Bajo cada campo verás <span className="ayuda-ok">✓ Se escribirá en la celda B1…</span> si la encontró, o un
-            aviso <span className="ayuda-aviso">⚠</span> con el motivo si no.</li>
-        </ul>
-      </>
-    ),
-  },
-  {
-    titulo: "Tipo del dato",
-    icono: "ti ti-category",
-    contenido: (
-      <>
-        <p>Le dice a la IA qué clase de dato buscar y cómo escribirlo:</p>
-        <table className="ayuda-tabla">
-          <tbody>
-            <tr><th>Texto</th><td>Nombres, direcciones, descripciones. Es el tipo por defecto.</td></tr>
-            <tr><th>Número</th><td>Cantidades, montos, plazos. <strong>Habilita el formato</strong> (siguiente paso).</td></tr>
-            <tr><th>Fecha</th><td>Se escribe como <strong>fecha real de Excel</strong> (15-08-2024), aunque en el origen
-              diga «15 de agosto de 2024».</td></tr>
-            <tr><th>Unidad</th><td>Unidades de medida (m2, m3, kg). «1200 mts2» queda «1200 m2».</td></tr>
-          </tbody>
-        </table>
-      </>
-    ),
-  },
-  {
-    titulo: "Formato (solo para Número)",
-    icono: "ti ti-currency-dollar",
-    contenido: (
-      <>
-        <p>Cómo se ve el número en la celda. El valor queda como número real de Excel, así que las fórmulas funcionan.</p>
-        <table className="ayuda-tabla">
-          <tbody>
-            <tr><th>Sin formato</th><td>Tal como viene.</td></tr>
-            <tr><th>Número entero</th><td>1.234</td></tr>
-            <tr><th>Decimal</th><td>1.234,56</td></tr>
-            <tr><th>Pesos $</th><td>$ 1.234</td></tr>
-            <tr><th>Pesos con decimales</th><td>$ 1.234,56</td></tr>
-            <tr><th>Porcentaje %</th><td>12,5% (el dato debe venir como 12,5, no como 0,125)</td></tr>
-            <tr><th>UF</th><td>1.234,56 UF</td></tr>
-          </tbody>
-        </table>
         <p className="ayuda-nota">
-          <i className="ti ti-lock" /> Los campos en <strong>Pesos</strong> o <strong>UF</strong> son montos: «Limpiar con IA»
-          nunca los envía, por privacidad (los limpia una regla fija). En la vista previa tienen además el ajuste de
-          IVA (+ IVA o neto).
+          <i className="ti ti-info-circle" /> No tiene que ser exacta, y si la dejas vacía se busca el nombre.
+          Bajo cada campo verás <span className="ayuda-ok">✓</span> si encontró la casilla o <span className="ayuda-aviso">⚠</span> qué corregir.
         </p>
       </>
     ),
   },
   {
-    titulo: "Revisa y termina",
-    icono: "ti ti-circle-check",
+    titulo: "Tipo y formato",
+    icono: "ti ti-category",
     contenido: (
       <>
-        <ol>
-          <li>Elige la <strong>pestaña</strong> de la hoja: el campo nuevo se agrega a la hoja que está abierta.</li>
-          <li>Presiona <strong>«Añadir campo»</strong> y completa nombre, tipo, formato y etiqueta. Cada cambio se guarda
-            al momento.</li>
-          <li>Mira el mensaje bajo cada campo: <span className="ayuda-ok">✓</span> encontró su casilla,
-            <span className="ayuda-aviso"> ⚠</span> hay algo que corregir.</li>
-          <li>Presiona <strong>«Listo»</strong>: se revisa toda la plantilla y verás
-            <span className="ayuda-ok"> ✓ todo correcto</span>, <span className="ayuda-aviso">⚠ qué revisar</span> o
-            <span className="ayuda-mal"> ✗ qué falló</span>.</li>
-        </ol>
-        <p>«Cerrar» sale sin revisar: los cambios ya quedaron guardados.</p>
+        <table className="ayuda-tabla">
+          <tbody>
+            <tr><th>Texto</th><td>Nombres, direcciones. Es el tipo por defecto.</td></tr>
+            <tr><th>Número</th><td>Montos y cantidades. Elige un formato: entero, decimal, $, %, UF.</td></tr>
+            <tr><th>Fecha</th><td>Queda como fecha de Excel (15-08-2024).</td></tr>
+            <tr><th>Unidad</th><td>m2, m3, kg… «1200 mts2» queda «1200 m2».</td></tr>
+          </tbody>
+        </table>
+        <p className="ayuda-nota">
+          <i className="ti ti-circle-check" /> Cada cambio se guarda al instante. Al terminar presiona
+          <strong> «Listo»</strong> para revisar toda la plantilla.
+        </p>
       </>
     ),
   },
