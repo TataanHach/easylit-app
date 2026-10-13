@@ -4,13 +4,28 @@
 #   Render       easylit-api    Web Service: Django (Gunicorn) + Celery juntos
 #                easylit-redis  Key Value:   cola de tareas de Celery
 #                easylit-web    Static Site: React compilado
-#   Neon         PostgreSQL     → DATABASE_URL
+#                easylit-db     PostgreSQL:  datos (plan gratis: VENCE A LOS 30 DÍAS)
 #   Cloudflare   R2             → archivos subidos y documentos generados
 #   Firebase     Authentication → inicio de sesión
 #
 # Las variables con sync:false se pegan a mano en el panel de Render (son
 # secretas o dependen de tus cuentas). Guía paso a paso: DESPLIEGUE.md
 # =============================================================
+
+databases:
+  # ---- PostgreSQL ----
+  # Plan gratis: vence 30 días después de crearla; luego hay ~14 días para pasarla
+  # a un plan de pago o se borra con todos sus datos. Ver DESPLIEGUE.md.
+  - name: easylit-db
+    plan: free
+    region: oregon
+    databaseName: easylit
+    user: easylit
+    # Acceso externo (con contraseña y SSL) para crear el primer usuario desde tu PC
+    # (el plan gratis no tiene Shell). Después puedes cerrarlo en el panel: Networking.
+    ipAllowList:
+      - source: 0.0.0.0/0
+        description: todos
 
 services:
   # ---- Redis (cola de tareas) ----
@@ -42,9 +57,10 @@ services:
           type: keyvalue
           name: easylit-redis
           property: connectionString
-      # Neon: Connection string (postgresql://…?sslmode=require)
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: easylit-db
+          property: connectionString
       # URL pública de easylit-web, para CORS (https://easylit-web.onrender.com)
       - key: FRONTEND_URL
         sync: false

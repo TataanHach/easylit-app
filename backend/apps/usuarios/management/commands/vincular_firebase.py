@@ -5,8 +5,8 @@ invitación.
 
     python manage.py vincular_firebase correo@empresa.cl --password "Clave#2026"
 
-Se puede correr desde tu PC apuntando a la base de producción (DATABASE_URL de
-Neon) con las variables de Firebase definidas.
+Se puede correr desde tu PC apuntando a la base de producción (External Database URL
+de Render) con las variables de Firebase definidas.
 """
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
