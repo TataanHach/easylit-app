@@ -13,6 +13,7 @@ import {
   type ReactNode,
 } from "react";
 import { tokenStore } from "@/api/client";
+import { esperarSesion, firebaseActivo } from "@/lib/firebase";
 import type { Usuario } from "@/types";
 import { authService } from "./authService";
 
@@ -38,6 +39,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Al montar: si hay token, restaurar la sesión.
   useEffect(() => {
+    if (firebaseActivo) {
+      // Firebase recuerda la sesión de la pestaña: si hay una, se piden los datos.
+      esperarSesion()
+        .then((u) => (u ? authService.perfil().then(setUsuario) : undefined))
+        .catch(() => authService.logout())
+        .finally(() => setCargando(false));
+      return;
+    }
     if (!tokenStore.access) {
       setCargando(false);
       return;

@@ -29,7 +29,7 @@ def mensaje_amigable(exc, etapa):
             f"No se pudo abrir {archivo}: no es un Excel válido o está dañado. "
             "Ábrelo en Excel, guárdalo como .xlsx y vuelve a subirlo."
         )
-    if isinstance(exc, FileNotFoundError):
+    if isinstance(exc, FileNotFoundError) or "NoSuchKey" in texto or "Not Found" in texto:
         return (
             f"No se encontró {archivo} en el servidor. Puede que se haya borrado. "
             "Vuelve a subirlo e intenta de nuevo."

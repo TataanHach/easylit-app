@@ -7,6 +7,7 @@
  * conectan en el bloque de autenticación y siguientes.
  */
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
+import { auth, firebaseActivo } from "@/lib/firebase";
 
 // En dev, el proxy de Vite atiende "/api". En prod, VITE_API_URL apunta a Render.
 const baseURL = import.meta.env.VITE_API_URL
@@ -50,8 +51,11 @@ export const tokenStore = {
 };
 
 // Añade el token a cada petición saliente.
-api.interceptors.request.use((cfg: InternalAxiosRequestConfig) => {
-  const token = tokenStore.access;
+api.interceptors.request.use(async (cfg: InternalAxiosRequestConfig) => {
+  // Con Firebase, su SDK entrega un token vigente (lo renueva solo cada hora).
+  const token = firebaseActivo
+    ? await auth?.currentUser?.getIdToken()
+    : tokenStore.access;
   if (token) cfg.headers.Authorization = `Bearer ${token}`;
   return cfg;
 });
@@ -64,7 +68,8 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-    if (error.response?.status === 401 && !original._retry && tokenStore.refresh) {
+    // (Con Firebase no aplica: su SDK ya renueva el token antes de cada petición.)
+    if (!firebaseActivo && error.response?.status === 401 && !original._retry && tokenStore.refresh) {
       original._retry = true;
       try {
         refreshing ??= axios

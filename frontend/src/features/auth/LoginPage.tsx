@@ -15,6 +15,7 @@ import { authService } from "./authService";
 import "./auth.css";
 import { LIMITES, limpiarTexto } from "@/lib/limites";
 import { useConfiguracion } from "@/lib/configuracion";
+import { firebaseActivo } from "@/lib/firebase";
 import { describirError } from "@/lib/errores";
 import { problemaCorreo } from "@/lib/validar";
 
@@ -73,7 +74,10 @@ export default function LoginPage() {
       await login(limpiarTexto(email), password);
       navigate("/");
     } catch (err) {
-      if (axios.isAxiosError(err) && err.response?.status === 401) {
+      const codigo = (err as { code?: string })?.code ?? "";
+      if (codigo === "auth/invalid-credential" || codigo === "auth/wrong-password") {
+        setErrorPw("La contraseña no es correcta. Revisa las mayúsculas y vuelve a intentarlo.");
+      } else if (!firebaseActivo && axios.isAxiosError(err) && err.response?.status === 401) {
         // Solo la contraseña puede estar mal: el correo ya se verificó en el paso 1.
         setErrorPw("La contraseña no es correcta. Revisa las mayúsculas y vuelve a intentarlo.");
       } else {

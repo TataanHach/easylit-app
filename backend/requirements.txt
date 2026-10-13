@@ -12,3 +12,6 @@ requests==2.34.2  # llamadas a la API REST de Gemini (sin gRPC)
 gunicorn==23.0.0
 python-decouple==3.8
 whitenoise==6.8.2
+django-storages[s3]==1.14.6  # archivos en Cloudflare R2 (compatible S3)
+boto3==1.43.112
+google-auth==2.59.1  # verificar tokens de Firebase (sin gRPC)

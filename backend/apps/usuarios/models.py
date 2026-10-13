@@ -73,6 +73,10 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
     rut = models.CharField(max_length=12, blank=True)
     telefono = models.CharField(max_length=30, blank=True)
 
+    # Cuenta de Firebase vinculada (cuando el login lo hace Firebase). Vacío =
+    # aún no activa su cuenta. Es lo que une el token de Firebase con este usuario.
+    firebase_uid = models.CharField(max_length=128, unique=True, null=True, blank=True)
+
     rol = models.CharField(max_length=20, choices=Rol.choices, default=Rol.TRABAJADOR)
 
     # Superadmin no pertenece a ninguna organización → null. Gerente y trabajador
@@ -130,6 +134,9 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
     @property
     def necesita_crear_contrasena(self):
         """True si fue invitado y aún no define contraseña."""
+        from django.conf import settings
+        if settings.FIREBASE_PROJECT_ID:
+            return not self.firebase_uid   # la contraseña vive en Firebase
         return not self.has_usable_password()
 
 

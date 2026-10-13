@@ -19,6 +19,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from apps.usuarios import firebase
 from apps.usuarios.models import Invitacion, Rol, Usuario
 
 from .permissions import EsGerenteOSuperadmin
@@ -155,8 +156,22 @@ class CrearContrasenaView(APIView):
         invitacion = datos["invitacion"]
         usuario = invitacion.usuario
 
-        # Fijar la contraseña y completar datos opcionales.
-        usuario.set_password(datos["password"])
+        # Fijar la contraseña y completar datos opcionales. Con Firebase, la
+        # contraseña se guarda allá (se crea su cuenta) y aquí solo el vínculo.
+        if firebase.activo():
+            try:
+                usuario.firebase_uid = firebase.crear_o_actualizar_cuenta(
+                    usuario.email, datos["password"], usuario.nombre_completo,
+                )
+            except Exception:
+                return Response(
+                    {"detail": "No se pudo crear tu cuenta de acceso en este momento. "
+                               "Intenta de nuevo en unos minutos; si se repite, avisa a tu gerente."},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+            usuario.set_unusable_password()
+        else:
+            usuario.set_password(datos["password"])
         if datos.get("rut"):
             usuario.rut = datos["rut"]
         if datos.get("telefono"):
@@ -166,6 +181,10 @@ class CrearContrasenaView(APIView):
         # Consumir la invitación.
         invitacion.usada_en = timezone.now()
         invitacion.save(update_fields=["usada_en"])
+
+        # Con Firebase, el frontend inicia sesión allá con la contraseña recién creada.
+        if firebase.activo():
+            return Response({"firebase": True, "usuario": UsuarioSerializer(usuario).data})
 
         # Devolver tokens ya iniciados, para que entre directo tras crear la clave.
         refresh = RefreshToken.for_user(usuario)

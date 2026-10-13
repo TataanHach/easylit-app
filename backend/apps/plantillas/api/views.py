@@ -8,6 +8,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.common.archivos import ruta_local
 from apps.plantillas.models import Plantilla, UnidadCanonica
 
 from .serializers import (
@@ -83,7 +84,7 @@ class PlantillaViewSet(viewsets.ModelViewSet):
         error = ""
         try:
             revision = revisar_plantilla(
-                plantilla.archivo.path, list(plantilla.campos.all()), plantilla.tipos_hoja
+                ruta_local(plantilla.archivo), list(plantilla.campos.all()), plantilla.tipos_hoja
             )
         except FileNotFoundError:
             revision, error = None, (

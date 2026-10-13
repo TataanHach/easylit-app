@@ -6,6 +6,7 @@
  */
 import axios from "axios";
 import { configuracionActual } from "./configuracion";
+import { mensajeFirebase } from "./firebase";
 
 export interface MensajeError {
   titulo: string;
@@ -59,6 +60,9 @@ function textoDelBackend(data: unknown): string {
 
 export function describirError(e: unknown, accion: string): MensajeError {
   const titulo = `No se pudo ${accion}`;
+
+  const deFirebase = mensajeFirebase(e);
+  if (deFirebase) return { titulo, detalle: deFirebase };
 
   if (!axios.isAxiosError(e)) {
     // Error del código de la página, no del servidor: se deja en la consola y se

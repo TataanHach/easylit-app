@@ -13,6 +13,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
+from apps.common.archivos import ruta_local
 from apps.transformaciones.models import Bitacora, MapeoCampo, Transformacion
 
 from .serializers import (
@@ -97,7 +98,7 @@ class TransformacionViewSet(viewsets.ModelViewSet):
         transformacion = self.get_object()
         try:
             df, _ = limpieza.limpiar_excel(
-                transformacion.archivo_origen.path,
+                ruta_local(transformacion.archivo_origen),
                 transformacion.opciones_limpieza or {},
                 todas_las_hojas=True,
             )
@@ -126,7 +127,7 @@ class TransformacionViewSet(viewsets.ModelViewSet):
 
         textos_tabla = []
         try:
-            ruta = transformacion.archivo_origen.path
+            ruta = ruta_local(transformacion.archivo_origen)
             wb_ori = load_workbook(ruta, data_only=True, read_only=True)
             for nombre in limpieza.hojas_itemizado(ruta):
                 datos = generacion._leer_itemizado_origen(wb_ori[nombre])
@@ -230,7 +231,7 @@ class TransformacionViewSet(viewsets.ModelViewSet):
 
         transformacion = self.get_object()
         df, _ = limpieza.limpiar_excel(
-            transformacion.archivo_origen.path,
+            ruta_local(transformacion.archivo_origen),
             transformacion.opciones_limpieza or {},
             todas_las_hojas=True,
         )
@@ -277,7 +278,7 @@ class TransformacionViewSet(viewsets.ModelViewSet):
         # generar, para que el usuario lo vea ANTES y no se entere después.
         try:
             estados = generacion.estado_campos(
-                transformacion.plantilla.archivo.path,
+                ruta_local(transformacion.plantilla.archivo),
                 list(transformacion.plantilla.campos.all()), valores_por_campo,
                 transformacion.plantilla.tipos_hoja,
             )
@@ -296,8 +297,8 @@ class TransformacionViewSet(viewsets.ModelViewSet):
         # --- 2. Itemizados: leer las tablas del origen y limpiarlas ---
         itemizados_por_hoja = {}
         try:
-            ruta_plantilla = transformacion.plantilla.archivo.path
-            ruta_origen = transformacion.archivo_origen.path
+            ruta_plantilla = ruta_local(transformacion.plantilla.archivo)
+            ruta_origen = ruta_local(transformacion.archivo_origen)
             wb_dest = generacion.abrir_plantilla(ruta_plantilla, transformacion.plantilla.tipos_hoja)
             wb_ori = load_workbook(ruta_origen, data_only=True, read_only=True)
 
@@ -348,7 +349,7 @@ class TransformacionViewSet(viewsets.ModelViewSet):
 
         # --- 3. Armar la lista de hojas en orden ---
         try:
-            wb = load_workbook(transformacion.plantilla.archivo.path, read_only=True)
+            wb = load_workbook(ruta_local(transformacion.plantilla.archivo), read_only=True)
             orden_hojas = wb.sheetnames
             wb.close()
         except Exception:

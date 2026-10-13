@@ -5,7 +5,9 @@
  * llamadas aquí evita esparcir URLs por los componentes: si una ruta cambia, se
  * toca un solo lugar.
  */
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { api, tokenStore } from "@/api/client";
+import { auth, firebaseActivo } from "@/lib/firebase";
 import type { Usuario } from "@/types";
 
 interface LoginResp {
@@ -28,6 +30,16 @@ export const authService = {
 
   /** Login con correo y contraseña. Guarda los tokens y devuelve el usuario. */
   async login(email: string, password: string): Promise<Usuario> {
+    if (firebaseActivo && auth) {
+      // Firebase verifica la contraseña; el backend dice quién es (rol, organización).
+      await signInWithEmailAndPassword(auth, email, password);
+      try {
+        return await this.perfil();
+      } catch (e) {
+        await signOut(auth);   // cuenta de Firebase no habilitada en EasyLit
+        throw e;
+      }
+    }
     const { data } = await api.post<LoginResp>("/auth/login/", { email, password });
     tokenStore.set(data.access, data.refresh);
     return data.usuario;
@@ -41,7 +53,12 @@ export const authService = {
     rut?: string;
     telefono?: string;
   }): Promise<Usuario> {
-    const { data } = await api.post<LoginResp>("/auth/crear-contrasena/", payload);
+    const { data } = await api.post<LoginResp & { firebase?: boolean }>("/auth/crear-contrasena/", payload);
+    if (data.firebase && auth) {
+      // El backend creó la cuenta en Firebase: se entra con la contraseña recién creada.
+      await signInWithEmailAndPassword(auth, data.usuario.email, payload.password);
+      return data.usuario;
+    }
     tokenStore.set(data.access, data.refresh);
     return data.usuario;
   },
@@ -58,6 +75,10 @@ export const authService = {
    * sesión local se cierra igual.
    */
   logout() {
+    if (firebaseActivo && auth) {
+      signOut(auth).catch(() => {});
+      return;
+    }
     const refresh = tokenStore.refresh;
     if (refresh) api.post("/auth/logout/", { refresh }).catch(() => {});
     tokenStore.clear();

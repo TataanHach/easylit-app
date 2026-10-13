@@ -5,6 +5,7 @@ import re
 
 from celery import shared_task
 
+from apps.common.archivos import ruta_local
 from .models import Bitacora, EstadoTransformacion, Transformacion
 
 
@@ -65,7 +66,7 @@ def _plantilla_tiene_tablas(plantilla):
     from openpyxl import load_workbook
     from .services import generacion
     try:
-        wb = generacion.abrir_plantilla(plantilla.archivo.path, plantilla.tipos_hoja)
+        wb = generacion.abrir_plantilla(ruta_local(plantilla.archivo), plantilla.tipos_hoja)
         hay = any(generacion._detectar_encabezado_tabla(ws) for ws in wb.worksheets)
         wb.close()
         return hay
@@ -88,12 +89,12 @@ def procesar_transformacion(transformacion_id):
 
     try:
         df, resumen = limpieza.limpiar_excel(
-            t.archivo_origen.path, t.opciones_limpieza or {},
+            ruta_local(t.archivo_origen), t.opciones_limpieza or {},
             todas_las_hojas=True,
         )
         # Las hojas de itemizado (tablas de partidas) no aparecen en `df`: las
         # copia el generador directo a las hojas de tabla de la plantilla.
-        itemizados = limpieza.hojas_itemizado(t.archivo_origen.path)
+        itemizados = limpieza.hojas_itemizado(ruta_local(t.archivo_origen))
         sin_formulario = df.empty or len(df.columns) == 0
         if sin_formulario and not itemizados:
             raise ErrorUsuario(
@@ -176,7 +177,7 @@ def procesar_transformacion(transformacion_id):
         if itemizados:
             from .services import generacion
             tablas = generacion.emparejamiento_tablas(
-                t.plantilla.archivo.path, t.archivo_origen.path, t.plantilla.tipos_hoja
+                ruta_local(t.plantilla.archivo), ruta_local(t.archivo_origen), t.plantilla.tipos_hoja
             )
             for info in tablas.values():
                 confianzas.extend(info.pop("puntajes"))
@@ -219,7 +220,7 @@ def generar_documento_tarea(transformacion_id):
 
     try:
         df, _ = limpieza.limpiar_excel(
-            t.archivo_origen.path, t.opciones_limpieza or {},
+            ruta_local(t.archivo_origen), t.opciones_limpieza or {},
             todas_las_hojas=True,
         )
         primera_fila = df.iloc[0] if len(df) > 0 else None
@@ -256,13 +257,13 @@ def generar_documento_tarea(transformacion_id):
         # Campos que quedarán vacíos y por qué (sin dato, sin casilla, dentro de
         # una tabla…): se guardan en la bitácora y se le muestran al usuario.
         avisos = generacion.campos_sin_escribir(
-            t.plantilla.archivo.path, list(t.plantilla.campos.all()),
+            ruta_local(t.plantilla.archivo), list(t.plantilla.campos.all()),
             {m["campo"].id: m["valor"] for m in mapeos_con_valor},
             t.plantilla.tipos_hoja,
         )
         contenido = generacion.generar_documento(
-            t.plantilla.archivo.path, mapeos_con_valor,
-            ruta_origen=t.archivo_origen.path,
+            ruta_local(t.plantilla.archivo), mapeos_con_valor,
+            ruta_origen=ruta_local(t.archivo_origen),
             calcular_totales=bool((t.resultado_limpieza or {}).get("calcular_totales")),
             valores_ia_tablas=(t.resultado_limpieza or {}).get("valores_ia_tablas"),
             avisos=avisos,

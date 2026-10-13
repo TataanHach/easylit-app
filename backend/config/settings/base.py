@@ -134,3 +134,14 @@ CONTRASENA_MIN = config("CONTRASENA_MIN", default=6, cast=int)
 CONTRASENA_MAX = config("CONTRASENA_MAX", default=18, cast=int)
 ARCHIVO_MAX_MB = config("ARCHIVO_MAX_MB", default=20, cast=int)  # nginx.conf deja pasar un poco más
 INVITACION_DIAS_VIGENCIA = config("INVITACION_DIAS_VIGENCIA", default=7, cast=int)
+
+# --- Autenticación con Firebase (opcional) ---
+# Con FIREBASE_PROJECT_ID, el login lo hace Firebase y Django verifica su token.
+# Sin él, se usa el login propio con JWT (desarrollo local).
+FIREBASE_PROJECT_ID = config("FIREBASE_PROJECT_ID", default="")
+# JSON de la cuenta de servicio (para crear las cuentas de los invitados).
+FIREBASE_CREDENCIALES = config("FIREBASE_CREDENCIALES", default="")
+if FIREBASE_PROJECT_ID:
+    REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"] = (
+        "apps.usuarios.firebase.FirebaseAuthentication",
+    )
