@@ -176,9 +176,24 @@ def procesar_transformacion(transformacion_id):
         # licitación que solo trae tablas quedaba en 0% aunque calzara perfecto.
         if itemizados:
             from .services import generacion
-            tablas = generacion.emparejamiento_tablas(
-                ruta_local(t.plantilla.archivo), ruta_local(t.archivo_origen), t.plantilla.tipos_hoja
-            )
+            ruta_plantilla, ruta_origen = ruta_local(t.plantilla.archivo), ruta_local(t.archivo_origen)
+            tablas = generacion.emparejamiento_tablas(ruta_plantilla, ruta_origen, t.plantilla.tipos_hoja)
+            # Las columnas que no calzaron por nombre se le preguntan a la IA.
+            sin_pareja = {h: i["sin_pareja"] for h, i in tablas.items() if i["sin_pareja"]}
+            if sin_pareja:
+                try:
+                    pedido = generacion.pedido_ia_columnas(
+                        ruta_plantilla, ruta_origen, sin_pareja, t.plantilla.tipos_hoja,
+                        anonimizar=t.organizacion.anonimizar_montos,
+                    )
+                    columnas_ia, modelo_columnas = ia.sugerir_columnas_tablas(pedido)
+                except Exception:
+                    columnas_ia, modelo_columnas = {}, "columnas-ia-fallo"
+                t.resultado_limpieza["modelo_columnas"] = modelo_columnas
+                if columnas_ia:
+                    t.resultado_limpieza["columnas_ia"] = columnas_ia
+                    tablas = generacion.emparejamiento_tablas(
+                        ruta_plantilla, ruta_origen, t.plantilla.tipos_hoja, columnas_ia)
             for info in tablas.values():
                 confianzas.extend(info.pop("puntajes"))
             t.resultado_limpieza["tablas_emparejadas"] = tablas
@@ -268,6 +283,8 @@ def generar_documento_tarea(transformacion_id):
             valores_ia_tablas=(t.resultado_limpieza or {}).get("valores_ia_tablas"),
             avisos=avisos,
             tipos_hoja=t.plantilla.tipos_hoja,
+            columnas_ia=(t.resultado_limpieza or {}).get("columnas_ia"),
+            columnas_usuario=(t.resultado_limpieza or {}).get("columnas_usuario"),
         )
 
         nombre = f"generado_{t.id}.xlsx"

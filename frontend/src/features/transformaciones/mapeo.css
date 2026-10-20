@@ -187,6 +187,15 @@
 /* Tabla de itemizado: celdas más compactas y numéricas a la derecha */
 .preview-itemizado th, .preview-itemizado td { white-space: nowrap; padding: 6px 14px; }
 .preview-itemizado td:not(:first-child) { text-align: right; }
+
+/* Tabla larga: muestra ~15 filas y baja dentro de su propia barra; el
+   encabezado (con el selector de columna) queda fijo arriba. */
+.preview-scroll { overflow: auto; max-height: calc(15 * 33px + 64px); }
+.preview-scroll thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--surface-2, var(--surface)); box-shadow: inset 0 -1px 0 var(--line-soft);
+}
+.preview-filas-total { margin: 0 16px 8px; font-size: var(--fs-sm); color: var(--text-3); }
  
 .iva-select {
   padding: 3px 8px; border: 1px solid var(--line-strong); border-radius: var(--r-sm);
@@ -241,6 +250,22 @@
 .totales-banda > span { flex: 1; min-width: 200px; }
 .totales-banda .btn { white-space: nowrap; }
 .celda-calculada { background: var(--brand-50); color: var(--brand-700); font-weight: 600; font-style: italic; }
+
+/* Columna del origen que llena cada columna de tabla (selector en el encabezado) */
+.columna-origen {
+  display: flex; align-items: center; gap: 4px; margin-top: 4px;
+  font-size: var(--fs-xs); font-weight: 400; color: var(--text-3);
+}
+.columna-origen select {
+  max-width: 170px; padding: 2px 6px; border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+  font-size: var(--fs-xs); background: var(--surface); color: var(--text-2); cursor: pointer;
+}
+.columna-origen select:focus { border-color: var(--brand-600); outline: none; }
+.columna-origen select:disabled { opacity: .6; cursor: wait; }
+.columna-origen-ia select { border-color: var(--ai-600); color: var(--ai-600); background: var(--ai-50); }
+.columna-origen-ia i { color: var(--ai-600); }
+.columna-origen-vacia select { border-color: var(--warn-700); color: var(--warn-700); background: var(--warn-50); }
+.columna-origen-usuario select { border-color: var(--brand-600); color: var(--brand-700); }
 
 /* Celdas de tabla limpiadas por la IA */
 .celda-ia { background: var(--ai-50); color: var(--ai-600); }

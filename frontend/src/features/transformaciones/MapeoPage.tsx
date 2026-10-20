@@ -23,6 +23,18 @@ function resumir(items: string[], max = 8): string[] {
 
 interface EstadoCampo { campo: string; hoja: string; ok: boolean; valor: string }
 
+/** De qué columna del origen sale una columna de tabla, y por qué. */
+interface ParejaColumna {
+  destino: string; origen: string | null;
+  fuente: "usuario" | "nombre" | "ia" | "ninguna"; motivo: string;
+}
+const FUENTE_COLUMNA: Record<string, string> = {
+  usuario: "Elegida por ti",
+  nombre: "Emparejada por nombre",
+  ia: "Sugerida por la IA: revísala",
+  vacia: "Quedará vacía: elige una columna del origen si corresponde",
+};
+
 /**
  * Campos que se llenarán, agrupados por hoja ("Hoja «X»: 3 de 4 campos"), con
  * el valor que llevará cada uno. Los que quedan vacíos van en su propio grupo.
@@ -37,6 +49,7 @@ function grupoLimpiezaAuto(resumen?: Record<string, number>) {
     fechas: (n) => `${n} fecha(s) al formato 15-08-2024`,
     ruts: (n) => `${n} RUT con puntos y guion (dígito verificador comprobado)`,
     correos: (n) => `${n} correo(s) sin espacios y en minúsculas`,
+    telefonos: (n) => `${n} teléfono(s) al formato +56 9 1234 5678`,
     plazos: (n) => `${n} plazo(s) o cantidad(es) a número («sesenta (60) días» → 60)`,
     nombres: (n) => `${n} nombre(s) de persona con mayúsculas iniciales`,
     unidades: (n) => `${n} unidad(es) normalizada(s) («mts2» → m2)`,
@@ -162,7 +175,10 @@ export default function MapeoPage() {
 
     // Columnas de las tablas de la plantilla que no encontraron pareja en el origen.
     const emparejadas = (t.resultado_limpieza?.tablas_emparejadas ?? {}) as Record<
-      string, { columnas: number; emparejadas: number; sin_pareja: string[] }
+      string, {
+        columnas: number; emparejadas: number; sin_pareja: string[];
+        por_ia?: { destino: string; origen: string; motivo: string }[];
+      }
     >;
     const colsTotal = Object.values(emparejadas).reduce((s, i) => s + i.columnas, 0);
     const colsOk = Object.values(emparejadas).reduce((s, i) => s + i.emparejadas, 0);
@@ -197,6 +213,13 @@ export default function MapeoPage() {
         grupos.push({
           titulo: `Tabla «${hoja}»: columnas sin pareja en el origen`,
           items: resumir(info.sin_pareja.map((c) => `«${c}» quedará vacía: el origen no tiene una columna parecida.`)),
+        });
+      }
+      // Parejas que sugirió la IA (no calzaban por nombre): conviene revisarlas.
+      if (info.por_ia?.length) {
+        grupos.push({
+          titulo: `Tabla «${hoja}»: columnas emparejadas por la IA (revísalas en el encabezado de la tabla, en la vista previa)`,
+          items: resumir(info.por_ia.map((p) => `«${p.destino}» ← «${p.origen}»${p.motivo ? `: ${p.motivo}` : ""}`)),
         });
       }
     });
@@ -284,6 +307,21 @@ export default function MapeoPage() {
       await refetchPreview();
     } catch (e) {
       avisos.error(describirError(e, `ajustar el IVA de «${campoNombre}»`));
+    }
+  }
+
+  const [guardandoColumna, setGuardandoColumna] = useState<string | null>(null);
+
+  async function cambiarColumna(hojaNombre: string, destino: string, origen: string) {
+    if (!id) return;
+    setGuardandoColumna(destino);
+    try {
+      await transformacionService.asignarColumna(id, hojaNombre, destino, origen || null);
+      await Promise.all([refetchPreview(), refetch()]);
+    } catch (e) {
+      avisos.error(describirError(e, `cambiar la columna «${destino}»`));
+    } finally {
+      setGuardandoColumna(null);
     }
   }
 
@@ -622,11 +660,39 @@ export default function MapeoPage() {
             </div>
           )}
 
+          {hoja?.tipo === "itemizado" && hoja.tabla.filas.length > 15 && (
+            <div className="preview-filas-total">
+              {hoja.tabla.filas.length.toLocaleString("es-CL")} filas · baja dentro de la tabla para verlas todas
+            </div>
+          )}
           {hoja?.tipo === "itemizado" && (
-            <div style={{ overflowX: "auto" }}>
+            // Alto de ~15 filas con su propia barra: con miles de filas la página no se alarga.
+            <div className="preview-scroll">
               <table className="preview-tabla preview-itemizado">
                 <thead>
-                  <tr>{hoja.tabla.columnas.map((c: string, i: number) => <th key={i}>{c}</th>)}</tr>
+                  <tr>{hoja.tabla.columnas.map((c: string, i: number) => {
+                    // De qué columna del origen sale esta: se puede cambiar aquí mismo.
+                    const p = hoja.tabla.parejas?.[i] as ParejaColumna | undefined;
+                    return (
+                      <th key={i}>
+                        {c}
+                        {p && (
+                          <div className={`columna-origen columna-origen-${p.origen ? p.fuente : "vacia"}`}
+                            title={FUENTE_COLUMNA[p.origen ? p.fuente : "vacia"] + (p.motivo ? `: ${p.motivo}` : "")}>
+                            <span>←</span>
+                            <select value={p.origen ?? ""} disabled={guardandoColumna === c}
+                              onChange={(e) => cambiarColumna(hoja.nombre, c, e.target.value)}>
+                              <option value="">(vacía)</option>
+                              {(hoja.tabla.columnas_origen as string[]).map((o) => (
+                                <option key={o} value={o}>{o}</option>
+                              ))}
+                            </select>
+                            {p.fuente === "ia" && p.origen && <i className="ti ti-sparkles" />}
+                          </div>
+                        )}
+                      </th>
+                    );
+                  })}</tr>
                 </thead>
                 <tbody>
                   {hoja.tabla.filas.map((fila: string[], i: number) => (

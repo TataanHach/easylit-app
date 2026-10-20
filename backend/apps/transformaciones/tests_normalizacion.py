@@ -99,3 +99,16 @@ class DataFrameTest(SimpleTestCase):
         for valor in ("15-08-2024", "12.345.678-5", "a@b.cl", "$ 150.000.000.- (ciento cincuenta millones)", "1200 m2"):
             self.assertTrue(n.resuelto_por_reglas(valor), valor)
         self.assertFalse(n.resuelto_por_reglas("Constructora y Servi cios Spa"))
+
+
+class TelefonoTest(SimpleTestCase):
+    def test_un_solo_formato_sin_inventar(self):
+        from apps.transformaciones.services.normalizacion import telefono
+        self.assertEqual(telefono(56998019366), "+56 9 9801 9366")        # número de Excel
+        self.assertEqual(telefono("9 6597 9624"), "+56 9 6597 9624")
+        self.assertEqual(telefono("+56 9 6355 2407 "), "+56 9 6355 2407")
+        self.assertEqual(telefono("22 345 6789"), "+56 2 2345 6789")      # Santiago
+        self.assertEqual(telefono(412736183), "+56 41 273 6183")          # Concepción
+        self.assertIsNone(telefono("6 9915 1736"))                        # 69 no es código de área
+        self.assertIsNone(telefono(84224173))                             # 8 dígitos: ambiguo
+        self.assertIsNone(telefono("Sin teléfono"))

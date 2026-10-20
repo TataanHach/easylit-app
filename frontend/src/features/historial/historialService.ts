@@ -100,6 +100,15 @@ export const transformacionService = {
     return data as { mapeos: any[]; quitado_de: string | null };
   },
 
+  /**
+   * Elige de qué columna del origen sale una columna de tabla de la plantilla
+   * (origen null = dejarla vacía). Manda sobre el emparejamiento por nombre y la IA.
+   */
+  async asignarColumna(id: string, hoja: string, destino: string, origen: string | null) {
+    const { data } = await api.post(`/transformaciones/${id}/asignar_columna/`, { hoja, destino, origen });
+    return data;
+  },
+
   /** Calcula (o deja de calcular) los totales faltantes de las tablas: precio × cantidad. */
   async calcularTotales(id: string, activar: boolean) {
     const { data } = await api.post(`/transformaciones/${id}/calcular_totales/`, { activar });

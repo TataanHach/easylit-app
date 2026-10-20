@@ -124,6 +124,34 @@ def fecha(valor):
 # RUT
 # ─────────────────────────────────────────────────────────────
 
+def telefono(valor):
+    """
+    Teléfono chileno en un solo formato: «+56 9 1234 5678» (celular),
+    «+56 2 1234 5678» (Santiago) o «+56 41 212 3456» (regiones). Acepta números
+    de Excel (56998019366), con o sin +56 y con cualquier espaciado. Devuelve
+    None si no es un teléfono chileno reconocible (se deja como venía).
+    """
+    if valor is None or isinstance(valor, bool):
+        return None
+    if isinstance(valor, float) and valor.is_integer():
+        valor = int(valor)
+    digitos = re.sub(r"\D", "", str(valor))
+    if len(digitos) == 11 and digitos.startswith("56"):
+        digitos = digitos[2:]
+    if len(digitos) != 9:
+        return None   # 8 dígitos ("9 9999999") es ambiguo: no se adivina
+    if digitos[0] in "92":
+        return f"+56 {digitos[0]} {digitos[1:5]} {digitos[5:]}"
+    if digitos[:2] in _CODIGOS_AREA:
+        return f"+56 {digitos[:2]} {digitos[2:5]} {digitos[5:]}"
+    return None   # "6 9915 1736": no es un código de área real; no se inventa
+
+
+# Códigos de área de teléfonos fijos de regiones (Santiago es el 2).
+_CODIGOS_AREA = {"32", "33", "34", "35", "41", "42", "43", "45", "51", "52", "53", "55",
+                 "57", "58", "61", "63", "64", "65", "67", "71", "72", "73", "75"}
+
+
 def rut(valor):
     """
     RUT válido → "12.345.678-5". None si no tiene forma de RUT o si el dígito
@@ -390,16 +418,24 @@ def limpiar_dataframe(df):
     de ofertas"), siempre que la celda entera sea la fecha o el RUT.
     """
     df = df.copy()
-    resumen = {"fechas": 0, "ruts": 0, "correos": 0, "plazos": 0, "nombres": 0,
+    resumen = {"fechas": 0, "ruts": 0, "correos": 0, "telefonos": 0, "plazos": 0, "nombres": 0,
                "unidades": 0, "tildes": 0, "errores_excel": 0, "espacios": 0}
 
     for col in df.columns:
         serie = df[col]
+        tipo = tipo_columna(col)
+        if tipo == "telefono":
+            # Todas las celdas, también las que Excel guardó como número
+            # (56998019366): si no, la columna quedaba con formatos mezclados.
+            normal = serie.map(telefono)
+            hay = normal.notna()
+            resumen["telefonos"] += int((normal[hay] != serie[hay].astype(str)).sum())
+            df[col] = serie.astype(object).where(~hay, normal)
+            serie = df[col]
         es_texto = serie.map(lambda v: isinstance(v, str))
         es_fecha_excel = serie.map(lambda v: isinstance(v, (datetime, date)))
         if not (es_texto.any() or es_fecha_excel.any()):
             continue
-        tipo = tipo_columna(col)
         # Como object: en una columna de tipo fecha, pandas volvería a convertir
         # el texto "01-09-2024" a fecha leyendo el mes primero (9 de enero).
         nueva = serie.astype(object)

@@ -14,9 +14,11 @@ import unicodedata
 from datetime import date, datetime
 
 from openpyxl import load_workbook
-from openpyxl.utils import coordinate_to_tuple
+from openpyxl.cell.cell import MergedCell
+from openpyxl.formula.translate import Translator
+from openpyxl.utils import coordinate_to_tuple, get_column_letter
 
-from .normalizacion import fecha, numero_en_palabras, resuelto_por_reglas, rut
+from .normalizacion import fecha, numero_en_palabras, resuelto_por_reglas, rut, telefono
 
 
 FORMATOS_EXCEL = {
@@ -63,7 +65,8 @@ def _a_numero(valor):
             s = s.replace(",", ".")
     elif "." in s:
         partes = s.split(".")
-        if all(len(g) == 3 for g in partes[1:]):
+        # "0.125" es decimal: ningún número con miles empieza en 0.
+        if partes[0] != "0" and all(len(g) == 3 for g in partes[1:]):
             s = s.replace(".", "")
         elif len(partes) > 2:
             s = s.replace(".", "")
@@ -97,6 +100,9 @@ def _limpiar_email(v):
 
 
 def _limpiar_telefono(v):
+    normal = telefono(v)
+    if normal:
+        return normal
     s = str(v)
     s = re.split(r"[/,]", s)[0].strip()
     s = re.sub(r"[^\d+]", "", s)
@@ -116,7 +122,9 @@ def _limpiar_monto(v):
             s = s.replace(",", "")
         else:
             s = s.replace(",", ".")
-    else:
+    elif re.fullmatch(r"[1-9]\d{0,2}(\.\d{3})+\.?", s):
+        # Solo puntos de miles ("1.500.000"). Un punto decimal ("5970672.7636",
+        # como llegan los números de Excel) se conserva: quitarlo multiplicaba el monto.
         s = s.replace(".", "")
     s = s.rstrip(".-")
     try:
@@ -127,18 +135,13 @@ def _limpiar_monto(v):
 
 
 def _limpiar_numero(v):
-    s = str(v)
-    if re.search(r"\d{1,3}(\.\d{3})+", s):
-        return _limpiar_monto(s)
-    m = re.search(r"\d+([.,]\d+)?", s)
-    if m:
-        num = m.group().replace(".", "").replace(",", ".")
-        try:
-            f = float(num)
-            return str(int(f)) if f == int(f) else str(f)
-        except ValueError:
-            return m.group()
-    return v
+    m = re.search(r"\d[\d.,]*", str(v))
+    if not m:
+        return v
+    num = _a_numero(m.group().rstrip(".,"))
+    if num is None:
+        return m.group()
+    return str(int(num)) if num == int(num) else str(num)
 
 
 def _limpiar_cantidad(v):
@@ -204,6 +207,7 @@ def limpiar_valor(valor, campo):
 _PALABRAS_TABLA = [
     "descripcion", "cantidad", "precio", "valor", "total", "unidad",
     "cargo", "rol", "remuneracion", "item", "detalle", "personas", "monto", "pagar",
+    "subtotal", "cant",
 ]
 
 
@@ -215,7 +219,9 @@ def _texto(c):
 # a columnas enteras): recorrerlas todas tardaba minutos. El encabezado se busca
 # solo arriba, y la tabla termina tras varias filas seguidas vacías.
 _MAX_FILAS_ENCABEZADO = 100
-_MAX_FILAS_VACIAS = 50
+# Con 50 se leían como partidas los bloques que hay bajo la tabla (una lista de
+# factores, notas…). Dos filas vacías seguidas ya separan otra cosa.
+_MAX_FILAS_VACIAS = 2
 
 
 TIPOS_HOJA = ("TABLA", "FORMULARIO")
@@ -239,6 +245,15 @@ def _tipo_manual(ws):
 def _es_dato(v):
     """Números y fechas no pueden ser encabezados de columna."""
     return isinstance(v, (int, float, date, datetime)) and not isinstance(v, bool)
+
+
+def _tiene_palabra_tabla(texto):
+    """
+    ¿El texto tiene una palabra típica de encabezado? Por palabra completa (o
+    su comienzo, para plurales: «Totales», «Precios»): buscada dentro del texto,
+    «rol» aparecía en «Carol» y una fila de datos pasaba por encabezado.
+    """
+    return any(w.startswith(p) for w in _normalizar(texto).split() for p in _PALABRAS_TABLA)
 
 
 def _encabezado_por_forma(filas):
@@ -268,7 +283,29 @@ def _encabezado_por_forma(filas):
     return None
 
 
+def _nombres_unicos(celdas):
+    """
+    Nombres de columna sin repetir: la segunda «SUB TOTAL» pasa a ser «SUB TOTAL (2)».
+    Con dos tablas lado a lado (mismos títulos), los valores se guardan por
+    nombre y la segunda tabla pisaba a la primera.
+    """
+    vistos, salida = {}, []
+    for c in celdas:
+        if c:
+            clave = _normalizar(c)
+            vistos[clave] = vistos.get(clave, 0) + 1
+            if vistos[clave] > 1:
+                c = f"{c} ({vistos[clave]})"
+        salida.append(c)
+    return salida
+
+
 def _detectar_encabezado_tabla(ws, origen=False):
+    r = _buscar_encabezado_tabla(ws, origen)
+    return (r[0], _nombres_unicos(r[1])) if r else None
+
+
+def _buscar_encabezado_tabla(ws, origen=False):
     """
     Busca la fila ENCABEZADO de una tabla. Devuelve (fila, [columnas]) o None.
       1. Marca manual de la plantilla: "FORMULARIO" = nunca es tabla.
@@ -283,8 +320,9 @@ def _detectar_encabezado_tabla(ws, origen=False):
     for i, fila in enumerate(filas, start=1):
         celdas = [_texto(c) for c in fila]
         con_texto = [c for c in celdas if c]
-        if len(con_texto) >= 3:
-            coinc = sum(1 for c in con_texto if any(p in _normalizar(c) for p in _PALABRAS_TABLA))
+        # Una fila con números o fechas es de datos, no de títulos.
+        if len(con_texto) >= 3 and not any(_es_dato(c) for c in fila):
+            coinc = sum(1 for c in con_texto if _tiene_palabra_tabla(c))
             if coinc >= 2:
                 return i, celdas
     if origen:
@@ -299,16 +337,22 @@ def _detectar_encabezado_tabla(ws, origen=False):
     return None
 
 
-def _leer_itemizado_origen(ws):
-    """Lee una tabla de partidas del origen. Devuelve dict o None."""
+def _leer_itemizado_origen(ws, ws_formulas=None):
+    """
+    Lee una tabla de partidas del origen. Devuelve dict o None.
+    `ws` es la hoja con los valores calculados; `ws_formulas` (opcional), la
+    misma hoja con sus fórmulas, para poder copiarlas al documento.
+    """
     r = _detectar_encabezado_tabla(ws, origen=True)
     if not r:
         return None
     fila_enc, encabezados = r
     cols = [(idx, nom) for idx, nom in enumerate(encabezados) if nom]
-    partidas = []
+    # `filas`: distancia de cada partida al encabezado, para escribirla en la
+    # misma posición del destino (saltarse filas en 0 corría todo hacia arriba).
+    partidas, filas = [], []
     vacias = 0
-    for fila in ws.iter_rows(min_row=fila_enc + 1, values_only=True):
+    for n, fila in enumerate(ws.iter_rows(min_row=fila_enc + 1, values_only=True), start=1):
         # Se guarda el valor ORIGINAL (fecha, número o texto), no su texto:
         # convertir todo a str perdía las fechas y los números.
         valores = {nom: (fila[idx] if idx < len(fila) else None) for idx, nom in cols}
@@ -318,6 +362,7 @@ def _leer_itemizado_origen(ws):
         # Precio*Cantidad) hasta el final de la hoja, y en filas vacías dan 0.
         if any(_texto(v) and v != 0 for v in valores.values()):
             partidas.append(valores)
+            filas.append(n)
             vacias = 0
         else:
             vacias += 1
@@ -325,8 +370,58 @@ def _leer_itemizado_origen(ws):
                 break
     if not partidas:
         return None
-    return {"hoja": ws.title, "encabezados": [n for _, n in cols],
-            "partidas": _normalizar_partidas(partidas)}
+    datos = {"hoja": ws.title, "encabezados": [n for _, n in cols],
+             "partidas": _normalizar_partidas(partidas), "filas": filas,
+             "fila_encabezado": fila_enc, "indices": {nom: idx for idx, nom in cols}}
+    if ws_formulas is not None:
+        # Fórmulas de cada partida, {columna: "=E4*D4"}, en el mismo orden.
+        con_formula = list(ws_formulas.iter_rows(
+            min_row=fila_enc + 1, max_row=fila_enc + filas[-1], values_only=True))
+        datos["formulas"] = [
+            {nom: v for idx, nom in cols
+             for v in [con_formula[n - 1][idx] if idx < len(con_formula[n - 1]) else None]
+             if isinstance(v, str) and v.startswith("=")}
+            for n in filas
+        ]
+    return datos
+
+
+_REF_CELDA = re.compile(r"^\$?[A-Z]{1,3}\$?\d+(:\$?[A-Z]{1,3}\$?\d+)?$|^\$?[A-Z]{1,3}:\$?[A-Z]{1,3}$|^\$?\d+:\$?\d+$")
+
+
+def _formula_copiable(formula, ws_destino, se_mueve):
+    """
+    ¿Se puede copiar esta fórmula del origen a la hoja destino? Solo si todo lo
+    que usa existe en la plantilla: las hojas que nombra y los nombres definidos
+    (grati, tope…). Si la tabla cambia de lugar (`se_mueve`), las referencias a
+    otras hojas no se pueden ajustar con seguridad: entonces tampoco.
+    """
+    from openpyxl.formula.tokenizer import Token, Tokenizer
+
+    wb = ws_destino.parent
+    try:
+        tokens = Tokenizer(formula).items
+    except Exception:
+        return False
+    for t in tokens:
+        if t.type != Token.OPERAND or t.subtype != Token.RANGE:
+            continue
+        ref = t.value
+        hoja = ws_destino
+        if "!" in ref:
+            nombre_hoja, ref = ref.rsplit("!", 1)
+            nombre_hoja = nombre_hoja.strip("'").replace("''", "'")
+            if se_mueve or nombre_hoja not in wb.sheetnames:
+                return False
+            hoja = wb[nombre_hoja]
+        if "#REF" in ref or "[" in ref:
+            return False      # referencia rota o a una tabla con nombre de Excel
+        if _REF_CELDA.match(ref.upper()):
+            continue
+        # Es un nombre definido: tiene que existir en la plantilla.
+        if ref not in hoja.defined_names and ref not in ws_destino.defined_names and ref not in wb.defined_names:
+            return False
+    return True
 
 
 def _normalizar_partidas(partidas):
@@ -344,17 +439,56 @@ def clave_ia_tabla(hoja, columna):
     return f"{hoja}::{columna}"
 
 
-def _emparejar_columnas(cols_origen, cols_destino):
-    """Para cada columna destino, la columna origen que más palabras comparte."""
+def columnas_ia_hoja(columnas_ia, hoja):
+    """{columna destino: columna origen} que sugirió la IA para una hoja."""
+    return {d: s["origen"] for d, s in ((columnas_ia or {}).get(hoja) or {}).items()}
+
+
+def columnas_usuario_hoja(resultado_limpieza, hoja):
+    """{columna destino: columna origen ("" = dejarla vacía)} elegidas por el usuario."""
+    return dict(((resultado_limpieza or {}).get("columnas_usuario") or {}).get(hoja) or {})
+
+
+def parejas_columnas(cols_origen, cols_destino, sugeridas=None, usuario=None):
+    """
+    De qué columna del origen sale cada columna destino, y por qué:
+    {destino: (origen o None, fuente)}, con fuente "usuario", "nombre", "ia" o "ninguna".
+    Manda lo que eligió el usuario (también "" = dejarla vacía); si no eligió,
+    la del mismo nombre o parecido; si no hay, la que sugirió la IA.
+    """
+    por_nombre = _emparejar_por_nombre(cols_origen, cols_destino)
+    usuario, sugeridas = usuario or {}, sugeridas or {}
+    parejas = {}
+    for d in cols_destino:
+        if d in usuario:
+            parejas[d] = (usuario[d] if usuario[d] in cols_origen else None, "usuario")
+        elif por_nombre[d]:
+            parejas[d] = (por_nombre[d], "nombre")
+        elif sugeridas.get(d) in cols_origen:
+            parejas[d] = (sugeridas[d], "ia")
+        else:
+            parejas[d] = (None, "ninguna")
+    return parejas
+
+
+def _emparejar_columnas(cols_origen, cols_destino, sugeridas=None, usuario=None):
+    """{columna destino: columna origen o None}. Ver parejas_columnas."""
+    return {d: o for d, (o, _) in parejas_columnas(cols_origen, cols_destino, sugeridas, usuario).items()}
+
+
+def _emparejar_por_nombre(cols_origen, cols_destino):
     mapa = {}
     for col_dest in cols_destino:
         nd = set(_normalizar(col_dest).split())
-        mejor, mejor_score = None, 0
+        mejor, mejor_score = None, None
         for col_ori in cols_origen:
             no = set(_normalizar(col_ori).split())
             comunes = nd & no
-            if comunes and len(comunes) > mejor_score:
-                mejor, mejor_score = col_ori, len(comunes)
+            if not comunes:
+                continue
+            score = (_normalizar(col_ori) == _normalizar(col_dest), len(comunes), -len(no - nd))
+            if mejor_score is None or score > mejor_score:
+                mejor, mejor_score = col_ori, score
         mapa[col_dest] = mejor
     return mapa
 
@@ -461,6 +595,39 @@ def texto_celda_tabla(valor, nombre_columna):
     return str(v)
 
 
+def _miles_cl(num, decimales):
+    """1234567.891 → «1.234.567,89» (formato chileno)."""
+    texto = f"{num:,.{decimales}f}"
+    return texto.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def texto_campo(valor, campo):
+    """
+    Cómo se verá un campo de formulario en el documento, para la vista previa.
+    Mostrar el número crudo («5970672.7636») confundía: con el punto chileno de
+    miles se lee como 59 mil millones.
+    """
+    limpio = limpiar_valor(valor, campo)
+    if limpio is None:
+        return None
+    formato = getattr(campo, "formato_numero", "") or "NINGUNO"
+    es_numero = formato in FORMATOS_EXCEL or getattr(campo, "tipo", "") == "NUMERO"
+    num = _a_numero(limpio) if es_numero else None
+    if num is None:
+        return str(limpio)
+    if formato == "PESOS":
+        return f"${_miles_cl(num, 0)}"
+    if formato == "PESOS_DEC":
+        return f"${_miles_cl(num, 2)}"
+    if formato == "UF":
+        return f"{_miles_cl(num, 2)} UF"
+    if formato == "PORCENTAJE":
+        return f"{_miles_cl(num, 1)}%"
+    if formato == "ENTERO":
+        return _miles_cl(num, 0)
+    return _miles_cl(num, 0 if float(num).is_integer() else 2)
+
+
 def _es_num(v):
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
@@ -479,15 +646,18 @@ def columnas_calculo_total(cols_dest):
     return (total, cantidad, precio) if total and cantidad and precio else None
 
 
-def filas_itemizado(datos_origen, cols_dest, calcular_totales=False, valores_ia=None):
+def filas_itemizado(datos_origen, cols_dest, calcular_totales=False, valores_ia=None,
+                    columnas_ia=None, columnas_usuario=None):
     """
     Filas limpias de una tabla, listas para la vista previa o el documento.
     Devuelve (filas, faltantes): cada fila es (valores {columna: valor},
     columnas_calculadas, columnas_limpiadas_por_ia). `faltantes` = filas sin
     total pero con precio y cantidad; si `calcular_totales`, a esas se les pone
     precio × cantidad. `valores_ia` = {clave_ia_tabla: {original: limpio}}.
+    `columnas_ia` = {columna destino: columna origen} sugeridas por la IA;
+    `columnas_usuario` = las que eligió el usuario (mandan sobre todo).
     """
-    mapa = _emparejar_columnas(datos_origen["encabezados"], cols_dest)
+    mapa = _emparejar_columnas(datos_origen["encabezados"], cols_dest, columnas_ia, columnas_usuario)
     calc = columnas_calculo_total(cols_dest)
     valores_ia = valores_ia or {}
     hoja = datos_origen.get("hoja", "")
@@ -548,7 +718,8 @@ def textos_para_ia(datos_origen, maximo=300):
     return salida
 
 
-def _volcar_itemizado(ws_destino, datos_origen, calcular_totales=False, valores_ia=None):
+def _volcar_itemizado(ws_destino, datos_origen, calcular_totales=False, valores_ia=None,
+                      columnas_ia=None, columnas_usuario=None):
     """
     Escribe las partidas del origen en la tabla del destino, emparejando columnas
     y limpiando cada celda. Devuelve cuántas partidas escribió.
@@ -560,24 +731,56 @@ def _volcar_itemizado(ws_destino, datos_origen, calcular_totales=False, valores_
     cols_dest = [(idx, nom) for idx, nom in enumerate(encabezados_dest) if nom]
     nombres_dest = [n for _, n in cols_dest]
 
-    filas, _ = filas_itemizado(datos_origen, nombres_dest, calcular_totales, valores_ia)
+    filas, _ = filas_itemizado(datos_origen, nombres_dest, calcular_totales, valores_ia,
+                               columnas_ia, columnas_usuario)
+    # Cada partida va a la misma distancia del encabezado que en el origen.
+    posiciones = datos_origen.get("filas") or range(1, len(filas) + 1)
 
-    fila_actual = fila_enc + 1
+    # Fórmulas del origen: se copian (ajustadas, como al copiar y pegar en Excel)
+    # solo si la tabla tiene la misma forma, es decir, si todas las columnas se
+    # corren igual. Si no, una fórmula apuntaría a otra columna: va el valor.
+    mapa = _emparejar_columnas(datos_origen["encabezados"], nombres_dest, columnas_ia, columnas_usuario)
+    formulas = datos_origen.get("formulas")
+    indices = datos_origen.get("indices") or {}
+    corrimientos = {idx - indices[mapa[nom]] for idx, nom in cols_dest if mapa.get(nom) in indices}
+    if not formulas or len(corrimientos) != 1:
+        formulas = None
+    else:
+        dx = corrimientos.pop()
+        dy = fila_enc - datos_origen["fila_encabezado"]
+
     escritas = 0
-    for valores, _calculadas, _por_ia in filas:
+    for k, ((valores, _calculadas, _por_ia), n) in enumerate(zip(filas, posiciones)):
         for idx_col, nom_dest in cols_dest:
             valor = valores.get(nom_dest)
-            if valor is not None:
-                celda = ws_destino.cell(row=fila_actual, column=idx_col + 1)
-                celda.value = valor
-                es_numero = isinstance(valor, (int, float)) and not isinstance(valor, bool)
-                if isinstance(valor, datetime):
-                    celda.number_format = "DD-MM-YYYY HH:MM"
-                elif isinstance(valor, date):
-                    celda.number_format = "DD-MM-YYYY"
-                elif es_numero and _tipo_columna(nom_dest) == "dinero":
-                    celda.number_format = '"$"#,##0' if float(valor).is_integer() else '"$"#,##0.00'
-        fila_actual += 1
+            formula = formulas[k].get(mapa.get(nom_dest)) if formulas else None
+            if formula:
+                desde = f"{get_column_letter(indices[mapa[nom_dest]] + 1)}{datos_origen['fila_encabezado'] + n}"
+                hacia = f"{get_column_letter(idx_col + 1)}{fila_enc + n}"
+                if _formula_copiable(formula, ws_destino, (dx, dy) != (0, 0)):
+                    try:
+                        valor = Translator(formula, origin=desde).translate_formula(hacia)
+                    except Exception:
+                        pass   # no se pudo ajustar: queda el valor calculado
+            if valor is None:
+                continue
+            celda = ws_destino.cell(row=fila_enc + n, column=idx_col + 1)
+            # Una celda combinada no se puede escribir (solo su esquina), y una
+            # fórmula de la plantilla se respeta: Excel la recalcula con los datos.
+            if isinstance(celda, MergedCell) or (isinstance(celda.value, str) and celda.value.startswith("=")):
+                continue
+            celda.value = valor
+            if isinstance(valor, str) and valor.startswith("="):
+                continue   # fórmula: el formato es el de la plantilla
+            if celda.number_format != "General":
+                continue   # el formato que ya trae la plantilla manda
+            es_numero = isinstance(valor, (int, float)) and not isinstance(valor, bool)
+            if isinstance(valor, datetime):
+                celda.number_format = "DD-MM-YYYY HH:MM"
+            elif isinstance(valor, date):
+                celda.number_format = "DD-MM-YYYY"
+            elif es_numero and _tipo_columna(nom_dest) == "dinero":
+                celda.number_format = '"$"#,##0' if float(valor).is_integer() else '"$"#,##0.00'
         escritas += 1
     return escritas
 
@@ -727,18 +930,29 @@ def _escribir_valor(celda, valor, campo):
             celda.value = num
             celda.number_format = code
             return
+    if getattr(campo, "tipo", "") == "NUMERO":
+        # Sin formato elegido, un número igual se escribe como número: como
+        # texto («695») Excel no lo suma y las fórmulas que lo usan fallan.
+        num = _a_numero(valor)
+        if num is not None:
+            celda.value = _entero_si_exacto(num)
+            return
     celda.value = valor
 
 
-def buscar_tabla_origen(wb_origen, nombre_hoja):
+def buscar_tabla_origen(wb_origen, nombre_hoja, wb_formulas=None):
     """Tabla del origen para una hoja de tabla de la plantilla: primero la hoja
-    del mismo nombre; si no, la primera hoja del origen que tenga tabla."""
+    del mismo nombre; si no, la primera hoja del origen que tenga tabla.
+    `wb_formulas`: el origen abierto con fórmulas, para poder copiarlas."""
+    def leer(hoja):
+        return _leer_itemizado_origen(wb_origen[hoja], wb_formulas[hoja] if wb_formulas else None)
+
     if nombre_hoja in wb_origen.sheetnames:
-        datos = _leer_itemizado_origen(wb_origen[nombre_hoja])
+        datos = leer(nombre_hoja)
         if datos:
             return datos
     for hoja_ori in wb_origen.sheetnames:
-        datos = _leer_itemizado_origen(wb_origen[hoja_ori])
+        datos = leer(hoja_ori)
         if datos:
             return datos
     return None
@@ -748,6 +962,11 @@ AVISO_TABLAS_FALLARON = (
     "No se pudieron copiar las tablas del archivo de origen; las hojas de tabla "
     "pueden quedar vacías. Revisa que el origen sea un Excel válido y vuelve a intentarlo."
 )
+
+
+def aviso_tabla_fallo(nombre_hoja):
+    return (f"No se pudo copiar la tabla de la hoja «{nombre_hoja}», así que puede haber "
+            "quedado vacía o incompleta. Revisa esa hoja en el documento generado.")
 
 
 def aviso_tabla_sin_origen(nombre_hoja):
@@ -794,11 +1013,62 @@ def campos_sin_escribir(ruta_plantilla, campos, valores, tipos_hoja=None):
     return [e["aviso"] for e in estado_campos(ruta_plantilla, campos, valores, tipos_hoja) if e["aviso"]]
 
 
-def emparejamiento_tablas(ruta_plantilla, ruta_origen, tipos_hoja=None):
+def pedido_ia_columnas(ruta_plantilla, ruta_origen, sin_pareja, tipos_hoja=None,
+                       anonimizar=True, muestras=3):
+    """
+    Lo que se manda a la IA para emparejar columnas de tabla que no calzaron por
+    nombre: por hoja, esas columnas destino y las columnas del origen con unos
+    pocos ejemplos. Montos y cantidades nunca salen: van como «<número oculto>»
+    (y con `anonimizar`, cualquier número).
+      {hoja: {"titulo", "columnas_destino", "sin_pareja": [...], "origen": {columna: [ejemplos]}}}
+    El título y las demás columnas de la plantilla dan el contexto: sin ellos,
+    «Numero» junto a «Nombre» y «Correo» no se entendía como el teléfono.
+    """
+    pedido = {}
+    wb_dest = abrir_plantilla(ruta_plantilla, tipos_hoja)
+    wb_ori = load_workbook(ruta_origen, data_only=True, read_only=True)
+    try:
+        for hoja, columnas in sin_pareja.items():
+            datos = buscar_tabla_origen(wb_ori, hoja)
+            enc = _detectar_encabezado_tabla(wb_dest[hoja]) if hoja in wb_dest.sheetnames else None
+            if not datos or not columnas or not enc:
+                continue
+            titulo = " ".join(
+                _texto(c) for fila in wb_dest[hoja].iter_rows(max_row=enc[0] - 1, values_only=True)
+                for c in fila if _texto(c))[:200]
+            origen = {}
+            for col in datos["encabezados"]:
+                oculta = _tipo_columna(col) in ("dinero", "cantidad")
+                ejemplos = []
+                for partida in datos["partidas"]:
+                    v = partida.get(col)
+                    if v is None or not _texto(v):
+                        continue
+                    if oculta or (anonimizar and _es_num(v)):
+                        ejemplos.append("<número oculto>")
+                    else:
+                        ejemplos.append(_texto(v)[:40])
+                    if len(ejemplos) >= muestras:
+                        break
+                origen[col] = ejemplos
+            pedido[hoja] = {"titulo": titulo, "columnas_destino": [c for c in enc[1] if c],
+                            "sin_pareja": list(columnas), "origen": origen}
+    finally:
+        wb_dest.close()
+        wb_ori.close()
+    return pedido
+
+
+def emparejamiento_tablas(ruta_plantilla, ruta_origen, tipos_hoja=None, columnas_ia=None,
+                          columnas_usuario=None):
     """
     Qué tan bien se emparejan las columnas de cada tabla de la plantilla con las
-    del origen. Por hoja: {columnas, emparejadas, sin_pareja, puntajes}, donde
-    cada puntaje es 100 (mismo nombre), 70 (nombre parecido) o 0 (sin pareja).
+    del origen. Por hoja: {columnas, emparejadas, sin_pareja, vacias_elegidas,
+    por_ia, puntajes}. Cada puntaje es 100 (mismo nombre o elegida por el
+    usuario), 70 (nombre parecido), el de la IA (máximo 60, para que se revise)
+    o 0 (sin pareja). `por_ia` lista las parejas que sugirió la IA:
+    [{destino, origen, motivo}]; `vacias_elegidas`, las que el usuario decidió
+    dejar vacías (no son un aviso).
     """
     resultado = {}
     try:
@@ -814,16 +1084,28 @@ def emparejamiento_tablas(ruta_plantilla, ruta_origen, tipos_hoja=None):
         if not datos:
             continue
         cols = [c for c in enc[1] if c]
-        mapa = _emparejar_columnas(datos["encabezados"], cols)
-        puntajes = [
-            100 if mapa[c] and _normalizar(mapa[c]) == _normalizar(c) else (70 if mapa[c] else 0)
-            for c in cols
-        ]
+        sugeridas = (columnas_ia or {}).get(nombre) or {}
+        parejas = parejas_columnas(datos["encabezados"], cols, columnas_ia_hoja(columnas_ia, nombre),
+                                   (columnas_usuario or {}).get(nombre))
+
+        def puntaje(c):
+            origen, fuente = parejas[c]
+            if fuente == "usuario":
+                return 100
+            if not origen:
+                return 0
+            if fuente == "ia":
+                return min(int(sugeridas[c].get("confianza") or 0), 60)
+            return 100 if _normalizar(origen) == _normalizar(c) else 70
+
         resultado[nombre] = {
             "columnas": len(cols),
-            "emparejadas": sum(1 for c in cols if mapa[c]),
-            "sin_pareja": [c for c in cols if not mapa[c]],
-            "puntajes": puntajes,
+            "emparejadas": sum(1 for c in cols if parejas[c][0]),
+            "sin_pareja": [c for c in cols if parejas[c] == (None, "ninguna")],
+            "vacias_elegidas": [c for c in cols if parejas[c] == (None, "usuario")],
+            "por_ia": [{"destino": c, "origen": parejas[c][0], "motivo": sugeridas[c].get("motivo", "")}
+                       for c in cols if parejas[c][1] == "ia"],
+            "puntajes": [puntaje(c) for c in cols],
         }
     wb_dest.close()
     wb_ori.close()
@@ -831,7 +1113,8 @@ def emparejamiento_tablas(ruta_plantilla, ruta_origen, tipos_hoja=None):
 
 
 def generar_documento(ruta_plantilla, mapeos_con_valor, ruta_origen=None, calcular_totales=False,
-                      valores_ia_tablas=None, avisos=None, tipos_hoja=None):
+                      valores_ia_tablas=None, avisos=None, tipos_hoja=None, columnas_ia=None,
+                      columnas_usuario=None):
     """
     ruta_plantilla: .xlsx de la plantilla destino.
     mapeos_con_valor: lista de {campo, valor} para los campos de FORMULARIO.
@@ -858,6 +1141,10 @@ def generar_documento(ruta_plantilla, mapeos_con_valor, ruta_origen=None, calcul
             continue  # Sin casilla: ya lo avisa campos_sin_escribir().
         fila, col = destino
         celda = ws.cell(row=fila, column=col)
+        if isinstance(celda, MergedCell):
+            # Casilla combinada: se escribe en su esquina superior izquierda.
+            rango = next(r for r in ws.merged_cells.ranges if celda.coordinate in r)
+            celda = ws.cell(row=rango.min_row, column=rango.min_col)
         _escribir_valor(celda, valor, campo)
 
     # 2. Volcar los ITEMIZADOS: para cada hoja del destino que tenga tabla,
@@ -865,21 +1152,39 @@ def generar_documento(ruta_plantilla, mapeos_con_valor, ruta_origen=None, calcul
     if ruta_origen:
         try:
             wb_origen = load_workbook(ruta_origen, data_only=True, read_only=True)
-            for nombre_hoja in wb.sheetnames:
-                ws_dest = wb[nombre_hoja]
+        except Exception:
+            wb_origen = None
+            avisos.append(AVISO_TABLAS_FALLARON)
+        try:
+            # El mismo origen con sus fórmulas, para copiarlas a las tablas.
+            wb_formulas = load_workbook(ruta_origen, read_only=True) if wb_origen else None
+        except Exception:
+            wb_formulas = None
+        for nombre_hoja in (wb.sheetnames if wb_origen else []):
+            ws_dest = wb[nombre_hoja]
+            # Cada hoja por separado: antes un error en una tabla cortaba el
+            # ciclo y todas las hojas siguientes quedaban vacías.
+            try:
                 # ¿La hoja destino tiene una tabla de itemizado?
                 if _detectar_encabezado_tabla(ws_dest) is None:
                     continue
-                datos = buscar_tabla_origen(wb_origen, nombre_hoja)
+                datos = buscar_tabla_origen(wb_origen, nombre_hoja, wb_formulas)
                 if datos:
-                    _volcar_itemizado(ws_dest, datos, calcular_totales, valores_ia_tablas)
+                    _volcar_itemizado(ws_dest, datos, calcular_totales, valores_ia_tablas,
+                                      columnas_ia_hoja(columnas_ia, nombre_hoja),
+                                      (columnas_usuario or {}).get(nombre_hoja))
                 else:
                     avisos.append(aviso_tabla_sin_origen(nombre_hoja))
+            except Exception:
+                avisos.append(aviso_tabla_fallo(nombre_hoja))
+        if wb_origen:
             wb_origen.close()
-        except Exception:
-            # Si falla el volcado de itemizados, no rompe la generación de campos,
-            # pero se avisa: las tablas pueden haber quedado vacías.
-            avisos.append(AVISO_TABLAS_FALLARON)
+        if wb_formulas:
+            wb_formulas.close()
+
+    # openpyxl guarda las fórmulas sin su resultado: que Excel las calcule al
+    # abrir, o se verían vacías hasta editar alguna celda.
+    wb.calculation.fullCalcOnLoad = True
 
     buffer = io.BytesIO()
     wb.save(buffer)

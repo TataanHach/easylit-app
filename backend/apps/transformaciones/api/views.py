@@ -259,7 +259,7 @@ class TransformacionViewSet(viewsets.ModelViewSet):
                 ajuste = getattr(campo, "ajuste_iva", "") or "NINGUNO"
             valor = _aplicar_iva(valor, ajuste)
             valores_por_campo[campo.id] = valor
-            valor_final = generacion.limpiar_valor(valor, campo)
+            valor_final = generacion.texto_campo(valor, campo)
 
             # ¿Es campo de moneda? (para mostrar el control de IVA)
             formato = getattr(campo, "formato_numero", "") or "NINGUNO"
@@ -289,7 +289,7 @@ class TransformacionViewSet(viewsets.ModelViewSet):
         # ventana de resultado del frontend.
         campos_estado = [
             {"campo": e["campo"].nombre, "hoja": e["hoja"], "ok": not e["aviso"],
-             "valor": "" if e["aviso"] else str(generacion.limpiar_valor(
+             "valor": "" if e["aviso"] else str(generacion.texto_campo(
                  valores_por_campo.get(e["campo"].id), e["campo"]))[:60]}
             for e in estados
         ]
@@ -326,7 +326,19 @@ class TransformacionViewSet(viewsets.ModelViewSet):
                 cols_dest = [n for n in encabezados_tabla if n]
                 calcular = bool((transformacion.resultado_limpieza or {}).get("calcular_totales"))
                 ia_tablas = (transformacion.resultado_limpieza or {}).get("valores_ia_tablas")
-                filas, faltantes = generacion.filas_itemizado(datos, cols_dest, calcular, ia_tablas)
+                resultado_limpieza = transformacion.resultado_limpieza or {}
+                sugeridas_ia = (resultado_limpieza.get("columnas_ia") or {}).get(nombre_hoja) or {}
+                columnas_ia = generacion.columnas_ia_hoja(resultado_limpieza.get("columnas_ia"), nombre_hoja)
+                columnas_usuario = generacion.columnas_usuario_hoja(resultado_limpieza, nombre_hoja)
+                filas, faltantes = generacion.filas_itemizado(
+                    datos, cols_dest, calcular, ia_tablas, columnas_ia, columnas_usuario)
+                # De dónde sale cada columna, para que el usuario lo vea y lo cambie.
+                parejas = [
+                    {"destino": d, "origen": o, "fuente": f,
+                     "motivo": (sugeridas_ia.get(d) or {}).get("motivo", "") if f == "ia" else ""}
+                    for d, (o, f) in generacion.parejas_columnas(
+                        datos["encabezados"], cols_dest, columnas_ia, columnas_usuario).items()
+                ]
 
                 filas_limpias, calculadas, por_ia = [], [], []
                 for i, (valores, calc, ia_cols) in enumerate(filas):
@@ -341,6 +353,8 @@ class TransformacionViewSet(viewsets.ModelViewSet):
                     "totales_calculados": calcular,
                     "celdas_calculadas": calculadas,     # [fila, columna] marcadas en la vista
                     "celdas_ia": por_ia,                 # [fila, columna] limpiadas por la IA
+                    "columnas_origen": datos["encabezados"],
+                    "parejas": parejas,                  # [{destino, origen, fuente, motivo}]
                 }
             wb_dest.close()
             wb_ori.close()
@@ -464,6 +478,67 @@ class TransformacionViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_200_OK,
         )
+
+    @action(detail=True, methods=["post"])
+    def asignar_columna(self, request, pk=None):
+        """
+        Elige de qué columna del origen sale una columna de una tabla de la plantilla.
+        Body: { "hoja": "Sheet1", "destino": "Numero", "origen": "Telefono" }
+        (origen null/"" = dejar la columna vacía). Manda sobre el nombre y la IA.
+        """
+        from openpyxl import load_workbook
+        from apps.transformaciones.services import generacion
+
+        transformacion = self.get_object()
+        hoja = request.data.get("hoja") or ""
+        destino = request.data.get("destino") or ""
+        origen = (request.data.get("origen") or "").strip()
+
+        ruta_plantilla = ruta_local(transformacion.plantilla.archivo)
+        ruta_origen = ruta_local(transformacion.archivo_origen)
+        tipos_hoja = transformacion.plantilla.tipos_hoja
+        wb_dest = generacion.abrir_plantilla(ruta_plantilla, tipos_hoja)
+        enc = generacion._detectar_encabezado_tabla(wb_dest[hoja]) if hoja in wb_dest.sheetnames else None
+        wb_dest.close()
+        if not enc or destino not in enc[1]:
+            return Response(
+                {"detail": f"La columna «{destino}» no está en una tabla de la hoja «{hoja}» de la "
+                           "plantilla. Recarga la página e intenta de nuevo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if origen:
+            wb_ori = load_workbook(ruta_origen, data_only=True, read_only=True)
+            datos = generacion.buscar_tabla_origen(wb_ori, hoja)
+            wb_ori.close()
+            if not datos or origen not in datos["encabezados"]:
+                return Response(
+                    {"detail": f"La columna «{origen}» no existe en la tabla del archivo de origen. "
+                               "Recarga la página e intenta de nuevo."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        resultado = transformacion.resultado_limpieza or {}
+        elegidas = resultado.get("columnas_usuario") or {}
+        anterior = (elegidas.get(hoja) or {}).get(destino)
+        elegidas.setdefault(hoja, {})[destino] = origen
+        resultado["columnas_usuario"] = elegidas
+        # El resumen de columnas emparejadas (avisos de la ventana de resultado) se rehace.
+        tablas = generacion.emparejamiento_tablas(
+            ruta_plantilla, ruta_origen, tipos_hoja, resultado.get("columnas_ia"), elegidas)
+        for info in tablas.values():
+            info.pop("puntajes", None)
+        resultado["tablas_emparejadas"] = tablas
+        transformacion.resultado_limpieza = resultado
+        transformacion.save(update_fields=["resultado_limpieza"])
+        Bitacora.objects.create(
+            transformacion=transformacion,
+            evento=Bitacora.Evento.AJUSTE_HUMANO,
+            autor=request.user,
+            detalle={"hoja": hoja, "columna": destino, "origen": origen or None,
+                     "origen_anterior": anterior},
+        )
+        return Response({"ok": True, "hoja": hoja, "destino": destino, "origen": origen or None},
+                        status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"])
     def calcular_totales(self, request, pk=None):

@@ -95,15 +95,21 @@ def _construir_prompt(muestra, campos_destino):
     )
     columnas_origen = json.dumps(muestra, ensure_ascii=False, indent=2)
 
-    return f"""Eres un asistente que mapea columnas de una planilla de licitación a un formato destino.
+    return f"""Eres un asistente que mapea los datos de una planilla Excel de ORIGEN a los campos de un formato DESTINO.
 
-COLUMNAS DE ORIGEN (con muestras de datos):
+COLUMNAS DE ORIGEN (con muestras de datos; "<número oculto>" = monto que no se muestra por privacidad):
 {columnas_origen}
 
 CAMPOS DEL FORMATO DESTINO:
 {campos_texto}
 
 Para cada columna de origen, indica a qué campo destino corresponde (o null si ninguno).
+- Fíjate en el significado, no solo en el nombre: pueden llamarse distinto y ser el mismo dato
+  (sinónimos, abreviaturas, otro idioma). Usa el tipo y la descripción de cada campo y las muestras.
+- Cada campo destino recibe como máximo una columna de origen.
+- Si una columna no corresponde a ningún campo, o dudas, responde null: es mejor dejar un campo vacío
+  que llenarlo con otro dato.
+- La confianza (0-100) debe reflejar tu seguridad real; si el nombre es ambiguo, que sea baja.
 Responde ÚNICAMENTE con un JSON válido, sin texto adicional ni markdown, con esta forma exacta:
 [
   {{"origen": "nombre columna origen", "destino": "nombre campo destino o null", "confianza": 0-100, "motivo": "breve"}}
@@ -226,6 +232,88 @@ def proponer_mapeo(df, columnas_numericas, campos_destino, anonimizar=True):
         return _propuesta_heuristica(muestra, campos_destino), "heuristica-respaldo"
 
 # ═════════════════════════════════════════════════════════════
+# Columnas de TABLAS que no calzaron por nombre («Numero» vs «Telefono»).
+# Las columnas se emparejan primero por nombre, gratis y exacto; a la IA solo
+# se le preguntan las que quedaron sin pareja.
+# ═════════════════════════════════════════════════════════════
+
+# Bajo esta confianza la sugerencia no se usa: mejor una columna vacía que
+# una llena con datos que no corresponden.
+CONFIANZA_MINIMA_COLUMNA = 50
+
+
+def _construir_prompt_columnas(pedido):
+    hojas = json.dumps(pedido, ensure_ascii=False, indent=2)
+    return f"""Eres un asistente que empareja columnas de tablas entre dos planillas Excel.
+
+Para cada hoja tienes:
+- "titulo": el texto que hay sobre la tabla DESTINO (puede venir vacío).
+- "columnas_destino": todas las columnas de la tabla DESTINO, para que entiendas de qué trata.
+- "sin_pareja": columnas DESTINO que no encontraron una columna con el mismo nombre.
+- "origen": las columnas de la planilla de ORIGEN, con algunos ejemplos de sus datos.
+
+{hojas}
+
+Para cada columna de "sin_pareja", indica qué columna de "origen" trae ese mismo dato, o null si ninguna.
+- Fíjate en el significado, no solo en el nombre: dos columnas pueden llamarse distinto y traer el
+  mismo dato (sinónimos, abreviaturas, otro idioma).
+- Si el nombre es corto o ambiguo, interprétalo según el título, las demás columnas de la tabla
+  destino y los ejemplos del origen: decide qué dato tiene sentido en esa tabla.
+- Si la columna destino solo numera las filas (un correlativo) y el origen no trae uno, responde null.
+- Si ninguna columna del origen trae ese dato, responde null: es mejor dejar la columna vacía que
+  llenarla con otro dato.
+- El valor de "origen" debe ser EXACTAMENTE uno de los nombres de columna del origen de esa hoja.
+
+Responde ÚNICAMENTE con un JSON válido, sin texto adicional ni markdown, así:
+[
+  {{"hoja": "nombre hoja", "destino": "columna destino", "origen": "columna origen o null", "confianza": 0-100, "motivo": "breve"}}
+]
+"""
+
+
+def sugerir_columnas_tablas(pedido):
+    """
+    pedido: {hoja: {"sin_pareja": [...], "origen": {columna: [ejemplos]}}}, armado
+    por generacion.pedido_ia_columnas (montos ya ocultos).
+    Devuelve ({hoja: {destino: {origen, confianza, motivo}}}, modelo_usado).
+    Sin clave o si la IA falla, devuelve {} y las columnas quedan como estaban.
+    """
+    if not pedido:
+        return {}, "sin-columnas"
+    if not getattr(settings, "GEMINI_API_KEY", ""):
+        return {}, "sin-clave-ia"
+    try:
+        texto = _llamar_gemini(_construir_prompt_columnas(pedido)) or ""
+        texto = re.sub(r"```(json)?", "", texto).strip()
+        inicio, fin = texto.find("["), texto.rfind("]")
+        if inicio != -1 and fin > inicio:
+            texto = texto[inicio:fin + 1]
+        respuesta = json.loads(texto)
+    except Exception:
+        logger.exception("Falló el emparejamiento de columnas con Gemini")
+        return {}, "columnas-ia-fallo"
+
+    sugerencias = {}
+    for r in respuesta if isinstance(respuesta, list) else []:
+        if not isinstance(r, dict):
+            continue
+        hoja, destino, origen = r.get("hoja"), r.get("destino"), r.get("origen")
+        info = pedido.get(hoja)
+        try:
+            confianza = int(r.get("confianza") or 0)
+        except (TypeError, ValueError):
+            confianza = 0
+        # Solo lo que se preguntó y columnas que existen: la IA puede inventar nombres.
+        if (not info or destino not in info["sin_pareja"] or origen not in info["origen"]
+                or confianza < CONFIANZA_MINIMA_COLUMNA):
+            continue
+        sugerencias.setdefault(hoja, {})[destino] = {
+            "origen": origen, "confianza": confianza, "motivo": str(r.get("motivo") or "")[:200],
+        }
+    return sugerencias, getattr(settings, "IA_MODEL", "gemini")
+
+
+# ═════════════════════════════════════════════════════════════
 # CAPA 2 DEL ESCALÓN 4: limpieza inteligente de datos con IA.
 #
 # Limpia SOLO texto y fechas (nunca montos: esos se protegen y los limpia la
@@ -243,24 +331,24 @@ def _construir_prompt_limpieza(items):
         f'  {it["n"]}. Campo "{it["campo"]}" (tipo {it["tipo"]}): "{it["valor"]}"'
         for it in items
     )
-    return f"""Eres un asistente que limpia datos de licitaciones chilenas.
-Para cada valor sucio, devuelve la versión LIMPIA según su tipo.
+    return f"""Eres un asistente que limpia datos de planillas Excel chilenas.
+Para cada valor, devuelve la versión LIMPIA según el TIPO de su campo. El nombre del campo es solo contexto.
 
-Reglas de QUÉ SÍ hacer:
-- Fechas: formato YYYY-MM-DD si es clara; si es aproximada ("Agosto 2024 aprox."), lo más cercano (2024-08) sin inventar día.
-- Números y plazos: extrae solo el número si viene con texto ("sesenta ( 60 ) Días" -> "60", "120 dias" -> "120").
-- Unidades: normaliza lo evidente ("1200 mts2" -> "1200 m2").
-- Espacios: corrige palabras partidas ("Servi cios" -> "Servicios") y espacios dobles.
-- RUT: formato XX.XXX.XXX-X sin espacios internos.
-- Emails: sin espacios.
+Según el tipo:
+- FECHA: formato YYYY-MM-DD si la fecha es clara; si solo trae mes y año, YYYY-MM sin inventar el día.
+- NUMERO: solo el número, aunque venga escrito en palabras o con texto alrededor.
+- TEXTO (y cualquier otro tipo): conserva el contenido; solo corrige la forma.
 
-Reglas de QUÉ NO hacer (MUY IMPORTANTE):
-- NO expandas abreviaturas en NOMBRES de entidades, empresas o instituciones.
-- "I. Municipalidad de Maipu" se queda "I. Municipalidad de Maipú" (solo corrige la tilde), NUNCA "Ilustre Municipalidad".
-- NO agregues ni quites palabras en nombres propios.
-- Si un valor NO es un dato real ("El mismo representante"), devuélvelo IGUAL.
-- Si dudas, devuelve el valor ORIGINAL.
-- NUNCA inventes información.
+Para todos los tipos:
+- Espacios: quita los dobles y une palabras partidas por un espacio de más.
+- Tildes y mayúsculas: corrige solo errores evidentes.
+- RUT: formato XX.XXX.XXX-X sin espacios. Correos: sin espacios.
+
+Lo que NUNCA se hace:
+- Quitar, agregar o cambiar palabras de un TEXTO, ni sacar números de él.
+- Expandir o cambiar abreviaturas de nombres propios (personas, empresas, instituciones).
+- Inventar información.
+- Si un valor no es un dato (una nota, una referencia a otro campo), o si dudas, devuélvelo IGUAL.
 
 VALORES A LIMPIAR:
 {lista}
