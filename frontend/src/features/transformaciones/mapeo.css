@@ -273,8 +273,16 @@
 .pendientes-pie { margin: 0; font-size: var(--fs-sm); color: var(--text-2); }
 
 /* Vista previa de solo lectura (desde el historial) */
-.modal.vista-previa-modal { max-width: 960px; }
-.vista-previa-modal .modal-body { padding: 18px 22px; }
+/* Alto fijo: al cambiar de hoja, las flechas y los botones de abajo no se mueven.
+   Lo que no cabe se desplaza dentro del cuerpo. */
+.modal.vista-previa-modal {
+  max-width: 960px; height: min(760px, calc(100dvh - 40px)); max-height: none;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.vista-previa-modal .modal-body {
+  padding: 18px 22px; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+}
+.vista-previa-modal .preview-tabla td { font-variant-numeric: tabular-nums; }
 .vista-previa-sub {
   font-size: var(--fs-md); color: var(--text-3); margin-top: 2px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;

@@ -3,8 +3,10 @@
   position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center;
   padding: 16px; background: rgba(15, 23, 42, .45); animation: ayuda-fondo .2s ease-out;
 }
+/* Alto fijo (el del paso más largo): al cambiar de paso, los botones de abajo
+   no se mueven y se puede avanzar sin mover el mouse. Si no cabe, el cuerpo baja. */
 .ayuda-modal {
-  width: 100%; max-width: 620px; max-height: calc(100dvh - 32px);
+  width: 100%; max-width: 620px; height: min(510px, calc(100dvh - 32px));
   display: flex; flex-direction: column; background: var(--surface);
   border-radius: var(--r-lg); box-shadow: 0 20px 50px rgba(15, 23, 42, .25);
   animation: ayuda-entrada .28s cubic-bezier(.2, .9, .3, 1.2);
@@ -15,6 +17,7 @@
 }
 .ayuda-contador { font-size: var(--fs-sm); color: var(--text-3); font-weight: 600; }
 .ayuda-cuerpo {
+  flex: 1; min-height: 0; overscroll-behavior: contain;
   padding: 18px 22px; overflow-y: auto; color: var(--text-2); line-height: 1.55;
   font-size: var(--fs-md); animation: ayuda-paso .25s ease-out;
 }
@@ -27,6 +30,15 @@
 .ayuda-cuerpo ul, .ayuda-cuerpo ol { margin: 0 0 10px; padding-left: 20px; }
 .ayuda-cuerpo li { margin-bottom: 6px; }
 .ayuda-cuerpo strong { color: var(--text); }
+
+/* Reparto del paso: el título y su frase de entrada arriba, la nota pegada abajo
+   (sobre los botones) y el dibujo o la tabla centrados entre ambos. */
+.ayuda-cuerpo { display: flex; flex-direction: column; }
+.ayuda-cuerpo > h2 + :is(p, ul) + *,
+.ayuda-cuerpo > h2 + :not(p, ul) { margin-top: auto; }
+/* Paso sin nota: el contenido queda centrado en vez de caer al fondo. */
+.ayuda-cuerpo > :last-child { margin-bottom: auto; }
+.ayuda-cuerpo > .ayuda-nota { margin-top: auto; margin-bottom: 0; }
 
 /* Texto normal (no flex): en flex, cada trozo de texto y cada <strong> pasan a
    ser elementos separados y el "gap" les mete espacios de más. El ícono va
@@ -43,7 +55,7 @@
 .ayuda-dos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .ayuda-si, .ayuda-no { padding: 12px 14px; border-radius: var(--r-md); }
 .ayuda-si { background: var(--dest-50); border: 1px solid var(--dest-100); }
-.ayuda-no { background: var(--danger-50); border: 1px solid #f2c9c9; }
+.ayuda-no { background: var(--danger-50); border: 1px solid var(--danger-100); }
 .ayuda-sub { font-weight: 700; color: var(--text); display: flex; gap: 6px; align-items: center; }
 .ayuda-si .ayuda-sub i { color: var(--dest-600); }
 .ayuda-no .ayuda-sub i { color: var(--danger-600); }
@@ -76,11 +88,14 @@
   display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
   padding: 14px 20px; border-top: 1px solid var(--line);
 }
-.ayuda-puntos { display: flex; gap: 6px; }
+.ayuda-puntos { display: flex; gap: 10px; }
 .ayuda-puntos button {
-  width: 9px; height: 9px; padding: 0; border-radius: 50%; border: none; cursor: pointer;
-  background: var(--line-strong); transition: width .2s, background .2s;
+  position: relative; width: 9px; height: 9px; padding: 0; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--line-strong); transition: background .2s;
 }
+/* Zona de clic más grande que el punto (sin cambiar cómo se ve); a los lados llega
+   solo a la mitad del espacio, para no pisar la del punto vecino. */
+.ayuda-puntos button::after { content: ""; position: absolute; inset: -8px -5px; }
 .ayuda-puntos button.activo { width: 22px; border-radius: 5px; background: var(--brand-600); }
 .ayuda-botones { display: flex; gap: 8px; }
 

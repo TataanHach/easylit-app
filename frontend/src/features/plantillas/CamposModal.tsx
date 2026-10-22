@@ -299,7 +299,7 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
           <p className="campos-hint">
             Cada campo es un dato que la plantilla espera. La <strong>etiqueta de búsqueda</strong> es
             el texto de la casilla en tu formulario (ej. "RUT"). El <strong>formato</strong> aplica solo
-            a campos numéricos o de moneda. Los cambios se guardan al momento.
+            a campos de tipo Número. Los cambios se guardan al momento.
           </p>
 
           {cargando ? (
@@ -373,7 +373,7 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
                   <select
                     value={c.formato_numero ?? "NINGUNO"}
                     disabled={!esNumerico(c.tipo)}
-                    title={esNumerico(c.tipo) ? "Formato del número" : "Solo para campos Número o Moneda"}
+                    title={esNumerico(c.tipo) ? "Formato del número" : "Solo para campos de tipo Número"}
                     onChange={(e) => actualizar(c.id, { formato_numero: e.target.value })}
                   >
                     {FORMATOS.map((f) => <option key={f.v} value={f.v}>{f.t}</option>)}
@@ -383,7 +383,8 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
                     onChange={(e) => setCampos(campos.map((x) => x.id === c.id ? { ...x, etiqueta_busqueda: e.target.value } : x))}
                     onBlur={(e) => actualizar(c.id, { etiqueta_busqueda: limpiarTexto(e.target.value) })} />
 
-                  <button className="campo-del" title="Eliminar campo" onClick={() => setPorEliminar(c)}>
+                  <button className="campo-del" title="Eliminar campo" aria-label={`Eliminar el campo «${c.nombre}»`}
+                    onClick={() => setPorEliminar(c)}>
                     <i aria-hidden="true" className="ti ti-trash" />
                   </button>
                   {revision?.problemas[c.id] && (

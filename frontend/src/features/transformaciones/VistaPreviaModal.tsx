@@ -4,7 +4,7 @@
  * Se abre desde el historial: muestra, hoja por hoja, los campos y tablas con el
  * valor que quedó en el documento, y permite descargarlo sin ir al mapeo.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { transformacionService } from "@/features/historial/historialService";
@@ -23,8 +23,28 @@ export default function VistaPreviaModal({ id, nombre, onDescargar, descargando,
     queryFn: () => transformacionService.vistaPrevia(id),
   });
 
+  const dialogo = useRef<HTMLDivElement>(null);
+  const cerrarRef = useRef<HTMLButtonElement>(null);
+
+  // Al abrir, el foco entra al diálogo; al cerrar, vuelve al botón que lo abrió.
   useEffect(() => {
-    const alTeclear = (e: KeyboardEvent) => { if (e.key === "Escape") onCerrar(); };
+    const anterior = document.activeElement as HTMLElement | null;
+    cerrarRef.current?.focus();
+    return () => anterior?.focus();
+  }, []);
+
+  // Escape cierra, y Tab da la vuelta dentro del diálogo en vez de irse a la página de atrás.
+  useEffect(() => {
+    const alTeclear = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { onCerrar(); return; }
+      if (e.key !== "Tab" || !dialogo.current) return;
+      const enfocables = [...dialogo.current.querySelectorAll<HTMLElement>(
+        "button:not(:disabled), select:not(:disabled), [href], [tabindex]:not([tabindex='-1'])")];
+      if (!enfocables.length) return;
+      const primero = enfocables[0], ultimo = enfocables[enfocables.length - 1];
+      if (e.shiftKey && document.activeElement === primero) { e.preventDefault(); ultimo.focus(); }
+      else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primero.focus(); }
+    };
     window.addEventListener("keydown", alTeclear);
     return () => window.removeEventListener("keydown", alTeclear);
   }, [onCerrar]);
@@ -37,13 +57,13 @@ export default function VistaPreviaModal({ id, nombre, onDescargar, descargando,
 
   return createPortal(
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onCerrar(); }}>
-      <div className="modal vista-previa-modal" role="dialog" aria-modal="true" aria-labelledby="vista-previa-titulo">
+      <div ref={dialogo} className="modal vista-previa-modal" role="dialog" aria-modal="true" aria-labelledby="vista-previa-titulo">
         <div className="modal-head">
           <div style={{ minWidth: 0 }}>
             <h2 id="vista-previa-titulo">Vista previa del documento</h2>
             <p className="vista-previa-sub" title={nombre}>{nombre}</p>
           </div>
-          <button className="modal-close" onClick={onCerrar} aria-label="Cerrar">
+          <button ref={cerrarRef} className="modal-close" onClick={onCerrar} aria-label="Cerrar">
             <i aria-hidden="true" className="ti ti-x" />
           </button>
         </div>
@@ -76,7 +96,8 @@ export default function VistaPreviaModal({ id, nombre, onDescargar, descargando,
                   onClick={() => setHojaActiva((h) => Math.max(0, h - 1))}>
                   <i aria-hidden="true" className="ti ti-chevron-left" />
                 </button>
-                <div className="preview-titulo">
+                {/* Al cambiar de hoja, el lector de pantalla anuncia la nueva. */}
+                <div className="preview-titulo" aria-live="polite">
                   <span className="preview-hoja-nombre">{hoja.nombre}</span>
                   <span className="preview-hoja-contador">
                     Hoja {hojaActiva + 1} de {hojas.length}

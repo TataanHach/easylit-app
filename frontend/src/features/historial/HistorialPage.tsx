@@ -321,7 +321,7 @@ function Fila({ t, esMio }: { t: Transformacion; esMio: boolean }) {
                 title="Ver la vista previa del documento" aria-label={`Vista previa de «${nombreVisible}»`}>
                 <i aria-hidden="true" className="ti ti-eye" /> Ver
               </button>
-              <button className="btn" onClick={descargar} disabled={descargando}
+              <button className="btn" onClick={descargar} disabled={descargando} aria-busy={descargando}
                 title="Descargar documento" aria-label={`Descargar «${nombreVisible}»`}>
                 <i aria-hidden="true" className={descargando ? "ti ti-loader-2" : "ti ti-download"} />
               </button>
