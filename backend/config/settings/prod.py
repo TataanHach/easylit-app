@@ -1,9 +1,10 @@
 """
 Settings de producción.
 
-Sirve tanto para Render (producción real en la nube) como para Docker local.
-Las diferencias entre ambos entornos se controlan con variables de entorno, con
-valores por defecto pensados para Render. En Docker local se sobreescriben.
+Pensados para Render (producción en la nube). También se usan desde tu PC para
+correr comandos contra la base de Render (crear usuarios: ver DESPLIEGUE.md).
+Lo que cambia entre ambos casos se controla con variables de entorno, con
+valores por defecto pensados para Render.
 """
 import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
@@ -22,7 +23,7 @@ if config("RENDER_EXTERNAL_HOSTNAME", default=""):
 
 # --- Base de datos ---
 # DB_SSL=True en Render (conexión cifrada obligatoria).
-# DB_SSL=False en Docker local (el PostgreSQL local no usa SSL).
+# DB_SSL=False solo para un PostgreSQL sin SSL (por ejemplo, uno local de pruebas).
 DB_SSL = config("DB_SSL", default=True, cast=bool)
 DATABASES = {
     "default": dj_database_url.parse(
@@ -39,7 +40,7 @@ MIDDLEWARE.insert(2, "corsheaders.middleware.CorsMiddleware")
 # Archivos subidos (Excel de origen, plantillas, documentos generados):
 #   - Con R2_BUCKET definido → Cloudflare R2 (compatible con S3). La API y el
 #     worker leen y escriben en el mismo lugar, sin disco compartido.
-#   - Sin R2 → disco local (solo Docker local). En Render NO: su disco se borra
+#   - Sin R2 → disco local (solo fuera de Render). En Render NO: su disco se borra
 #     en cada reinicio o despliegue (el plan gratis no tiene disco persistente),
 #     así que ahí R2 es obligatorio.
 R2_BUCKET = config("R2_BUCKET", default="")
@@ -100,12 +101,12 @@ CELERY_RESULT_BACKEND = REDIS_URL
 
 # La IA (GEMINI_API_KEY, IA_MODEL) y las reglas de negocio se leen en base.py.
 
-# --- Carpeta de archivos sin R2 (solo Docker local) ---
+# --- Carpeta de archivos sin R2 (solo fuera de Render) ---
 MEDIA_ROOT = config("MEDIA_ROOT", default=str(BASE_DIR / "media"))
 
 # --- Endurecimiento de seguridad para HTTPS ---
-# Solo se activa cuando SECURE_SSL=True (Render). En Docker local se apaga,
-# porque ahí no hay HTTPS y el redirect dejaría la app inaccesible.
+# Activo por defecto (Render). SECURE_SSL=False solo para probar estos settings
+# sin HTTPS: el redirect a https dejaría la app inaccesible.
 SECURE_SSL = config("SECURE_SSL", default=True, cast=bool)
 if SECURE_SSL:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

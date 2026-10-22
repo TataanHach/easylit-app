@@ -49,7 +49,6 @@ function grupoLimpiezaAuto(resumen?: Record<string, number>) {
     fechas: (n) => `${n} fecha(s) al formato 15-08-2024`,
     ruts: (n) => `${n} RUT con puntos y guion (dígito verificador comprobado)`,
     correos: (n) => `${n} correo(s) sin espacios y en minúsculas`,
-    telefonos: (n) => `${n} teléfono(s) al formato +56 9 1234 5678`,
     plazos: (n) => `${n} plazo(s) o cantidad(es) a número («sesenta (60) días» → 60)`,
     nombres: (n) => `${n} nombre(s) de persona con mayúsculas iniciales`,
     unidades: (n) => `${n} unidad(es) normalizada(s) («mts2» → m2)`,

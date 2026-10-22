@@ -2,8 +2,8 @@
 Límite de peso de los archivos que se suben (plantillas y Excel de origen).
 
 Se configura con ARCHIVO_MAX_MB (settings/.env). El frontend lo lee de
-/api/config/ para avisar antes de subir, y nginx deja pasar un poco más
-(frontend/nginx.conf), para que el mensaje claro lo dé esta validación.
+/api/config/ para avisar antes de subir; si igual llega uno más pesado, esta
+validación lo rechaza con un mensaje claro.
 """
 import os
 import shutil

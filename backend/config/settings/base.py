@@ -132,7 +132,7 @@ IA_MAX_TEXTOS_TABLA = config("IA_MAX_TEXTOS_TABLA", default=300, cast=int)
 IVA_TASA = config("IVA_TASA", default=0.19, cast=float)          # 19% en Chile
 CONTRASENA_MIN = config("CONTRASENA_MIN", default=6, cast=int)
 CONTRASENA_MAX = config("CONTRASENA_MAX", default=18, cast=int)
-ARCHIVO_MAX_MB = config("ARCHIVO_MAX_MB", default=20, cast=int)  # nginx.conf deja pasar un poco más
+ARCHIVO_MAX_MB = config("ARCHIVO_MAX_MB", default=20, cast=int)
 INVITACION_DIAS_VIGENCIA = config("INVITACION_DIAS_VIGENCIA", default=7, cast=int)
 
 # --- Autenticación con Firebase (opcional) ---

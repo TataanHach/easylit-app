@@ -18,7 +18,7 @@ from openpyxl.cell.cell import MergedCell
 from openpyxl.formula.translate import Translator
 from openpyxl.utils import coordinate_to_tuple, get_column_letter
 
-from .normalizacion import fecha, numero_en_palabras, resuelto_por_reglas, rut, telefono
+from .normalizacion import fecha, numero_en_palabras, resuelto_por_reglas, rut
 
 
 FORMATOS_EXCEL = {
@@ -100,9 +100,6 @@ def _limpiar_email(v):
 
 
 def _limpiar_telefono(v):
-    normal = telefono(v)
-    if normal:
-        return normal
     s = str(v)
     s = re.split(r"[/,]", s)[0].strip()
     s = re.sub(r"[^\d+]", "", s)
