@@ -5,11 +5,11 @@
  * En la vista previa, los campos de moneda tienen un control de IVA que
  * reemplaza el de la plantilla para esta transformación.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { plantillaService } from "@/features/plantillas/plantillaService";
-import { transformacionService } from "@/features/historial/historialService";
+import { nombreDescarga, transformacionService } from "@/features/historial/historialService";
 import { useAvisos } from "@/components/ui/Avisos";
 import { describirError } from "@/lib/errores";
 import { useConfiguracion } from "@/lib/configuracion";
@@ -442,7 +442,7 @@ export default function MapeoPage() {
   async function descargar() {
     if (!id || !t) return;
     try {
-      const archivo = t.nombre ? `${t.nombre}.xlsx` : `${t.nombre_origen}_transformado.xlsx`;
+      const archivo = nombreDescarga(t);
       await transformacionService.descargar(id, archivo);
       avisos.exito("Descarga iniciada", `«${archivo}» se está guardando en tu carpeta de descargas.`);
     } catch (e) {
@@ -452,14 +452,14 @@ export default function MapeoPage() {
 
   if (isLoading || (estadoEnProceso && !isFetchedAfterMount)) {
     return <div style={{ padding: 40, textAlign: "center", color: "var(--text-3)" }}>
-      <i className="ti ti-loader-2" style={{ fontSize: 22 }} /><p style={{ marginTop: 8 }}>Cargando…</p>
+      <i aria-hidden="true" className="ti ti-loader-2" style={{ fontSize: 22 }} /><p style={{ marginTop: 8 }}>Cargando…</p>
     </div>;
   }
   if (!t) {
     return (
       <div style={{ maxWidth: 640 }}>
         <div className="banda banda-error">
-          <i className="ti ti-alert-circle" />
+          <i aria-hidden="true" className="ti ti-alert-circle" />
           <div>
             <strong>No se encontró la transformación</strong>
             Puede que se haya eliminado o que no tengas acceso a ella. Vuelve al historial y elige otra.
@@ -483,10 +483,10 @@ export default function MapeoPage() {
       {resultado && <ResultadoModal resultado={resultado} onAceptar={() => setResultado(null)} />}
         <div className="mapeo-header"><h1>Hubo un problema</h1></div>
         <div style={{
-          background: "var(--danger-50)", border: "1px solid #f2c9c9",
+          background: "var(--danger-50)", border: "1px solid var(--danger-100)",
           borderRadius: "var(--r-lg)", padding: 24, color: "var(--danger-700)",
         }}>
-          <i className="ti ti-alert-triangle" style={{ fontSize: 28 }} />
+          <i aria-hidden="true" className="ti ti-alert-triangle" style={{ fontSize: 28 }} />
           <p style={{ marginTop: 8 }}><strong>No se pudo procesar «{t.nombre || t.nombre_origen}».</strong></p>
           <p style={{ marginTop: 12, fontWeight: 600 }}>¿Qué pasó?</p>
           <p style={{ marginTop: 2 }}>
@@ -513,12 +513,12 @@ export default function MapeoPage() {
       {resultado && <ResultadoModal resultado={resultado} onAceptar={() => setResultado(null)} />}
         <div className="mapeo-header"><h1>Transformación realizada con éxito</h1></div>
         <div className="exito-caja">
-          <i className="ti ti-circle-check" />
+          <i aria-hidden="true" className="ti ti-circle-check" />
           <h2>¡Tu documento está listo!</h2>
           <p>Se rellenó la plantilla con los datos de la licitación, respetando el formato original.</p>
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
             <button className="btn btn-primary btn-lg" onClick={descargar}>
-              <i className="ti ti-download" /> Descargar documento
+              <i aria-hidden="true" className="ti ti-download" /> Descargar documento
             </button>
             <button className="btn btn-lg" onClick={() => navigate("/historial")}>
               Ir al historial
@@ -580,7 +580,7 @@ export default function MapeoPage() {
       {(preview?.avisos?.length ?? 0) > 0 && (
         <div className="pendientes-caja" role="status">
           <p className="pendientes-titulo">
-            <i className="ti ti-alert-triangle" />
+            <i aria-hidden="true" className="ti ti-alert-triangle" />
             {generado ? "Revisa antes de descargar" : "Revisa antes de generar"}: {preview.avisos.length === 1
               ? "1 dato quedará sin llenar" : `${preview.avisos.length} datos quedarán sin llenar`} en el documento
           </p>
@@ -598,9 +598,9 @@ export default function MapeoPage() {
       {hojas.length > 0 && (
         <div className="mapeo-panel" style={{ marginBottom: 14 }}>
           <div className="preview-nav">
-            <button className="preview-flecha" disabled={hojaActiva === 0}
+            <button className="preview-flecha" disabled={hojaActiva === 0} aria-label="Hoja anterior"
               onClick={() => setHojaActiva((h) => Math.max(0, h - 1))}>
-              <i className="ti ti-chevron-left" />
+              <i aria-hidden="true" className="ti ti-chevron-left" />
             </button>
             <div className="preview-titulo">
               <span className="preview-hoja-nombre">{hoja?.nombre}</span>
@@ -609,16 +609,16 @@ export default function MapeoPage() {
                 {hoja?.tipo === "itemizado" && <span className="preview-badge-item">tabla</span>}
               </span>
             </div>
-            <button className="preview-flecha" disabled={hojaActiva >= hojas.length - 1}
+            <button className="preview-flecha" disabled={hojaActiva >= hojas.length - 1} aria-label="Hoja siguiente"
               onClick={() => setHojaActiva((h) => Math.min(hojas.length - 1, h + 1))}>
-              <i className="ti ti-chevron-right" />
+              <i aria-hidden="true" className="ti ti-chevron-right" />
             </button>
           </div>
 
           {/* Campos de la hoja (también en hojas con tabla: casillas sobre la tabla) */}
           {hoja?.campos?.length > 0 && (
             <table className="preview-tabla">
-              <thead><tr><th>Campo</th><th>Valor final</th><th>IVA</th><th></th></tr></thead>
+              <thead><tr><th>Campo</th><th>Valor final</th><th>IVA</th><th><span className="solo-lector">Limpieza con IA</span></th></tr></thead>
               <tbody>
                 {hoja.campos.map((f: any, i: number) => (
                   <tr key={i}>
@@ -629,13 +629,13 @@ export default function MapeoPage() {
                     </td>
                     <td>
                       {f.es_moneda && (
-                        <select className="iva-select" value={f.ajuste_iva || "NINGUNO"}
+                        <select className="iva-select" value={f.ajuste_iva || "NINGUNO"} aria-label={`IVA de «${f.campo}»`}
                           onChange={(e) => cambiarIVA(f.campo, e.target.value)}>
                           {IVA_OPCIONES.map((o) => <option key={o.v} value={o.v}>{o.t}</option>)}
                         </select>
                       )}
                     </td>
-                    <td>{f.limpiado_ia && <span title="Limpiado con IA" style={{ color: "var(--ai-600,#5B4E8C)" }}><i className="ti ti-sparkles" /></span>}</td>
+                    <td>{f.limpiado_ia && <span title="Limpiado con IA" role="img" aria-label="Limpiado con IA" style={{ color: "var(--ai-600,#5B4E8C)" }}><i aria-hidden="true" className="ti ti-sparkles" /></span>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -644,7 +644,7 @@ export default function MapeoPage() {
 
           {hoja?.tipo === "itemizado" && hoja.tabla.totales_faltantes > 0 && (
             <div className={`totales-banda ${hoja.tabla.totales_calculados ? "activo" : ""}`}>
-              <i className={hoja.tabla.totales_calculados ? "ti ti-calculator" : "ti ti-alert-triangle"} />
+              <i aria-hidden="true" className={hoja.tabla.totales_calculados ? "ti ti-calculator" : "ti ti-alert-triangle"} />
               <span>
                 {hoja.tabla.totales_calculados
                   ? <>Se calcularon <strong>{hoja.tabla.totales_faltantes}</strong> total(es) como precio × cantidad (marcados en azul).</>
@@ -652,9 +652,9 @@ export default function MapeoPage() {
               </span>
               <button className="btn" disabled={calculandoTotales}
                 onClick={() => alternarTotales(!hoja.tabla.totales_calculados, hoja.tabla.totales_faltantes)}>
-                {calculandoTotales ? "…" : hoja.tabla.totales_calculados
-                  ? <><i className="ti ti-arrow-back-up" /> Quitar cálculo</>
-                  : <><i className="ti ti-calculator" /> Calcular totales (precio × cantidad)</>}
+                {calculandoTotales ? "Calculando…" : hoja.tabla.totales_calculados
+                  ? <><i aria-hidden="true" className="ti ti-arrow-back-up" /> Quitar cálculo</>
+                  : <><i aria-hidden="true" className="ti ti-calculator" /> Calcular totales (precio × cantidad)</>}
               </button>
             </div>
           )}
@@ -665,55 +665,8 @@ export default function MapeoPage() {
             </div>
           )}
           {hoja?.tipo === "itemizado" && (
-            // Alto de ~15 filas con su propia barra: con miles de filas la página no se alarga.
-            <div className="preview-scroll">
-              <table className="preview-tabla preview-itemizado">
-                <thead>
-                  <tr>{hoja.tabla.columnas.map((c: string, i: number) => {
-                    // De qué columna del origen sale esta: se puede cambiar aquí mismo.
-                    const p = hoja.tabla.parejas?.[i] as ParejaColumna | undefined;
-                    return (
-                      <th key={i}>
-                        {c}
-                        {p && (
-                          <div className={`columna-origen columna-origen-${p.origen ? p.fuente : "vacia"}`}
-                            title={FUENTE_COLUMNA[p.origen ? p.fuente : "vacia"] + (p.motivo ? `: ${p.motivo}` : "")}>
-                            <span>←</span>
-                            <select value={p.origen ?? ""} disabled={guardandoColumna === c}
-                              onChange={(e) => cambiarColumna(hoja.nombre, c, e.target.value)}>
-                              <option value="">(vacía)</option>
-                              {(hoja.tabla.columnas_origen as string[]).map((o) => (
-                                <option key={o} value={o}>{o}</option>
-                              ))}
-                            </select>
-                            {p.fuente === "ia" && p.origen && <i className="ti ti-sparkles" />}
-                          </div>
-                        )}
-                      </th>
-                    );
-                  })}</tr>
-                </thead>
-                <tbody>
-                  {hoja.tabla.filas.map((fila: string[], i: number) => (
-                    <tr key={i}>
-                      {fila.map((celda, j) => {
-                        const marcada = (lista?: number[][]) =>
-                          (lista ?? []).some(([fi, co]) => fi === i && co === j);
-                        const calculada = marcada(hoja.tabla.celdas_calculadas);
-                        const porIA = marcada(hoja.tabla.celdas_ia);
-                        return (
-                          <td key={j} className={calculada ? "celda-calculada" : porIA ? "celda-ia" : ""}
-                            title={calculada ? "Calculado: precio × cantidad" : porIA ? "Limpiado con IA" : undefined}>
-                            {celda || "—"}
-                            {porIA && <i className="ti ti-sparkles celda-ia-icono" />}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <TablaItemizado key={hoja.nombre} hoja={hoja} guardandoColumna={guardandoColumna}
+              onCambiarColumna={cambiarColumna} />
           )}
         </div>
       )}
@@ -721,13 +674,13 @@ export default function MapeoPage() {
       {/* ───── ADVERTENCIAS ───── */}
       {avisoIA && (
         <div className="banda banda-aviso">
-          <i className="ti ti-alert-triangle" />
+          <i aria-hidden="true" className="ti ti-alert-triangle" />
           <div><strong>Mapeo hecho sin IA</strong>{avisoIA}</div>
         </div>
       )}
       {ningunoAsignado ? (
         <div className="banda banda-error">
-          <i className="ti ti-alert-circle" />
+          <i aria-hidden="true" className="ti ti-alert-circle" />
           <div>
             <strong>No se puede generar todavía</strong>
             Ningún campo tiene un dato asignado, así que el documento saldría vacío. Abajo, en «Mapeo propuesto»,
@@ -736,7 +689,7 @@ export default function MapeoPage() {
         </div>
       ) : obligatoriosFaltantes.length > 0 && (
         <div className="banda banda-aviso">
-          <i className="ti ti-alert-triangle" />
+          <i aria-hidden="true" className="ti ti-alert-triangle" />
           <div>
             <strong>Faltan campos obligatorios</strong>
             Ningún dato está asignado a: {obligatoriosFaltantes.map((c) => c.nombre).join(", ")}. Quedarán vacíos en el
@@ -748,19 +701,19 @@ export default function MapeoPage() {
       {/* ───── BOTONES (entre vista previa y mapeo) ───── */}
       <div className="mapeo-acciones" style={{ marginBottom: 14 }}>
         <span className="mapeo-acciones-info">
-          <i className="ti ti-info-circle" style={{ verticalAlign: "-2px" }} /> {campos.length} campos
+          <i aria-hidden="true" className="ti ti-info-circle" style={{ verticalAlign: "-2px" }} /> {campos.length} campos
           {camposSinDato > 0 && !ningunoAsignado && <> · {camposSinDato} sin dato (quedarán vacíos)</>}.
         </span>
         <div style={{ display: "flex", gap: 10 }}>
           <button className="btn btn-lg" onClick={() => navigate("/historial")}>Volver</button>
           <button className="btn btn-lg" onClick={limpiarConIA} disabled={limpiando}
             style={{ borderColor: "var(--ai-600, #5B4E8C)", color: "var(--ai-600, #5B4E8C)" }}>
-            {limpiando ? "Limpiando…" : <><i className="ti ti-sparkles" /> Limpiar con IA</>}
+            {limpiando ? "Limpiando…" : <><i aria-hidden="true" className="ti ti-sparkles" /> Limpiar con IA</>}
           </button>
           <button className="btn btn-primary btn-lg" onClick={generar}
             disabled={generando || (mapeos.length === 0 && !soloTablas) || ningunoAsignado}
             title={ningunoAsignado ? "Asigna un dato a al menos un campo para poder generar" : undefined}>
-            {generando ? "Generando…" : <><i className="ti ti-file-export" /> Generar documento</>}
+            {generando ? "Generando…" : <><i aria-hidden="true" className="ti ti-file-export" /> Generar documento</>}
           </button>
         </div>
       </div>
@@ -769,20 +722,20 @@ export default function MapeoPage() {
       <div className="mapeo-panel">
         <div className="mapeo-panel-head">
           <div className="titulo">
-            <span className="mapeo-ia-icon"><i className="ti ti-brain" /></span>
+            <span className="mapeo-ia-icon"><i aria-hidden="true" className="ti ti-brain" /></span>
             <div>
               <h2>Mapeo propuesto</h2>
               <p>Elige qué dato del Excel va en cada campo de la plantilla. Se guarda al instante.</p>
             </div>
           </div>
-          <span className="privacy-tag"><i className="ti ti-lock" /> Montos ocultos a la IA</span>
+          <span className="privacy-tag"><i aria-hidden="true" className="ti ti-lock" /> Montos ocultos a la IA</span>
         </div>
 
         {mapeos.length === 0 ? (
           <div style={{ padding: 32, textAlign: "center", color: "var(--text-3)" }}>
             {soloTablas ? (
               <>
-                <i className="ti ti-table" style={{ fontSize: 26, display: "block", marginBottom: 6 }} />
+                <i aria-hidden="true" className="ti ti-table" style={{ fontSize: 26, display: "block", marginBottom: 6 }} />
                 Esta licitación solo trae tablas ({tablasOrigen.join(", ")}), así que no hay datos sueltos que mapear.
                 Las filas se copiarán a las hojas de tabla de la plantilla: revisa la vista previa y genera.
               </>
@@ -794,9 +747,9 @@ export default function MapeoPage() {
           <>
             {hojasMapeo.length > 1 && (
               <div className="preview-nav mapeo-nav">
-                <button className="preview-flecha" disabled={indiceMapeo === 0} title="Hoja anterior"
+                <button className="preview-flecha" disabled={indiceMapeo === 0} title="Hoja anterior" aria-label="Hoja anterior"
                   onClick={() => setHojaMapeo(indiceMapeo - 1)}>
-                  <i className="ti ti-chevron-left" />
+                  <i aria-hidden="true" className="ti ti-chevron-left" />
                 </button>
                 <div className="preview-titulo">
                   <span className="preview-hoja-nombre">{grupoMapeo?.nombre}</span>
@@ -807,9 +760,9 @@ export default function MapeoPage() {
                     </span>
                   </span>
                 </div>
-                <button className="preview-flecha" disabled={indiceMapeo >= hojasMapeo.length - 1} title="Hoja siguiente"
+                <button className="preview-flecha" disabled={indiceMapeo >= hojasMapeo.length - 1} title="Hoja siguiente" aria-label="Hoja siguiente"
                   onClick={() => setHojaMapeo(indiceMapeo + 1)}>
-                  <i className="ti ti-chevron-right" />
+                  <i aria-hidden="true" className="ti ti-chevron-right" />
                 </button>
               </div>
             )}
@@ -825,12 +778,13 @@ export default function MapeoPage() {
                     {c.nombre}
                     {c.obligatorio && <span className="mapeo-oblig" title="Campo obligatorio">*</span>}
                   </span>
-                  <span className="mapeo-flecha"><i className="ti ti-arrow-left" /></span>
+                  <span className="mapeo-flecha"><i aria-hidden="true" className="ti ti-arrow-left" /></span>
                   <div className="mapeo-dato">
                     <select
                       className={`mapeo-select ${!m ? "sin-asignar" : ""}`}
                       value={m?.origen_columna ?? ""}
                       disabled={guardandoId === c.id}
+                      aria-label={`Dato del Excel para «${c.nombre}»`}
                       onChange={(e) => cambiarDato(c.id, c.nombre, e.target.value)}
                     >
                       <option value="">— Sin dato —</option>
@@ -860,7 +814,9 @@ export default function MapeoPage() {
                   </div>
                   <span className={`mapeo-conf ${clase}`}>
                     {guardandoId === c.id ? (
-                      <i className="ti ti-loader-2" style={{ color: "var(--brand-500)" }} />
+                      <span role="status" aria-label={`Guardando «${c.nombre}»…`}>
+                        <i aria-hidden="true" className="ti ti-loader-2" style={{ color: "var(--brand-500)" }} />
+                      </span>
                     ) : !m ? (
                       <span className="mapeo-conf-num" style={{ color: "var(--text-3)" }}>—</span>
                     ) : m.ajustado_por_humano ? (
@@ -925,27 +881,129 @@ function ProcesandoIA({ estado, nombre, onTerminar }: {
     <div style={{ maxWidth: 620 }}>
       <div className="mapeo-header"><h1>Procesando tu licitación</h1><p>{nombre}</p></div>
       <div className="ia-proceso">
-        <div className="ia-proceso-orbe"><i className="ti ti-sparkles" /></div>
+        <div className="ia-proceso-orbe"><i aria-hidden="true" className="ti ti-sparkles" /></div>
         <div className="ia-pasos">
           {pasos.map((p, i) => {
             const hecho = i < pasoActual; const activo = i === pasoActual;
             return (
               <div key={i} className={`ia-paso ${hecho ? "hecho" : ""} ${activo ? "activo" : ""}`}>
-                <span className="ia-paso-icono">{hecho ? <i className="ti ti-check" /> : <i className={p.icono} />}</span>
+                <span className="ia-paso-icono">{hecho ? <i aria-hidden="true" className="ti ti-check" /> : <i aria-hidden="true" className={p.icono} />}</span>
                 <div className="ia-paso-texto">
                   <p className="ia-paso-titulo">{p.titulo}{p.ia && activo && <span className="ia-badge">IA</span>}</p>
                   <p className="ia-paso-desc">{p.desc}</p>
                 </div>
-                {activo && <span className="ia-paso-spinner"><i className="ti ti-loader-2" /></span>}
+                {activo && <span className="ia-paso-spinner"><i aria-hidden="true" className="ti ti-loader-2" /></span>}
               </div>
             );
           })}
         </div>
-        <p className="ia-nota"><i className="ti ti-info-circle" /> Puedes ir a otras secciones; la transformación seguirá en tu historial.</p>
+        {/* El lector de pantalla anuncia cada paso al avanzar. */}
+        <p className="solo-lector" role="status">
+          {pasoActual < pasos.length
+            ? `Paso ${pasoActual + 1} de ${pasos.length}: ${pasos[pasoActual].titulo}`
+            : "Procesamiento terminado"}
+        </p>
+        <p className="ia-nota"><i aria-hidden="true" className="ti ti-info-circle" /> Puedes ir a otras secciones; la transformación seguirá en tu historial.</p>
       </div>
     </div>
   );
 }
+// Tablas con más filas que esto dibujan solo las que se ven (más un margen),
+// para que miles de filas no traben la pantalla.
+const FILAS_SIN_VIRTUALIZAR = 100;
+const FILAS_MARGEN = 10;
+const FILAS_VISIBLES = 15;      // alto de .preview-scroll
+
+/**
+ * Tabla de una hoja itemizada, con el selector de columna del origen en el
+ * encabezado. Sin `onCambiarColumna` es de solo lectura (vista previa del historial).
+ */
+export function TablaItemizado({ hoja, guardandoColumna = null, onCambiarColumna }: {
+  hoja: any; guardandoColumna?: string | null;
+  onCambiarColumna?: (hoja: string, destino: string, origen: string) => void;
+}) {
+  const filas: string[][] = hoja.tabla.filas;
+  // Celdas marcadas como "fila,columna", para no recorrer las listas en cada celda.
+  const calculadas = useMemo(
+    () => new Set((hoja.tabla.celdas_calculadas ?? []).map(([f, c]: number[]) => `${f},${c}`)),
+    [hoja.tabla.celdas_calculadas]);
+  const porIA = useMemo(
+    () => new Set((hoja.tabla.celdas_ia ?? []).map(([f, c]: number[]) => `${f},${c}`)),
+    [hoja.tabla.celdas_ia]);
+
+  const virtual = filas.length > FILAS_SIN_VIRTUALIZAR;
+  const [scrollTop, setScrollTop] = useState(0);
+  // Alto real de una fila: se mide la primera dibujada (depende de la fuente).
+  const [altoFila, setAltoFila] = useState(28);
+  const cuerpo = useRef<HTMLTableSectionElement>(null);
+  useLayoutEffect(() => {
+    const fila = cuerpo.current?.querySelector<HTMLElement>("tr[data-fila]");
+    if (virtual && fila && fila.offsetHeight) setAltoFila(fila.offsetHeight);
+  }, [virtual]);
+
+  const desde = virtual ? Math.max(0, Math.floor(scrollTop / altoFila) - FILAS_MARGEN) : 0;
+  const hasta = virtual
+    ? Math.min(filas.length, Math.ceil(scrollTop / altoFila) + FILAS_VISIBLES + FILAS_MARGEN)
+    : filas.length;
+
+  return (
+    // Alto de ~15 filas con su propia barra: con miles de filas la página no se alarga.
+    <div className="preview-scroll"
+      onScroll={virtual ? (e) => setScrollTop(e.currentTarget.scrollTop) : undefined}>
+      <table className="preview-tabla preview-itemizado" aria-rowcount={filas.length + 1}>
+        <thead>
+          <tr aria-rowindex={1}>{hoja.tabla.columnas.map((c: string, i: number) => {
+            // De qué columna del origen sale esta: se puede cambiar aquí mismo.
+            const p = hoja.tabla.parejas?.[i] as ParejaColumna | undefined;
+            return (
+              <th key={i}>
+                {c}
+                {p && onCambiarColumna && (
+                  <div className={`columna-origen columna-origen-${p.origen ? p.fuente : "vacia"}`}
+                    title={FUENTE_COLUMNA[p.origen ? p.fuente : "vacia"] + (p.motivo ? `: ${p.motivo}` : "")}>
+                    <span aria-hidden="true">←</span>
+                    <select value={p.origen ?? ""} disabled={guardandoColumna === c}
+                      aria-label={`Columna del origen para «${c}»`}
+                      onChange={(e) => onCambiarColumna(hoja.nombre, c, e.target.value)}>
+                      <option value="">(vacía)</option>
+                      {(hoja.tabla.columnas_origen as string[]).map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                    {p.fuente === "ia" && p.origen && <i aria-hidden="true" className="ti ti-sparkles" />}
+                  </div>
+                )}
+              </th>
+            );
+          })}</tr>
+        </thead>
+        <tbody ref={cuerpo}>
+          {desde > 0 && <tr aria-hidden="true" style={{ height: desde * altoFila }} />}
+          {filas.slice(desde, hasta).map((fila, k) => {
+            const i = desde + k;
+            return (
+              <tr key={i} data-fila aria-rowindex={i + 2}>
+                {fila.map((celda, j) => {
+                  const calculada = calculadas.has(`${i},${j}`);
+                  const ia = porIA.has(`${i},${j}`);
+                  return (
+                    <td key={j} className={calculada ? "celda-calculada" : ia ? "celda-ia" : ""}
+                      title={calculada ? "Calculado: precio × cantidad" : ia ? "Limpiado con IA" : undefined}>
+                      {celda || "—"}
+                      {ia && <i role="img" aria-label="Limpiado con IA" className="ti ti-sparkles celda-ia-icono" />}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+          {hasta < filas.length && <tr aria-hidden="true" style={{ height: (filas.length - hasta) * altoFila }} />}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function recortarTexto(texto: string, max: number) {
   return texto.length > max ? `${texto.slice(0, max).trimEnd()}…` : texto;
 }

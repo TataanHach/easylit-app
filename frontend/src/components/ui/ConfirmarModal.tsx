@@ -88,7 +88,7 @@ export default function ConfirmarModal({
           </button>
           {!error && (
             <button className="btn btn-peligro" onClick={alConfirmar} disabled={ocupado}>
-              {ocupado ? <><i className="ti ti-loader-2" /> {procesando}</> : confirmar}
+              {ocupado ? <><i aria-hidden="true" className="ti ti-loader-2" /> {procesando}</> : confirmar}
             </button>
           )}
         </div>

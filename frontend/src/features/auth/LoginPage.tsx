@@ -19,6 +19,13 @@ import { firebaseActivo } from "@/lib/firebase";
 import { describirError } from "@/lib/errores";
 import { problemaCorreo } from "@/lib/validar";
 
+/** Lo que ofrece EasyLit, en el panel azul del login. */
+const PUNTOS = [
+  { icono: "ti ti-shield-lock", titulo: "Datos Privados", texto: "Tus datos no salen de EasyLit: la IA solo ve la estructura." },
+  { icono: "ti ti-calculator", titulo: "Totales verificados", texto: "Cada total se reconcilia contra el documento original." },
+  { icono: "ti ti-history", titulo: "Trazabilidad completa", texto: "Bitácora de quién cambió qué y cuándo." },
+];
+
 export default function LoginPage() {
   const { contrasena_max: CONTRASENA_MAX } = useConfiguracion();
   const { usuario, login } = useAuth();
@@ -93,19 +100,25 @@ export default function LoginPage() {
     <div className="auth-wrap">
       <aside className="auth-brand">
         <div className="auth-brand-top">
-          <span className="auth-logo"><i className="ti ti-file-invoice" /></span>
+          <span className="auth-logo"><i aria-hidden="true" className="ti ti-file-invoice" /></span>
           <div>
             <div className="auth-brand-name">EasyLit</div>
             <div className="auth-brand-sub">v1.0 · Beta</div>
           </div>
         </div>
         <div className="auth-brand-mid">
-          <h2>Transforma licitaciones sin perder un solo número.</h2>
-          <p>Sube el documento del mandante, limpia los datos y genera el formato exigido con el itemizado verificado partida por partida.</p>
+          <h2>Transforma licitaciones<br /> Rapido y preciso.</h2>
+          <p>Sube tu documento y plantilla, limpia los datos y genera el formato exigido.</p>
           <ul className="auth-points">
-            <li className="auth-point"><i className="ti ti-shield-lock" /> Tus precios no salen de la empresa: la IA solo ve la estructura.</li>
-            <li className="auth-point"><i className="ti ti-calculator" /> Cada total se reconcilia contra el documento original.</li>
-            <li className="auth-point"><i className="ti ti-history" /> Bitácora de quién cambió qué y cuándo.</li>
+            {PUNTOS.map((p) => (
+              <li key={p.titulo} className="auth-point">
+                <span className="auth-point-icono"><i aria-hidden="true" className={p.icono} /></span>
+                <div>
+                  <p className="auth-point-titulo">{p.titulo}</p>
+                  <p className="auth-point-texto">{p.texto}</p>
+                </div>
+              </li>
+            ))}
           </ul>
         </div>
         <p className="auth-brand-foot">© 2026 EasyLit · Concepción, Chile</p>
@@ -114,7 +127,7 @@ export default function LoginPage() {
       <main className="auth-form-col">
         <div className="auth-card">
           <div className="auth-mini-logo">
-            <span className="logo-icon"><i className="ti ti-file-invoice" /></span>
+            <span className="logo-icon"><i aria-hidden="true" className="ti ti-file-invoice" /></span>
             <div>
               <div className="auth-brand-name">EasyLit</div>
               <div className="auth-brand-sub" style={{ color: "var(--text-3)" }}>v1.0 · Beta</div>
@@ -128,7 +141,7 @@ export default function LoginPage() {
 
           {error && (
             <div className="auth-error">
-              <i className="ti ti-alert-circle" />
+              <i aria-hidden="true" className="ti ti-alert-circle" />
               <span>{error}</span>
             </div>
           )}
@@ -138,7 +151,7 @@ export default function LoginPage() {
               <div className="field">
                 <label htmlFor="email">Correo electrónico</label>
                 <div className="input-wrap">
-                  <i className="ti ti-mail" />
+                  <i aria-hidden="true" className="ti ti-mail" />
                   <input
                     id="email" type="email" className={`auth-input ${errorEmail ? "error" : ""}`} autoComplete="email"
                     placeholder="nombre@empresa.cl" autoFocus maxLength={LIMITES.email}
@@ -150,7 +163,7 @@ export default function LoginPage() {
                 {errorEmail && <p id="email-error" className="hint error">{errorEmail}</p>}
               </div>
               <button className="auth-btn" type="submit" disabled={cargando}>
-                {cargando ? "Verificando…" : <>Continuar <i className="ti ti-arrow-right" /></>}
+                {cargando ? "Verificando…" : <>Continuar <i aria-hidden="true" className="ti ti-arrow-right" /></>}
               </button>
             </form>
           ) : (
@@ -158,14 +171,14 @@ export default function LoginPage() {
               <div className="field">
                 <label htmlFor="email2">Correo electrónico</label>
                 <div className="input-wrap">
-                  <i className="ti ti-mail" />
+                  <i aria-hidden="true" className="ti ti-mail" />
                   <input id="email2" type="email" className="auth-input" value={email} disabled />
                 </div>
               </div>
               <div className="field">
                 <label htmlFor="password">Contraseña</label>
                 <div className="input-wrap">
-                  <i className="ti ti-lock" />
+                  <i aria-hidden="true" className="ti ti-lock" />
                   <input
                     id="password" type={verPw ? "text" : "password"}
                     className={`auth-input has-toggle ${errorPw ? "error" : ""}`} autoComplete="current-password"
@@ -175,13 +188,13 @@ export default function LoginPage() {
                   />
                   <button type="button" className="toggle-pw" onClick={() => setVerPw(!verPw)}
                     aria-label={verPw ? "Ocultar" : "Mostrar"}>
-                    <i className={verPw ? "ti ti-eye-off" : "ti ti-eye"} />
+                    <i aria-hidden="true" className={verPw ? "ti ti-eye-off" : "ti ti-eye"} />
                   </button>
                 </div>
                 {errorPw && <p id="password-error" className="hint error">{errorPw}</p>}
               </div>
               <button className="auth-btn" type="submit" disabled={cargando}>
-                {cargando ? "Ingresando…" : <><i className="ti ti-login-2" /> Iniciar sesión</>}
+                {cargando ? "Ingresando…" : <><i aria-hidden="true" className="ti ti-login-2" /> Iniciar sesión</>}
               </button>
               <p className="auth-alt">
                 <button type="button" onClick={() => { setPaso("correo"); setPassword(""); setError(""); setErrorPw(""); }}

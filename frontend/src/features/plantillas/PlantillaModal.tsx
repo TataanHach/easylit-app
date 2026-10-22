@@ -5,7 +5,7 @@
  * En modo editar: permite cambiar nombre/mandante/sector (no el archivo, para
  * no invalidar transformaciones que ya lo usan).
  */
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { plantillaService } from "./plantillaService";
 import { LIMITES, limpiarTexto, problemaTamano } from "@/lib/limites";
 import { describirError } from "@/lib/errores";
@@ -64,12 +64,19 @@ export default function PlantillaModal({ plantilla, onCerrar, onGuardado }: Prop
     onGuardado(datos.nombre, creada);
   }
 
+  // Escape cierra, como la X (salvo mientras se guarda).
+  useEffect(() => {
+    const alTeclear = (e: KeyboardEvent) => { if (e.key === "Escape" && !guardando) onCerrar(); };
+    window.addEventListener("keydown", alTeclear);
+    return () => window.removeEventListener("keydown", alTeclear);
+  }, [guardando, onCerrar]);
+
   return (
     <div className="modal-overlay">
-      <div className="modal">
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="plantilla-modal-titulo">
         <div className="modal-head">
-          <h2>{esEdicion ? "Editar plantilla" : "Nueva plantilla"}</h2>
-          <button className="modal-close" onClick={onCerrar}><i className="ti ti-x" /></button>
+          <h2 id="plantilla-modal-titulo">{esEdicion ? "Editar plantilla" : "Nueva plantilla"}</h2>
+          <button className="modal-close" onClick={onCerrar} aria-label="Cerrar"><i aria-hidden="true" className="ti ti-x" /></button>
         </div>
         <form onSubmit={guardar} noValidate>
           <div className="modal-body">
@@ -108,8 +115,8 @@ export default function PlantillaModal({ plantilla, onCerrar, onGuardado }: Prop
                   <label className={`file-drop ${archivo ? "tiene" : ""}`}>
                     <input type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }}
                       onChange={(e) => { elegirArchivo(e.target.files?.[0] ?? null); e.target.value = ""; }} />
-                    {archivo ? <><i className="ti ti-file-check" /> {archivo.name}</>
-                            : <><i className="ti ti-upload" /> Haz clic para subir el Excel</>}
+                    {archivo ? <><i aria-hidden="true" className="ti ti-file-check" /> {archivo.name}</>
+                            : <><i aria-hidden="true" className="ti ti-upload" /> Haz clic para subir el Excel</>}
                   </label>
                 </div>
               </>

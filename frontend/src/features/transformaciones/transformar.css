@@ -34,8 +34,8 @@
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--r-lg); padding: 18px;
 }
-.slot.origen.lleno { border-color: var(--brand-100); background: linear-gradient(180deg, #F5FAFF 0%, #fff 60%); }
-.slot.destino.lleno { border-color: var(--dest-100); background: linear-gradient(180deg, #F5FBEC 0%, #fff 60%); }
+.slot.origen.lleno { border-color: var(--brand-100); background: linear-gradient(180deg, var(--brand-25) 0%, var(--surface) 60%); }
+.slot.destino.lleno { border-color: var(--dest-100); background: linear-gradient(180deg, var(--dest-25) 0%, var(--surface) 60%); }
 .slot-label {
   font-size: var(--fs-sm); font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.08em; color: var(--text-2); margin-bottom: 14px;
@@ -46,9 +46,11 @@
   border-radius: var(--r-lg); padding: 26px 16px; text-align: center;
   cursor: pointer; background: var(--surface-2);
 }
-.dropzone:hover { border-color: var(--brand-600); background: #F5FAFF; }
+.dropzone:hover { border-color: var(--brand-600); background: var(--brand-25); }
+/* El input va oculto con .solo-lector (no display:none) para poder elegir el archivo con teclado. */
+.dropzone:has(input:focus-visible) { border-color: var(--brand-600); box-shadow: var(--focus-ring); }
 .drop-icon {
-  width: 44px; height: 44px; border-radius: var(--r-lg); background: #fff;
+  width: 44px; height: 44px; border-radius: var(--r-lg); background: var(--surface);
   border: 1px solid var(--line); margin: 0 auto 10px;
   display: flex; align-items: center; justify-content: center;
 }
@@ -58,7 +60,7 @@
 
 .archivo-card {
   display: flex; align-items: center; gap: 10px; padding: 12px;
-  background: #fff; border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
 }
 .archivo-icon {
   width: 36px; height: 36px; border-radius: var(--r-md); flex-shrink: 0;
@@ -77,10 +79,11 @@
   padding: 4px; border-radius: var(--r-sm);
 }
 .quitar-btn:hover { background: var(--bg); color: var(--danger-500); }
+.quitar-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
 .flecha-col { display: flex; align-items: center; justify-content: center; }
 .flecha-circulo {
-  width: 36px; height: 36px; border-radius: 50%; background: #fff;
+  width: 36px; height: 36px; border-radius: 50%; background: var(--surface);
   border: 1px solid var(--line); display: flex; align-items: center;
   justify-content: center; color: var(--text-3);
 }
@@ -88,9 +91,10 @@
 /* Selector de plantilla */
 .select-plantilla {
   width: 100%; padding: 10px 12px; border: 1px solid var(--line-strong);
-  border-radius: var(--r-md); font-size: var(--fs-base); background: #fff; cursor: pointer;
+  border-radius: var(--r-md); font-size: var(--fs-base); background: var(--surface); cursor: pointer;
 }
-.select-plantilla:focus { border-color: var(--brand-600); box-shadow: var(--focus-ring); outline: none; }
+.select-plantilla:focus { outline: none; }
+.select-plantilla:focus-visible { border-color: var(--brand-600); box-shadow: var(--focus-ring); }
 
 .campo { margin-bottom: 14px; }
 .campo label { display: block; font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); margin-bottom: 6px; }
@@ -98,7 +102,8 @@
   width: 100%; padding: 9px 12px; border: 1px solid var(--line-strong);
   border-radius: var(--r-md); font-size: var(--fs-base);
 }
-.campo input:focus { border-color: var(--brand-600); box-shadow: var(--focus-ring); outline: none; }
+.campo input:focus { outline: none; }
+.campo input:focus-visible { border-color: var(--brand-600); box-shadow: var(--focus-ring); }
 
 /* Barra de acción */
 .acciones {
@@ -109,6 +114,7 @@
 }
 .acciones-info { font-size: var(--fs-md); color: var(--text-2); }
 .btn-lg { padding: 10px 20px; font-size: var(--fs-base); }
+.acciones .btn:disabled { opacity: .5; cursor: not-allowed; }
 
 /* Estado de procesamiento */
 .proceso {
@@ -129,7 +135,7 @@
 .proceso-paso.hecho { color: var(--text); font-weight: 500; }
 
 .error-caja {
-  background: var(--danger-50); border: 1px solid #f2c9c9; color: var(--danger-700);
+  background: var(--danger-50); border: 1px solid var(--danger-100); color: var(--danger-700);
   padding: 14px 16px; border-radius: var(--r-md); font-size: var(--fs-base);
   display: flex; gap: 10px; align-items: flex-start;
 }

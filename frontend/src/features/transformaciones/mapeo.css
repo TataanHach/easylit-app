@@ -16,7 +16,7 @@
 .mapeo-panel-head .titulo { display: flex; align-items: center; gap: 10px; }
 .mapeo-ia-icon {
   width: 32px; height: 32px; border-radius: var(--r-md);
-  background: #fff; display: flex; align-items: center; justify-content: center;
+  background: var(--surface); display: flex; align-items: center; justify-content: center;
 }
 .mapeo-ia-icon i { color: var(--ai-600); font-size: 16px; }
 .mapeo-panel-head h2 { font-size: var(--fs-base); font-weight: 600; }
@@ -44,13 +44,14 @@
   border: 1px solid var(--dest-100); background: var(--dest-50);
   color: var(--dest-700); font-weight: 600; font-size: var(--fs-md); cursor: pointer;
 }
-.mapeo-select:focus { outline: none; box-shadow: var(--focus-ring); }
+.mapeo-select:focus { outline: none; }
+.mapeo-select:focus-visible { box-shadow: var(--focus-ring); }
 .mapeo-select.sin-asignar { border-color: var(--danger-500); background: var(--danger-50); color: var(--danger-700); }
 
 .mapeo-conf { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
 .mapeo-conf-bar { width: 40px; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .mapeo-conf-fill { display: block; height: 100%; }
-.mapeo-conf-num { font-size: var(--fs-sm); font-weight: 600; min-width: 32px; }
+.mapeo-conf-num { font-size: var(--fs-sm); font-weight: 600; min-width: 32px; font-variant-numeric: tabular-nums; }
 .mapeo-conf.alta .mapeo-conf-fill { background: var(--ok-600); } .mapeo-conf.alta .mapeo-conf-num { color: var(--dest-600); }
 .mapeo-conf.media .mapeo-conf-fill { background: var(--warn-500); } .mapeo-conf.media .mapeo-conf-num { color: var(--warn-700); }
 .mapeo-conf.baja .mapeo-conf-fill { background: var(--danger-500); } .mapeo-conf.baja .mapeo-conf-num { color: var(--danger-600); }
@@ -105,13 +106,16 @@
   0%, 100% { transform: scale(1); opacity: .3; }
   50% { transform: scale(1.15); opacity: 0; }
 }
+@media (prefers-reduced-motion: reduce) {
+  .ia-proceso-orbe, .ia-proceso-orbe::after { animation: none; }
+}
 
 /* Lista de pasos */
 .ia-pasos { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 6px; }
 .ia-paso {
   display: flex; align-items: center; gap: 14px;
   padding: 12px 14px; border-radius: var(--r-md);
-  opacity: .45; transition: opacity .3s, background .3s;
+  opacity: .45; transition: opacity .3s;
 }
 .ia-paso.hecho { opacity: 1; }
 .ia-paso.activo { opacity: 1; background: var(--ai-50); }
@@ -120,7 +124,6 @@
   width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   background: var(--line-soft); color: var(--text-3);
-  transition: background .3s, color .3s;
 }
 .ia-paso.hecho .ia-paso-icono { background: var(--dest-50); color: var(--ok-600); }
 .ia-paso.activo .ia-paso-icono { background: var(--ai-600); color: #fff; }
@@ -169,24 +172,14 @@
 .preview-flecha i { font-size: 18px; }
 .preview-titulo { text-align: center; }
 .preview-hoja-nombre { display: block; font-size: var(--fs-lg); font-weight: 600; color: var(--text); }
-.preview-hoja-contador { font-size: var(--fs-sm); color: var(--text-3); display: inline-flex; align-items: center; gap: 8px; }
+.preview-hoja-contador { font-size: var(--fs-sm); color: var(--text-3); font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; gap: 8px; }
 .preview-badge-item {
   font-size: var(--fs-xs); font-weight: 700; padding: 1px 7px; border-radius: var(--r-pill);
   background: var(--dest-50); color: var(--dest-700);
 }
- 
-/* Tabla de la vista previa (si no la tenías ya) */
-.preview-tabla { width: 100%; border-collapse: collapse; font-size: var(--fs-md); }
-.preview-tabla th {
-  text-align: left; padding: 8px 12px; border-bottom: 2px solid var(--line);
-  font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .04em; color: var(--text-3);
-}
-.preview-tabla td { padding: 8px 12px; border-bottom: 1px solid var(--line-soft); }
-.preview-tabla tr:hover { background: var(--bg); }
- 
 /* Tabla de itemizado: celdas más compactas y numéricas a la derecha */
 .preview-itemizado th, .preview-itemizado td { white-space: nowrap; padding: 6px 14px; }
-.preview-itemizado td:not(:first-child) { text-align: right; }
+.preview-itemizado td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* Tabla larga: muestra ~15 filas y baja dentro de su propia barra; el
    encabezado (con el selector de columna) queda fijo arriba. */
@@ -195,13 +188,14 @@
   position: sticky; top: 0; z-index: 1;
   background: var(--surface-2, var(--surface)); box-shadow: inset 0 -1px 0 var(--line-soft);
 }
-.preview-filas-total { margin: 0 16px 8px; font-size: var(--fs-sm); color: var(--text-3); }
+.preview-filas-total { margin: 0 16px 8px; font-size: var(--fs-sm); color: var(--text-3); font-variant-numeric: tabular-nums; }
  
 .iva-select {
   padding: 3px 8px; border: 1px solid var(--line-strong); border-radius: var(--r-sm);
   font-size: var(--fs-sm); background: var(--surface); cursor: pointer; color: var(--text-2);
 }
 .iva-select:focus { border-color: var(--brand-600); outline: none; }
+.iva-select:focus-visible { box-shadow: var(--focus-ring); }
 /* Mapeo por campo de la plantilla */
 .mapeo-fila-head {
   padding-top: 10px; padding-bottom: 10px; background: var(--surface-2);
@@ -210,10 +204,6 @@
 }
 .mapeo-fila-head span:last-child { text-align: right; }
 .mapeo-campo { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.mapeo-hoja {
-  font-size: var(--fs-xs); font-weight: 500; padding: 1px 6px; border-radius: var(--r-xs);
-  background: var(--surface); border: 1px solid var(--brand-100); color: var(--text-2);
-}
 .mapeo-oblig { color: var(--danger-600); font-weight: 700; }
 .mapeo-manual {
   font-size: var(--fs-xs); font-weight: 700; padding: 2px 8px; border-radius: var(--r-pill);
@@ -261,6 +251,7 @@
   font-size: var(--fs-xs); background: var(--surface); color: var(--text-2); cursor: pointer;
 }
 .columna-origen select:focus { border-color: var(--brand-600); outline: none; }
+.columna-origen select:focus-visible { box-shadow: var(--focus-ring); }
 .columna-origen select:disabled { opacity: .6; cursor: wait; }
 .columna-origen-ia select { border-color: var(--ai-600); color: var(--ai-600); background: var(--ai-50); }
 .columna-origen-ia i { color: var(--ai-600); }
@@ -280,3 +271,13 @@
 .pendientes-titulo i { font-size: 18px; }
 .pendientes-caja ul { margin: 0 0 6px; padding-left: 26px; line-height: 1.5; font-size: var(--fs-md); }
 .pendientes-pie { margin: 0; font-size: var(--fs-sm); color: var(--text-2); }
+
+/* Vista previa de solo lectura (desde el historial) */
+.modal.vista-previa-modal { max-width: 960px; }
+.vista-previa-modal .modal-body { padding: 18px 22px; }
+.vista-previa-sub {
+  font-size: var(--fs-md); color: var(--text-3); margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.vista-previa-modal .preview-nav { padding: 12px 12px 14px; }
+.vista-previa-estado { padding: 32px; text-align: center; color: var(--text-3); }

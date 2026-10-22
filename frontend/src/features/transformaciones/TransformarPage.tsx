@@ -115,7 +115,7 @@ export default function TransformarPage() {
       </div>
 
       <div className="stepper">
-        <div className="step activo"><span className="step-num">1</span> Cargar</div>
+        <div className="step activo" aria-current="step"><span className="step-num">1</span> Cargar</div>
         <div className="step-linea" />
         <div className="step"><span className="step-num">2</span> Limpieza + IA</div>
         <div className="step-linea" />
@@ -125,8 +125,8 @@ export default function TransformarPage() {
       </div>
 
       {error && (
-        <div className="error-caja" style={{ marginBottom: "var(--s-4)" }}>
-          <i className="ti ti-alert-circle" /><span>{error}</span>
+        <div className="error-caja" role="alert" style={{ marginBottom: "var(--s-4)" }}>
+          <i aria-hidden="true" className="ti ti-alert-circle" /><span>{error}</span>
         </div>
       )}
 
@@ -135,28 +135,29 @@ export default function TransformarPage() {
           <p className="slot-label">Documento fuente</p>
           {!archivo ? (
             <label className="dropzone">
-              <input type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }}
+              <input type="file" accept=".xlsx,.xlsm,.xls,.csv" className="solo-lector"
                 onChange={(e) => { elegirArchivo(e.target.files?.[0] ?? null); e.target.value = ""; }} />
-              <div className="drop-icon"><i className="ti ti-file-upload" /></div>
+              <div className="drop-icon"><i aria-hidden="true" className="ti ti-file-upload" /></div>
               <p className="drop-title">Sube la licitación</p>
-              <p className="drop-sub">Excel o CSV · haz clic para seleccionar</p>
+              <p className="drop-sub">Excel o CSV · haz clic o pulsa Enter para seleccionar</p>
             </label>
           ) : (
             <div className="archivo-card">
-              <span className="archivo-icon"><i className="ti ti-file-spreadsheet" /></span>
+              <span className="archivo-icon"><i aria-hidden="true" className="ti ti-file-spreadsheet" /></span>
               <div className="archivo-info">
                 <p className="archivo-nombre">{archivo.name}</p>
                 <p className="archivo-meta">{(archivo.size / 1024).toFixed(0)} KB</p>
               </div>
-              <button className="quitar-btn" onClick={() => setArchivo(null)} title="Quitar">
-                <i className="ti ti-x" />
+              <button className="quitar-btn" onClick={() => setArchivo(null)} title="Quitar"
+                aria-label={`Quitar «${archivo.name}»`}>
+                <i aria-hidden="true" className="ti ti-x" />
               </button>
             </div>
           )}
         </div>
 
         <div className="flecha-col">
-          <div className="flecha-circulo"><i className="ti ti-arrow-right" /></div>
+          <div className="flecha-circulo"><i aria-hidden="true" className="ti ti-arrow-right" /></div>
         </div>
 
         <div className={`slot destino ${plantillaId ? "lleno" : ""}`}>
@@ -164,8 +165,8 @@ export default function TransformarPage() {
 
           {/* Paso A: elegir empresa/mandante */}
           <div className="campo">
-            <label>Empresa / mandante</label>
-            <select className="select-plantilla" value={empresa}
+            <label htmlFor="empresa-transformacion">Empresa / mandante</label>
+            <select id="empresa-transformacion" className="select-plantilla" value={empresa}
               onChange={(e) => cambiarEmpresa(e.target.value)}>
               <option value="">Todas las empresas</option>
               {empresas.map((m) => {
@@ -180,11 +181,11 @@ export default function TransformarPage() {
 
           {/* Paso B: elegir plantilla (filtrada por empresa) */}
           <div className="campo">
-            <label>Plantilla</label>
+            <label htmlFor="plantilla-transformacion">Plantilla</label>
             {cargandoPlantillas ? (
-              <p className="drop-sub"><i className="ti ti-loader-2" style={{ marginRight: 6 }} />Cargando plantillas…</p>
+              <p className="drop-sub"><i aria-hidden="true" className="ti ti-loader-2" style={{ marginRight: 6 }} />Cargando plantillas…</p>
             ) : plantillasFiltradas.length > 0 ? (
-              <select className="select-plantilla" value={plantillaId}
+              <select id="plantilla-transformacion" className="select-plantilla" value={plantillaId}
                 onChange={(e) => cambiarPlantilla(e.target.value)}>
                 <option value="">Elige una plantilla…</option>
                 {plantillasFiltradas.map((p) => (
@@ -195,7 +196,7 @@ export default function TransformarPage() {
               </select>
             ) : (
               <div className="error-caja">
-                <i className="ti ti-info-circle" />
+                <i aria-hidden="true" className="ti ti-info-circle" />
                 <span>
                   {empresa
                     ? "Esta empresa no tiene plantillas. Elige otra o créala."
@@ -209,7 +210,7 @@ export default function TransformarPage() {
 
       <div className="campo" style={{ marginTop: "var(--s-4)" }}>
         <label htmlFor="nombre-transformacion">Nombre de la transformación (opcional)</label>
-        <input id="nombre-transformacion" type="text"
+        <input id="nombre-transformacion" name="nombre" type="text" autoComplete="off"
           maxLength={LIMITES.nombreTransformacion} value={nombre} onChange={(e) => setNombre(e.target.value)}
           onBlur={(e) => setNombre(limpiarTexto(e.target.value))}
           placeholder={archivo ? archivo.name.replace(/\.[^.]+$/, "") : "Ej: Licitación pavimentación 2026"} />
@@ -221,9 +222,8 @@ export default function TransformarPage() {
           {archivo && !plantillaId && "Elige la empresa y su plantilla."}
           {archivo && plantillaId && "Todo listo para transformar."}
         </span>
-        <button className="btn btn-primary btn-lg" disabled={!listo} onClick={transformar}
-          style={!listo ? { opacity: 0.5, cursor: "not-allowed" } : {}}>
-          {enviando ? "Subiendo…" : <>Transformar <i className="ti ti-arrow-right" /></>}
+        <button className="btn btn-primary btn-lg" disabled={!listo} onClick={transformar}>
+          {enviando ? "Subiendo…" : <>Transformar <i aria-hidden="true" className="ti ti-arrow-right" /></>}
         </button>
       </div>
     </div>

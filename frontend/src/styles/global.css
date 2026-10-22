@@ -11,6 +11,12 @@ body {
 }
 a { color: var(--brand-600); text-decoration: none; }
 
+/* Texto solo para lectores de pantalla (y controles que deben seguir siendo enfocables). */
+.solo-lector {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
 /* Todo ícono de carga gira, en cualquier pantalla. */
 .ti-loader-2 { display: inline-block; animation: cargando-girar 1s linear infinite; }
 @keyframes cargando-girar { to { transform: rotate(360deg); } }

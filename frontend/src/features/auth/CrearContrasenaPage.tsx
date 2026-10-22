@@ -67,7 +67,7 @@ export default function CrearContrasenaPage() {
     <div className="auth-wrap">
       <aside className="auth-brand">
         <div className="auth-brand-top">
-          <span className="auth-logo"><i className="ti ti-file-invoice" /></span>
+          <span className="auth-logo"><i aria-hidden="true" className="ti ti-file-invoice" /></span>
           <div>
             <div className="auth-brand-name">EasyLit</div>
             <div className="auth-brand-sub">v1.0 · Beta</div>
@@ -89,7 +89,7 @@ export default function CrearContrasenaPage() {
 
           {error && (
             <div className="auth-error">
-              <i className="ti ti-alert-circle" /><span>{error}</span>
+              <i aria-hidden="true" className="ti ti-alert-circle" /><span>{error}</span>
             </div>
           )}
 
@@ -98,26 +98,29 @@ export default function CrearContrasenaPage() {
               <div className="field">
                 <label htmlFor="token">Código de invitación</label>
                 <div className="input-wrap">
-                  <i className="ti ti-key" />
+                  <i aria-hidden="true" className="ti ti-key" />
                   <input id="token" type="text" className="auth-input"
                     placeholder="Pega aquí el código de tu invitación" maxLength={LIMITES.tokenInvitacion}
                     value={token} onChange={(e) => setToken(e.target.value)}
                     onBlur={(e) => setToken(limpiarTexto(e.target.value))} />
                 </div>
-                <p className="hint">En desarrollo, este código lo entrega el endpoint de invitación.</p>
+                {import.meta.env.DEV && (
+                  <p className="hint">En desarrollo, este código lo entrega el endpoint de invitación.</p>
+                )}
               </div>
             )}
 
             <div className="field">
               <label htmlFor="pw">Contraseña</label>
               <div className="input-wrap">
-                <i className="ti ti-lock" />
+                <i aria-hidden="true" className="ti ti-lock" />
                 <input id="pw" type={verPw ? "text" : "password"}
                   className="auth-input has-toggle" autoComplete="new-password"
                   placeholder={`Entre ${CONTRASENA_MIN} y ${CONTRASENA_MAX} caracteres`} maxLength={CONTRASENA_MAX}
                   value={password} onChange={(e) => setPassword(e.target.value)} />
-                <button type="button" className="toggle-pw" onClick={() => setVerPw(!verPw)}>
-                  <i className={verPw ? "ti ti-eye-off" : "ti ti-eye"} />
+                <button type="button" className="toggle-pw" onClick={() => setVerPw(!verPw)}
+                  aria-label={verPw ? "Ocultar contraseña" : "Mostrar contraseña"}>
+                  <i aria-hidden="true" className={verPw ? "ti ti-eye-off" : "ti ti-eye"} />
                 </button>
               </div>
               <div className="pw-strength" data-level={nivel}>
@@ -128,7 +131,7 @@ export default function CrearContrasenaPage() {
                   const ok = r.cumple(password);
                   return (
                     <li key={r.texto} className={ok ? "ok" : password ? "falta" : ""}>
-                      <i className={ok ? "ti ti-circle-check" : "ti ti-circle"} /> {r.texto}
+                      <i aria-hidden="true" className={ok ? "ti ti-circle-check" : "ti ti-circle"} /> {r.texto}
                     </li>
                   );
                 })}
@@ -138,7 +141,7 @@ export default function CrearContrasenaPage() {
             <div className="field">
               <label htmlFor="pw2">Confirmar contraseña</label>
               <div className="input-wrap">
-                <i className="ti ti-lock-check" />
+                <i aria-hidden="true" className="ti ti-lock-check" />
                 <input id="pw2" type={verPw ? "text" : "password"}
                   className={`auth-input ${password2 ? (coinciden ? "ok" : "error") : ""}`}
                   autoComplete="new-password" placeholder="Repite la contraseña"
@@ -154,7 +157,7 @@ export default function CrearContrasenaPage() {
             <div className="field">
               <label htmlFor="rut">RUT (opcional)</label>
               <div className="input-wrap">
-                <i className="ti ti-id" />
+                <i aria-hidden="true" className="ti ti-id" />
                 <input id="rut" type="text"
                   className={`auth-input ${rut ? (rutOk ? "ok" : "error") : ""}`}
                   placeholder="12.345.678-9" maxLength={LIMITES.rut}
@@ -164,7 +167,7 @@ export default function CrearContrasenaPage() {
             </div>
 
             <button className="auth-btn" type="submit" disabled={cargando}>
-              {cargando ? "Creando…" : <><i className="ti ti-check" /> Crear contraseña y entrar</>}
+              {cargando ? "Creando…" : <><i aria-hidden="true" className="ti ti-check" /> Crear contraseña y entrar</>}
             </button>
           </form>
         </div>

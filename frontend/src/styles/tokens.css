@@ -1,5 +1,6 @@
 /* EasyLit · Tokens de diseño (compartidos con el prototipo original) */
 :root {
+  --brand-25:#F5FAFF; --dest-25:#F5FBEC; --danger-100:#F2C9C9;
   --brand-50:#E6F1FB; --brand-100:#C0D9F0; --brand-300:#B5D4F4;
   --brand-500:#378ADD; --brand-600:#185FA5; --brand-700:#124B85; --brand-900:#0C447C;
   --dest-50:#EAF3DE; --dest-100:#C5DDA0; --dest-600:#3B6D11; --dest-700:#27500A;

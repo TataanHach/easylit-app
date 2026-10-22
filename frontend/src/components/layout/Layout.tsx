@@ -44,14 +44,14 @@ export default function Layout() {
     <div className={`app-shell ${navAbierto ? "nav-open" : ""}`}>
       <aside className="sidebar">
         <div className="sidebar-logo">
-          <div className="logo-icon"><i className="ti ti-file-invoice" /></div>
+          <div className="logo-icon"><i aria-hidden="true" className="ti ti-file-invoice" /></div>
           <div>
             <div className="logo-text">EasyLit</div>
             <div className="logo-sub">v1.0 · Beta</div>
           </div>
           {/* Solo en pantalla angosta: el menú tapa el botón ☰, así que lleva su propio cierre. */}
           <button className="nav-cerrar" onClick={cerrarNav} aria-label="Cerrar menú">
-            <i className="ti ti-x" />
+            <i aria-hidden="true" className="ti ti-x" />
           </button>
         </div>
 
@@ -59,33 +59,34 @@ export default function Layout() {
         <nav className="sidebar-nav" onClick={(e) => { if ((e.target as HTMLElement).closest("a")) cerrarNav(); }}>
           <p className="nav-section">Principal</p>
           <NavLink to="/transformar" className={({ isActive }) => `nav-item ${isActive ? "activo" : ""}`}>
-            <i className="ti ti-arrows-transfer-up" /> Transformar
+            <i aria-hidden="true" className="ti ti-arrows-transfer-up" /> Transformar
           </NavLink>
           <NavLink to="/historial" className={({ isActive }) => `nav-item ${isActive ? "activo" : ""}`}>
-            <i className="ti ti-clock-hour-4" /> Historial
+            <i aria-hidden="true" className="ti ti-clock-hour-4" /> Historial
           </NavLink>
           <NavLink to="/plantillas" className={({ isActive }) => `nav-item ${isActive ? "activo" : ""}`}>
-            <i className="ti ti-template" /> Plantillas
+            <i aria-hidden="true" className="ti ti-template" /> Plantillas
           </NavLink>
 
           {puedeConfig && (
             <>
               <p className="nav-section">Configuración</p>
               <NavLink to="/equipo" className={({ isActive }) => `nav-item ${isActive ? "activo" : ""}`}>
-                <i className="ti ti-users" /> Equipo
+                <i aria-hidden="true" className="ti ti-users" /> Equipo
               </NavLink>
             </>
           )}
         </nav>
 
-        <a className="sidebar-bottom" onClick={cerrarSesion} style={{ cursor: "pointer" }}>
+        <button type="button" className="sidebar-bottom" onClick={cerrarSesion}
+          title="Cerrar sesión" aria-label={`Cerrar sesión (${usuario?.nombre_completo ?? ""})`}>
           <div className="avatar">{iniciales}</div>
           <div className="avatar-info">
             <p>{usuario?.nombre_completo}</p>
             <span>{rolLegible(usuario?.rol)}</span>
           </div>
-          <i className="ti ti-logout logout-icon" title="Cerrar sesión" />
-        </a>
+          <i aria-hidden="true" className="ti ti-logout logout-icon" />
+        </button>
       </aside>
 
       {/* Fondo oscuro detrás del menú abierto: un clic afuera lo cierra. */}
@@ -95,13 +96,13 @@ export default function Layout() {
         <header className="topbar">
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <button className="nav-toggle" onClick={() => setNavAbierto(!navAbierto)} aria-label="Abrir menú" aria-expanded={navAbierto}>
-              <i className="ti ti-menu-2" />
+              <i aria-hidden="true" className="ti ti-menu-2" />
             </button>
             <span className="topbar-title">{usuario?.organizacion_nombre ?? "EasyLit"}</span>
           </div>
           <div className="topbar-right">
             <NavLink to="/transformar" className="btn btn-primary">
-              <i className="ti ti-plus" /> Nueva transformación
+              <i aria-hidden="true" className="ti ti-plus" /> Nueva transformación
             </NavLink>
           </div>
         </header>

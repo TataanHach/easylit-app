@@ -10,9 +10,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/features/auth/AuthContext";
-import { transformacionService, type Alcance } from "./historialService";
+import { nombreDescarga, transformacionService, type Alcance } from "./historialService";
 import { useAvisos } from "@/components/ui/Avisos";
 import ConfirmarModal from "@/components/ui/ConfirmarModal";
+import VistaPreviaModal from "@/features/transformaciones/VistaPreviaModal";
+import { describirError } from "@/lib/errores";
 import type { Transformacion } from "@/types";
 import "./historial.css";
 
@@ -102,7 +104,7 @@ export default function HistorialPage() {
             className={`scope-tab ${alcance === t.clave ? "activo" : ""}`}
             onClick={() => setAlcance(t.clave)}
           >
-            <i className={t.icono} /> {t.label}
+            <i aria-hidden="true" className={t.icono} /> {t.label}
           </button>
         ))}
       </div>
@@ -138,7 +140,7 @@ export default function HistorialPage() {
               min={fechaDesde || undefined} />
             {hayFiltros && (
               <button className="btn filtros-limpiar" onClick={limpiarFiltros}>
-                <i className="ti ti-x" /> Limpiar filtros
+                <i aria-hidden="true" className="ti ti-x" /> Limpiar filtros
               </button>
             )}
           </div>
@@ -146,13 +148,13 @@ export default function HistorialPage() {
 
         {isLoading && (
           <div className="estado-caja">
-            <i className="ti ti-loader-2" /><p style={{ marginTop: 8 }}>Cargando…</p>
+            <i aria-hidden="true" className="ti ti-loader-2" /><p style={{ marginTop: 8 }}>Cargando…</p>
           </div>
         )}
 
         {isError && (
           <div className="estado-caja">
-            <i className="ti ti-alert-circle" style={{ color: "var(--danger-500)" }} />
+            <i aria-hidden="true" className="ti ti-alert-circle" style={{ color: "var(--danger-500)" }} />
             <h3>No se pudo cargar el historial</h3>
             <p>No hay conexión con el servidor. Revisa tu internet (o que el backend esté encendido) y recarga la página.</p>
           </div>
@@ -160,7 +162,7 @@ export default function HistorialPage() {
 
         {data && data.length === 0 && (
           <div className="estado-caja">
-            <i className="ti ti-folder-open" />
+            <i aria-hidden="true" className="ti ti-folder-open" />
             <h3>Nada por aquí todavía</h3>
             <p>No hay transformaciones con este filtro.</p>
           </div>
@@ -168,7 +170,7 @@ export default function HistorialPage() {
 
         {data && data.length > 0 && filtradas.length === 0 && (
           <div className="estado-caja">
-            <i className="ti ti-filter-off" />
+            <i aria-hidden="true" className="ti ti-filter-off" />
             <h3>Sin resultados</h3>
             <p>Ninguna transformación coincide con los filtros.</p>
           </div>
@@ -204,13 +206,13 @@ export default function HistorialPage() {
             </span>
             <div className="paginacion-botones">
               <button className="btn" disabled={paginaActual === 1}
-                onClick={() => setPagina(paginaActual - 1)} title="Anterior">
-                <i className="ti ti-chevron-left" />
+                onClick={() => setPagina(paginaActual - 1)} title="Anterior" aria-label="Página anterior">
+                <i aria-hidden="true" className="ti ti-chevron-left" />
               </button>
               <span className="paginacion-num">Página {paginaActual} de {totalPaginas}</span>
               <button className="btn" disabled={paginaActual === totalPaginas}
-                onClick={() => setPagina(paginaActual + 1)} title="Siguiente">
-                <i className="ti ti-chevron-right" />
+                onClick={() => setPagina(paginaActual + 1)} title="Siguiente" aria-label="Página siguiente">
+                <i aria-hidden="true" className="ti ti-chevron-right" />
               </button>
             </div>
           </div>
@@ -226,6 +228,8 @@ function Fila({ t, esMio }: { t: Transformacion; esMio: boolean }) {
   const { usuario } = useAuth();
   const avisos = useAvisos();
   const [confirmar, setConfirmar] = useState(false);
+  const [verPrevia, setVerPrevia] = useState(false);
+  const [descargando, setDescargando] = useState(false);
 
   const empresa = empresaDe(t);
   const nombreVisible = t.nombre || t.nombre_origen;
@@ -245,6 +249,19 @@ function Fila({ t, esMio }: { t: Transformacion; esMio: boolean }) {
   // Puede borrar: el autor, o un gerente/superadmin.
   const puedeBorrar = esMio || usuario?.rol === "GERENTE" || usuario?.rol === "SUPERADMIN";
 
+  async function descargar() {
+    const archivo = nombreDescarga(t);
+    setDescargando(true);
+    try {
+      await transformacionService.descargar(t.id, archivo);
+      avisos.exito("Descarga iniciada", `«${archivo}» se está guardando en tu carpeta de descargas.`);
+    } catch (e) {
+      avisos.error(describirError(e, "descargar el documento"));
+    } finally {
+      setDescargando(false);
+    }
+  }
+
   // Si falla, el error lo muestra la ventana de confirmación (sin cerrarse).
   async function eliminar() {
     await transformacionService.eliminar(t.id);
@@ -257,7 +274,7 @@ function Fila({ t, esMio }: { t: Transformacion; esMio: boolean }) {
     <tr>
       <td>
         <div className="doc-cell">
-          <span className={`doc-icon ${iconoClase}`}><i className={iconoArchivo} /></span>
+          <span className={`doc-icon ${iconoClase}`}><i aria-hidden="true" className={iconoArchivo} /></span>
           <div>
             <p className="doc-name" title={titulo}>{recortar(nombreVisible, MAX_NOMBRE)}</p>
             {empresa && <p style={{ fontSize: "var(--fs-sm)", color: "var(--text-3)" }}>{empresa}</p>}
@@ -273,8 +290,12 @@ function Fila({ t, esMio }: { t: Transformacion; esMio: boolean }) {
       </td>
       <td><Confianza valor={t.confianza} /></td>
       <td><Estado estado={t.estado} /></td>
-      <td style={{ color: "var(--text-3)" }}>{formatFecha(t.creada)}</td>
+      <td className="fecha">{formatFecha(t.creada)}</td>
       <td style={{ textAlign: "right" }}>
+        {verPrevia && (
+          <VistaPreviaModal id={t.id} nombre={nombreVisible} onDescargar={descargar}
+            descargando={descargando} onCerrar={() => setVerPrevia(false)} />
+        )}
         {confirmar && (
           <ConfirmarModal
             titulo="¿Eliminar esta transformación?"
@@ -291,18 +312,25 @@ function Fila({ t, esMio }: { t: Transformacion; esMio: boolean }) {
         <span style={{ display: "inline-flex", gap: 6, alignItems: "center", justifyContent: "flex-end" }}>
           {(t.estado === "EN_REVISION" || t.estado === "MAPEO_PROPUESTO" || t.estado === "APROBADO") && (
             <button className="btn" onClick={() => navigate(`/transformar/${t.id}/mapeo`)}>
-              <i className="ti ti-eye" /> Revisar
+              <i aria-hidden="true" className="ti ti-eye" /> Revisar
             </button>
           )}
           {t.estado === "GENERADO" && (
-            <button className="btn btn-primary" onClick={() => navigate(`/transformar/${t.id}/mapeo`)}>
-              <i className="ti ti-download" /> Ver
-            </button>
+            <>
+              <button className="btn" onClick={() => setVerPrevia(true)}
+                title="Ver la vista previa del documento" aria-label={`Vista previa de «${nombreVisible}»`}>
+                <i aria-hidden="true" className="ti ti-eye" /> Ver
+              </button>
+              <button className="btn" onClick={descargar} disabled={descargando}
+                title="Descargar documento" aria-label={`Descargar «${nombreVisible}»`}>
+                <i aria-hidden="true" className={descargando ? "ti ti-loader-2" : "ti ti-download"} />
+              </button>
+            </>
           )}
           {puedeBorrar && (
-            <button className="btn" title="Eliminar" onClick={() => setConfirmar(true)}
-              style={{ padding: "7px 10px" }}>
-              <i className="ti ti-trash" />
+            <button className="btn" title="Eliminar" aria-label={`Eliminar «${nombreVisible}»`}
+              onClick={() => setConfirmar(true)}>
+              <i aria-hidden="true" className="ti ti-trash" />
             </button>
           )}
         </span>
@@ -333,7 +361,7 @@ function Estado({ estado }: { estado: string }) {
     ERROR: { clase: "error", icono: "ti ti-alert-triangle", texto: "Error" },
   };
   const e = mapa[estado] ?? { clase: "draft", icono: "ti ti-file", texto: estado };
-  return <span className={`pill ${e.clase}`}><i className={e.icono} /> {e.texto}</span>;
+  return <span className={`pill ${e.clase}`}><i aria-hidden="true" className={e.icono} /> {e.texto}</span>;
 }
 
 /**
@@ -378,8 +406,9 @@ function FechaInput({ label, value, onChange, min, max }: {
         <input type="text" inputMode="numeric" placeholder="dd/mm/aaaa" aria-label={label}
           value={texto} onChange={(e) => escribir(e.target.value)}
           className={invalida ? "invalida" : ""} title={invalida ? "Fecha inválida" : undefined} />
-        <button type="button" className="fecha-btn" onClick={abrirCalendario} title="Abrir calendario">
-          <i className="ti ti-calendar" />
+        <button type="button" className="fecha-btn" onClick={abrirCalendario} title="Abrir calendario"
+          aria-label={`Abrir calendario: ${label}`}>
+          <i aria-hidden="true" className="ti ti-calendar" />
         </button>
         <input ref={selectorRef} type="date" className="fecha-selector" tabIndex={-1} aria-hidden
           value={value} min={min} max={max}
@@ -421,7 +450,7 @@ function fechaLocal(iso: string) {
 }
 
 function recortar(texto: string, max: number) {
-  return texto.length > max ? `${texto.slice(0, max).trimEnd()}...` : texto;
+  return texto.length > max ? `${texto.slice(0, max).trimEnd()}…` : texto;
 }
 
 function formatFecha(iso: string) {

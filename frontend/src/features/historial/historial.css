@@ -36,15 +36,16 @@
 .data-table { width: 100%; border-collapse: collapse; min-width: 760px; }
 .data-table th {
   font-size: var(--fs-sm); color: var(--text-2); font-weight: 600;
-  padding: 10px 16px; text-align: left; background: var(--surface-2);
+  padding: 10px; text-align: left; background: var(--surface-2);
   border-bottom: 1px solid var(--line);
   text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;
 }
 .data-table td {
-  font-size: var(--fs-base); padding: 14px 16px;
+  font-size: var(--fs-base); padding: 14px 10px;
   border-bottom: 1px solid var(--line-soft); vertical-align: middle;
 }
 .data-table tbody tr:last-child td { border-bottom: none; }
+.data-table td .btn { padding: 7px 10px; }
 .data-table tbody tr:hover td { background: var(--surface-2); }
 
 .doc-cell { display: flex; align-items: center; gap: 10px; }
@@ -56,7 +57,11 @@
 .doc-icon i { color: var(--pdf-fg); font-size: 15px; }
 .doc-icon.xlsx { background: var(--xls-bg); }
 .doc-icon.xlsx i { color: var(--xls-fg); }
-.doc-name { font-weight: 500; }
+.doc-cell > div { min-width: 0; }
+/* Nombres largos se cortan con «…» (el completo queda en el tooltip) para que la tabla
+   quepa entera en pantallas de 1280 px sin esconder la columna de acciones. */
+.doc-name { font-weight: 500; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.data-table td.fecha { color: var(--text-3); white-space: nowrap; }
 
 .owner-cell { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-md); }
 .owner-cell.yo { font-weight: 600; }
@@ -75,7 +80,7 @@
 .conf { display: inline-flex; align-items: center; gap: 6px; }
 .conf-bar { width: 44px; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .conf-fill { display: block; height: 100%; border-radius: 3px; }
-.conf-num { font-size: var(--fs-sm); font-weight: 600; }
+.conf-num { font-size: var(--fs-sm); font-weight: 600; font-variant-numeric: tabular-nums; }
 .conf.alta .conf-fill { background: var(--ok-600); } .conf.alta .conf-num { color: var(--dest-600); }
 .conf.media .conf-fill { background: var(--warn-500); } .conf.media .conf-num { color: var(--warn-700); }
 .conf.baja .conf-fill { background: var(--danger-500); } .conf.baja .conf-num { color: var(--danger-600); }
@@ -122,7 +127,9 @@
   border: 1px solid var(--line); border-radius: var(--r-sm);
   background: var(--surface); color: var(--text);
 }
+.filtro select, .filtro input[type="text"] { height: 32px; }
 .filtro select:focus, .filtro input:focus { border-color: var(--brand-600); outline: none; }
+.filtro select:focus-visible, .filtro input:focus-visible { box-shadow: var(--focus-ring); }
 .filtros-limpiar { padding: 6px 12px; }
 
 /* Fecha dd/mm/aaaa con botón de calendario */

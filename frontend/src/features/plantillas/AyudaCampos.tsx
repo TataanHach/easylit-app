@@ -53,7 +53,7 @@ const PASOS: { titulo: string; icono: string; contenido: ReactNode }[] = [
           pie={<><span className="mx-marca etiqueta" /> Ya está en tu Excel · <span className="mx-marca dato" /> Lo llena EasyLit</>}
         />
         <p className="ayuda-nota">
-          <i className="ti ti-table" /> Las hojas de <strong>tabla</strong> (Ítem, Descripción, Cantidad…) se llenan automáticamente
+          <i aria-hidden="true" className="ti ti-table" /> Las hojas de <strong>tabla</strong> (Ítem, Descripción, Cantidad…) se llenan automáticamente
           con la tabla del origen: <strong>no necesitan campos</strong>.
         </p>
       </>
@@ -65,14 +65,14 @@ const PASOS: { titulo: string; icono: string; contenido: ReactNode }[] = [
     contenido: (
       <div className="ayuda-dos">
         <div className="ayuda-si">
-          <p className="ayuda-sub"><i className="ti ti-circle-check" /> Sí</p>
+          <p className="ayuda-sub"><i aria-hidden="true" className="ti ti-circle-check" /> Sí</p>
           <ul>
             <li>Cada casilla de un formulario que se llena con un dato de la licitación.</li>
             <li>Casillas sobre una tabla (oferente, fecha…).</li>
           </ul>
         </div>
         <div className="ayuda-no">
-          <p className="ayuda-sub"><i className="ti ti-circle-x" /> No</p>
+          <p className="ayuda-sub"><i aria-hidden="true" className="ti ti-circle-x" /> No</p>
           <ul>
             <li>Columnas de una tabla: se llenan automáticamente.</li>
             <li>Títulos, fórmulas (totales, IVA) o casillas de firma y timbre.</li>
@@ -104,7 +104,7 @@ const PASOS: { titulo: string; icono: string; contenido: ReactNode }[] = [
           pie={<>Etiqueta <strong>«RUT del oferente»</strong> → se escribe en <strong>B1</strong></>}
         />
         <p className="ayuda-nota">
-          <i className="ti ti-info-circle" /> No tiene que ser exacta, y si la dejas vacía se busca el nombre.
+          <i aria-hidden="true" className="ti ti-info-circle" /> No tiene que ser exacta, y si la dejas vacía se busca el nombre.
           Bajo cada campo verás <span className="ayuda-ok">✓</span> si encontró la casilla o <span className="ayuda-aviso">⚠</span> qué corregir.
         </p>
       </>
@@ -124,7 +124,7 @@ const PASOS: { titulo: string; icono: string; contenido: ReactNode }[] = [
           </tbody>
         </table>
         <p className="ayuda-nota">
-          <i className="ti ti-circle-check" /> Cada cambio se guarda al instante. Al terminar presiona
+          <i aria-hidden="true" className="ti ti-circle-check" /> Cada cambio se guarda al instante. Al terminar presiona
           <strong> «Listo»</strong> para revisar toda la plantilla.
         </p>
       </>
@@ -153,11 +153,11 @@ export default function AyudaCampos({ onCerrar }: { onCerrar: () => void }) {
       <div className="ayuda-modal" role="dialog" aria-modal="true" aria-labelledby="ayuda-titulo">
         <div className="ayuda-head">
           <span className="ayuda-contador">Paso {paso + 1} de {PASOS.length}</span>
-          <button className="modal-close" onClick={onCerrar} aria-label="Cerrar ayuda"><i className="ti ti-x" /></button>
+          <button className="modal-close" onClick={onCerrar} aria-label="Cerrar ayuda"><i aria-hidden="true" className="ti ti-x" /></button>
         </div>
         {/* key: al cambiar de paso, la animación de entrada se repite. */}
         <div className="ayuda-cuerpo" key={paso}>
-          <h2 id="ayuda-titulo"><i className={actual.icono} /> {actual.titulo}</h2>
+          <h2 id="ayuda-titulo"><i aria-hidden="true" className={actual.icono} /> {actual.titulo}</h2>
           {actual.contenido}
         </div>
         <div className="ayuda-foot">
@@ -169,12 +169,12 @@ export default function AyudaCampos({ onCerrar }: { onCerrar: () => void }) {
           </div>
           <div className="ayuda-botones">
             <button className="btn" onClick={() => setPaso(paso - 1)} disabled={paso === 0}>
-              <i className="ti ti-arrow-left" /> Anterior
+              <i aria-hidden="true" className="ti ti-arrow-left" /> Anterior
             </button>
             {ultimo
               ? <button className="btn btn-primary" onClick={onCerrar}>Entendido</button>
               : <button className="btn btn-primary" onClick={() => setPaso(paso + 1)}>
-                  Siguiente <i className="ti ti-arrow-right" />
+                  Siguiente <i aria-hidden="true" className="ti ti-arrow-right" />
                 </button>}
           </div>
         </div>

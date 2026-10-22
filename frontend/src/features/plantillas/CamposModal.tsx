@@ -273,17 +273,26 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
   // Cuántos campos tiene cada hoja, para mostrarlo en las pestañas.
   const contarHoja = (h: string) => campos.filter((c) => (c.hoja_destino || "") === h).length;
 
+  // Escape cierra, salvo que haya otra ventana encima (ayuda, confirmar o resultado).
+  useEffect(() => {
+    const alTeclear = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !verAyuda && !porEliminar && !resultado) onCerrar();
+    };
+    window.addEventListener("keydown", alTeclear);
+    return () => window.removeEventListener("keydown", alTeclear);
+  }, [verAyuda, porEliminar, resultado, onCerrar]);
+
   return (
     <div className="modal-overlay">
-      <div className="modal campos-modal">
+      <div className="modal campos-modal" role="dialog" aria-modal="true" aria-labelledby="campos-modal-titulo">
         <div className="modal-head">
-          <h2>Campos de "{plantilla.nombre}"</h2>
+          <h2 id="campos-modal-titulo">Campos de «{plantilla.nombre}»</h2>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <button className="ayuda-btn" onClick={() => setVerAyuda(true)} title="¿Cómo funcionan los campos?"
               aria-label="Ayuda: cómo funcionan los campos">
-              <i className="ti ti-help" /> ?
+              <i aria-hidden="true" className="ti ti-help" /> ?
             </button>
-            <button className="modal-close" onClick={onCerrar}><i className="ti ti-x" /></button>
+            <button className="modal-close" onClick={onCerrar} aria-label="Cerrar"><i aria-hidden="true" className="ti ti-x" /></button>
           </div>
         </div>
         <div className="modal-body">
@@ -294,7 +303,7 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
           </p>
 
           {cargando ? (
-            <p style={{ color: "var(--text-3)" }}><i className="ti ti-loader-2" style={{ marginRight: 6 }} />Cargando…</p>
+            <p style={{ color: "var(--text-3)" }}><i aria-hidden="true" className="ti ti-loader-2" style={{ marginRight: 6 }} />Cargando…</p>
           ) : (
             <>
               {/* Pestañas por hoja (solo si el Excel tiene varias hojas) */}
@@ -306,10 +315,10 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
                       className={`hoja-tab ${h === hojaActiva ? "activa" : ""}`}
                       onClick={() => setHojaActiva(h)}
                     >
-                      <i className={esTabla(h) ? "ti ti-table" : "ti ti-forms"} /> {h}
+                      <i aria-hidden="true" className={esTabla(h) ? "ti ti-table" : "ti ti-forms"} /> {h}
                       {esTabla(h) && <span className="hoja-tab-tipo">tabla</span>}
                       <span className="hoja-tab-count">{contarHoja(h)}</span>
-                      {conProblema(h) && <i className="ti ti-alert-triangle hoja-tab-alerta" title="Hay campos con problemas" />}
+                      {conProblema(h) && <i aria-hidden="true" className="ti ti-alert-triangle hoja-tab-alerta" title="Hay campos con problemas" />}
                     </button>
                   ))}
                 </div>
@@ -334,7 +343,7 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
 
               {esTabla(hojaActiva) && (
                 <div className="hoja-aviso">
-                  <i className="ti ti-table" />
+                  <i aria-hidden="true" className="ti ti-table" />
                   <div>
                     <strong>Esta hoja es una tabla: se llena automáticamente.</strong> Sus columnas
                     ({infoHoja(hojaActiva)!.columnas.join(", ")}) se completan con la tabla del
@@ -375,17 +384,17 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
                     onBlur={(e) => actualizar(c.id, { etiqueta_busqueda: limpiarTexto(e.target.value) })} />
 
                   <button className="campo-del" title="Eliminar campo" onClick={() => setPorEliminar(c)}>
-                    <i className="ti ti-trash" />
+                    <i aria-hidden="true" className="ti ti-trash" />
                   </button>
                   {revision?.problemas[c.id] && (
                     <p className="campo-problema">
-                      <i className="ti ti-alert-triangle" /> Este campo no se podrá llenar: {revision.problemas[c.id]}
+                      <i aria-hidden="true" className="ti ti-alert-triangle" /> Este campo no se podrá llenar: {revision.problemas[c.id]}
                     </p>
                   )}
                   {revision?.ubicaciones?.[c.id] && (
                     // Dónde se escribirá: así se ve que basta una etiqueta parecida.
                     <p className="campo-ubicacion">
-                      <i className="ti ti-circle-check" /> Se escribirá en la celda <strong>{revision.ubicaciones[c.id].celda}</strong>
+                      <i aria-hidden="true" className="ti ti-circle-check" /> Se escribirá en la celda <strong>{revision.ubicaciones[c.id].celda}</strong>
                       {revision.ubicaciones[c.id].etiqueta && <>, junto a «{revision.ubicaciones[c.id].etiqueta}»</>}
                       {revision.ubicaciones[c.id].etiqueta && !revision.ubicaciones[c.id].exacta && <> (etiqueta parecida)</>}
                     </p>
@@ -400,7 +409,7 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
                 </p>
               )}
               <button className="add-campo" onClick={agregar} disabled={guardando}>
-                <i className="ti ti-plus" /> Añadir campo{hayHojas ? ` a "${hojaActiva}"` : ""}
+                <i aria-hidden="true" className="ti ti-plus" /> Añadir campo{hayHojas ? ` a "${hojaActiva}"` : ""}
               </button>
             </>
           )}
@@ -409,7 +418,7 @@ export default function CamposModal({ plantilla, onCerrar }: Props) {
           {/* Los cambios ya se guardaron al hacerlos: "Cerrar" sale sin revisar. */}
           <button className="btn" onClick={onCerrar}>Cerrar</button>
           <button className="btn btn-primary" onClick={terminar} disabled={revisando || cargando}>
-            {revisando ? <><i className="ti ti-loader-2" /> Revisando…</> : "Listo"}
+            {revisando ? <><i aria-hidden="true" className="ti ti-loader-2" /> Revisando…</> : "Listo"}
           </button>
         </div>
       </div>

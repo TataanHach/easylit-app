@@ -72,13 +72,13 @@ export function AvisosProvider({ children }: { children: ReactNode }) {
       <div className="avisos" aria-live="polite">
         {avisos.map((a) => (
           <div key={a.id} className={`aviso aviso-${a.tipo}`} role={a.tipo === "error" ? "alert" : "status"}>
-            <i className={`aviso-icono ${ICONOS[a.tipo]}`} />
+            <i aria-hidden="true" className={`aviso-icono ${ICONOS[a.tipo]}`} />
             <div className="aviso-texto">
               <p className="aviso-titulo">{a.titulo}</p>
               {a.detalle && <p className="aviso-detalle">{a.detalle}</p>}
             </div>
             <button className="aviso-cerrar" onClick={() => cerrar(a.id)} title="Cerrar" aria-label="Cerrar aviso">
-              <i className="ti ti-x" />
+              <i aria-hidden="true" className="ti ti-x" />
             </button>
           </div>
         ))}

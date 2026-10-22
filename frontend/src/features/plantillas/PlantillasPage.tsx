@@ -74,23 +74,23 @@ export default function PlantillasPage() {
           <p>Formatos de mandantes que puedes crear, editar y reutilizar.</p>
         </div>
         <button className="btn btn-primary" onClick={() => setModalCrear(true)}>
-          <i className="ti ti-plus" /> Nueva plantilla
+          <i aria-hidden="true" className="ti ti-plus" /> Nueva plantilla
         </button>
       </div>
 
       {isLoading && (
-        <div className="pl-estado"><i className="ti ti-loader-2" /><p style={{ marginTop: 8 }}>Cargando…</p></div>
+        <div className="pl-estado"><i aria-hidden="true" className="ti ti-loader-2" /><p style={{ marginTop: 8 }}>Cargando…</p></div>
       )}
       {isError && (
         <div className="pl-estado">
-          <i className="ti ti-alert-circle" style={{ color: "var(--danger-500)" }} />
+          <i aria-hidden="true" className="ti ti-alert-circle" style={{ color: "var(--danger-500)" }} />
           <h3>No se pudo cargar</h3><p>Revisa que el backend esté corriendo.</p>
         </div>
       )}
 
       {data && data.length === 0 && (
         <div className="pl-estado">
-          <i className="ti ti-template" />
+          <i aria-hidden="true" className="ti ti-template" />
           <h3>Aún no hay plantillas</h3>
           <p>Crea tu primera plantilla con el botón de arriba.</p>
         </div>
@@ -100,10 +100,10 @@ export default function PlantillasPage() {
         <>
           {/* Filtro por mandante (empresa) */}
           <div className="pl-filtro">
-            <label>
-              <i className="ti ti-building" /> Empresa / mandante
+            <label htmlFor="filtro-mandante">
+              <i aria-hidden="true" className="ti ti-building" /> Empresa / mandante
             </label>
-            <select value={mandanteFiltro} onChange={(e) => setMandanteFiltro(e.target.value)}>
+            <select id="filtro-mandante" value={mandanteFiltro} onChange={(e) => setMandanteFiltro(e.target.value)}>
               <option value="">Todas ({data.length})</option>
               {mandantes.map((m) => {
                 const n = data.filter((p) => p.mandante === m).length;
@@ -120,7 +120,7 @@ export default function PlantillasPage() {
 
           {visibles.length === 0 ? (
             <div className="pl-estado">
-              <i className="ti ti-folder-open" />
+              <i aria-hidden="true" className="ti ti-folder-open" />
               <h3>Sin plantillas para este mandante</h3>
               <p>Prueba con otra empresa o crea una nueva.</p>
             </div>
@@ -185,7 +185,7 @@ function Tarjeta({ p, onUsar, onEditar, onCampos, onEliminar }: {
       <div className="pl-body">
         <p className="pl-name">{p.nombre}</p>
         <p className="pl-org">
-          <i className="ti ti-building" /> {p.mandante || "Sin mandante"}{p.sector ? ` · ${p.sector}` : ""}
+          <i aria-hidden="true" className="ti ti-building" /> {p.mandante || "Sin mandante"}{p.sector ? ` · ${p.sector}` : ""}
         </p>
         <div className="pl-tags">
           <span className="pl-tag">{p.total_campos} campo{p.total_campos !== 1 ? "s" : ""}</span>
@@ -193,12 +193,14 @@ function Tarjeta({ p, onUsar, onEditar, onCampos, onEliminar }: {
         </div>
         <div className="pl-foot">
           <div className="pl-acciones">
-            <button className="pl-icon-btn" title="Usar" onClick={onUsar}><i className="ti ti-player-play" /></button>
-            <button className="pl-icon-btn" title="Editar campos" onClick={onCampos}><i className="ti ti-list-details" /></button>
-            <button className="pl-icon-btn" title="Editar datos" onClick={onEditar}><i className="ti ti-edit" /></button>
-            <button className="pl-icon-btn danger" title="Eliminar" onClick={onEliminar}><i className="ti ti-trash" /></button>
+            <button className="pl-icon-btn" title="Usar en una transformación" aria-label={`Usar «${p.nombre}» en una transformación`} onClick={onUsar}><i aria-hidden="true" className="ti ti-player-play" /></button>
+            <button className="pl-icon-btn" title="Editar campos" aria-label={`Editar campos de «${p.nombre}»`} onClick={onCampos}><i aria-hidden="true" className="ti ti-list-details" /></button>
+            <button className="pl-icon-btn" title="Editar datos" aria-label={`Editar datos de «${p.nombre}»`} onClick={onEditar}><i aria-hidden="true" className="ti ti-edit" /></button>
+            <button className="pl-icon-btn danger" title="Eliminar" aria-label={`Eliminar «${p.nombre}»`} onClick={onEliminar}><i aria-hidden="true" className="ti ti-trash" /></button>
           </div>
-          <span className="pl-usos">{p.usos}</span>
+          <span className="pl-usos" title="Transformaciones hechas con esta plantilla">
+            {p.usos} uso{p.usos !== 1 ? "s" : ""}
+          </span>
         </div>
       </div>
     </div>

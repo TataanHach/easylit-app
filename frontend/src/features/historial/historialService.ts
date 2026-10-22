@@ -9,6 +9,12 @@ import type { Transformacion } from "@/types";
 
 export type Alcance = "mine" | "team" | "all";
 
+/** Nombre con que se guarda el documento generado al descargarlo. */
+export function nombreDescarga(t: Pick<Transformacion, "nombre" | "nombre_origen">) {
+  // Sin la extensión del origen: «licitacion_transformado.xlsx», no «licitacion.xlsx_transformado.xlsx».
+  return t.nombre ? `${t.nombre}.xlsx` : `${t.nombre_origen.replace(/\.[^.]+$/, "")}_transformado.xlsx`;
+}
+
 export const transformacionService = {
   async listar(alcance: Alcance = "mine"): Promise<Transformacion[]> {
     const { data } = await api.get<Transformacion[]>("/transformaciones/", {
