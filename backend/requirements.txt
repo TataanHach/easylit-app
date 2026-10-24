@@ -1,7 +1,7 @@
-Django==5.1.4
-djangorestframework==3.15.2
-djangorestframework-simplejwt==5.3.1
-django-cors-headers==4.6.0
+Django==5.2.17  # LTS: parches de seguridad hasta abril de 2028
+djangorestframework==3.18.3
+djangorestframework-simplejwt==5.5.1
+django-cors-headers==4.9.0
 psycopg[binary]==3.2.3
 dj-database-url==2.3.0
 celery==5.4.0
@@ -9,9 +9,10 @@ redis==5.2.1
 pandas==2.2.3
 openpyxl==3.1.5
 requests==2.34.2  # llamadas a la API REST de Gemini (sin gRPC)
+certifi==2026.10.23  # certificados raíz de requests; la versión anterior traía CAs comprometidas
 gunicorn==23.0.0
 python-decouple==3.8
-whitenoise==6.8.2
+whitenoise==6.12.0
 django-storages[s3]==1.14.6  # archivos en Cloudflare R2 (compatible S3)
 boto3==1.43.112
 google-auth==2.59.1  # verificar tokens de Firebase (sin gRPC)

@@ -49,7 +49,7 @@ services:
       - key: DJANGO_SETTINGS_MODULE
         value: config.settings.prod
       - key: PYTHON_VERSION
-        value: "3.12.7"
+        value: "3.13.17"            # misma versión que en local; parches hasta 2029
       - key: SECRET_KEY
         generateValue: true          # Render genera un secreto fuerte
       - key: REDIS_URL
@@ -92,6 +92,9 @@ services:
     buildCommand: "npm ci && npm run build"
     staticPublishPath: dist
     envVars:
+      # Versión de Node para compilar (Node 20 ya no tiene soporte desde abril de 2026).
+      - key: NODE_VERSION
+        value: "24"
       - key: VITE_API_URL
         sync: false                   # https://easylit-api.onrender.com
       - key: VITE_FIREBASE_API_KEY

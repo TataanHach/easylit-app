@@ -107,7 +107,7 @@ class Usuario(AbstractBaseUser, PermissionsMixin):
             # Todo usuario que no sea superadmin DEBE tener organización.
             models.CheckConstraint(
                 name="usuario_no_superadmin_requiere_org",
-                check=(
+                condition=(
                     models.Q(rol="SUPERADMIN")
                     | models.Q(organizacion__isnull=False)
                 ),
