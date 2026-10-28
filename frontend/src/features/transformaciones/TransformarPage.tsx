@@ -108,7 +108,7 @@ export default function TransformarPage() {
   const listo = archivo && plantillaId && !enviando;
 
   return (
-    <div style={{ maxWidth: 860 }}>
+    <div style={{ maxWidth: 860, margin: "0 auto" }}>
       <div className="wizard-header">
         <h1>Nueva transformación</h1>
         <p>Sube la licitación, elige la empresa y su formato destino.</p>
@@ -223,7 +223,7 @@ export default function TransformarPage() {
           {archivo && plantillaId && "Todo listo para transformar."}
         </span>
         <button className="btn btn-primary btn-lg" disabled={!listo} onClick={transformar}>
-          {enviando ? "Subiendo…" : <>Transformar <i aria-hidden="true" className="ti ti-arrow-right" /></>}
+          {enviando ? "Subiendo…" : <>Transformar archivos <i aria-hidden="true" className="ti ti-arrow-right" /></>}
         </button>
       </div>
     </div>

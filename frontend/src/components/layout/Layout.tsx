@@ -2,17 +2,18 @@
  * Layout de la aplicación.
  *
  * Marco compartido por todas las pantallas internas: sidebar con navegación,
- * topbar, y un <Outlet> donde React Router inserta la pantalla activa. El menú
- * de configuración solo aparece para gerentes y superadmin.
+ * topbar, y un <Outlet> donde React Router inserta la pantalla activa.
  */
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/features/auth/AuthContext";
 import "./layout.css";
 
 export default function Layout() {
   const { usuario, logout } = useAuth();
   const navigate = useNavigate();
+  // En la pantalla de Transformar, el botón «Nueva transformación» sobra.
+  const enTransformar = useLocation().pathname === "/transformar";
   const [navAbierto, setNavAbierto] = useState(false);
   const cerrarNav = () => setNavAbierto(false);
 
@@ -37,9 +38,6 @@ export default function Layout() {
     .join("")
     .toUpperCase();
 
-  const puedeConfig =
-    usuario?.rol === "GERENTE" || usuario?.rol === "SUPERADMIN";
-
   return (
     <div className={`app-shell ${navAbierto ? "nav-open" : ""}`}>
       <aside className="sidebar">
@@ -58,24 +56,15 @@ export default function Layout() {
         {/* Elegir una sección también cierra el menú (en pantalla ancha no hace nada). */}
         <nav className="sidebar-nav" onClick={(e) => { if ((e.target as HTMLElement).closest("a")) cerrarNav(); }}>
           <p className="nav-section">Principal</p>
+          <NavLink to="/plantillas" className={({ isActive }) => `nav-item ${isActive ? "activo" : ""}`}>
+            <i aria-hidden="true" className="ti ti-template" /> Plantillas
+          </NavLink>
           <NavLink to="/transformar" className={({ isActive }) => `nav-item ${isActive ? "activo" : ""}`}>
             <i aria-hidden="true" className="ti ti-arrows-transfer-up" /> Transformar
           </NavLink>
           <NavLink to="/historial" className={({ isActive }) => `nav-item ${isActive ? "activo" : ""}`}>
             <i aria-hidden="true" className="ti ti-clock-hour-4" /> Historial
           </NavLink>
-          <NavLink to="/plantillas" className={({ isActive }) => `nav-item ${isActive ? "activo" : ""}`}>
-            <i aria-hidden="true" className="ti ti-template" /> Plantillas
-          </NavLink>
-
-          {puedeConfig && (
-            <>
-              <p className="nav-section">Configuración</p>
-              <NavLink to="/equipo" className={({ isActive }) => `nav-item ${isActive ? "activo" : ""}`}>
-                <i aria-hidden="true" className="ti ti-users" /> Equipo
-              </NavLink>
-            </>
-          )}
         </nav>
 
         <button type="button" className="sidebar-bottom" onClick={cerrarSesion}
@@ -100,11 +89,13 @@ export default function Layout() {
             </button>
             <span className="topbar-title">{usuario?.organizacion_nombre ?? "EasyLit"}</span>
           </div>
-          <div className="topbar-right">
-            <NavLink to="/transformar" className="btn btn-primary">
-              <i aria-hidden="true" className="ti ti-plus" /> Nueva transformación
-            </NavLink>
-          </div>
+          {!enTransformar && (
+            <div className="topbar-right">
+              <NavLink to="/transformar" className="btn btn-primary">
+                <i aria-hidden="true" className="ti ti-plus" /> Nueva transformación
+              </NavLink>
+            </div>
+          )}
         </header>
 
         <main className="content">

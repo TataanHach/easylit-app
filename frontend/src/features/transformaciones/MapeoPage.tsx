@@ -457,7 +457,7 @@ export default function MapeoPage() {
   }
   if (!t) {
     return (
-      <div style={{ maxWidth: 640 }}>
+      <div style={{ maxWidth: 640, margin: "0 auto" }}>
         <div className="banda banda-error">
           <i aria-hidden="true" className="ti ti-alert-circle" />
           <div>
@@ -479,7 +479,7 @@ export default function MapeoPage() {
 
   if (t.estado === "ERROR") {
     return (
-      <div style={{ maxWidth: 640 }}>
+      <div style={{ maxWidth: 640, margin: "0 auto" }}>
       {resultado && <ResultadoModal resultado={resultado} onAceptar={() => setResultado(null)} />}
         <div className="mapeo-header"><h1>Hubo un problema</h1></div>
         <div style={{
@@ -509,7 +509,7 @@ export default function MapeoPage() {
 
   if (generado || t.estado === "GENERADO") {
     return (
-      <div style={{ maxWidth: 640 }}>
+      <div style={{ maxWidth: 640, margin: "0 auto" }}>
       {resultado && <ResultadoModal resultado={resultado} onAceptar={() => setResultado(null)} />}
         <div className="mapeo-header"><h1>Transformación realizada con éxito</h1></div>
         <div className="exito-caja">
@@ -569,7 +569,7 @@ export default function MapeoPage() {
   );
 
   return (
-    <div style={{ maxWidth: 980 }}>
+    <div style={{ maxWidth: 980, margin: "0 auto" }}>
       <div className="mapeo-header">
         <h1>Revisar y generar</h1>
         <p>{t.nombre || t.nombre_origen} → {t.plantilla_nombre}. Revisa la vista previa, ajusta y genera.</p>
@@ -878,7 +878,7 @@ function ProcesandoIA({ estado, nombre, onTerminar }: {
     { icono: "ti ti-checks", titulo: "Preparando la revisión", desc: "Dejando todo listo para que revises" },
   ];
   return (
-    <div style={{ maxWidth: 620 }}>
+    <div style={{ maxWidth: 620, margin: "0 auto" }}>
       <div className="mapeo-header"><h1>Procesando tu licitación</h1><p>{nombre}</p></div>
       <div className="ia-proceso">
         <div className="ia-proceso-orbe"><i aria-hidden="true" className="ti ti-sparkles" /></div>

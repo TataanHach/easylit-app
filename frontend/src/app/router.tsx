@@ -24,7 +24,7 @@ export const router = createBrowserRouter([
       </RutaProtegida>
     ),
     children: [
-      { index: true, element: <Navigate to="/historial" replace /> },
+      { index: true, element: <Navigate to="/plantillas" replace /> },
       { path: "transformar", element: <TransformarPage /> },
       { path: "transformar/:id/mapeo", element: <MapeoPage /> },
       { path: "historial", element: <HistorialPage /> },
