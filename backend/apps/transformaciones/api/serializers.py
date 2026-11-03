@@ -7,7 +7,8 @@ y de la plantilla para que la tabla no tenga que resolver esas referencias.
 """
 from rest_framework import serializers
 
-from apps.common.archivos import validar_tamano
+from apps.common.archivos import validar_planilla
+from apps.common.textos import normalizar_mandante
 from apps.transformaciones.models import (
     Bitacora,
     MapeoCampo,
@@ -23,6 +24,7 @@ class TransformacionListaSerializer(serializers.ModelSerializer):
     plantilla_nombre = serializers.CharField(source="plantilla.nombre", read_only=True)
     plantilla_mandante = serializers.CharField(source="plantilla.mandante", read_only=True)
     descargable = serializers.BooleanField(read_only=True)
+    duracion_proceso = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Transformacion
@@ -30,7 +32,7 @@ class TransformacionListaSerializer(serializers.ModelSerializer):
             "id", "nombre", "nombre_origen", "mandante",
             "plantilla", "plantilla_nombre", "plantilla_mandante",
             "autor", "autor_nombre",
-            "estado", "confianza", "descargable", "creada",
+            "estado", "confianza", "descargable", "duracion_proceso", "creada",
         )
 
 
@@ -46,22 +48,11 @@ class CrearTransformacionSerializer(serializers.ModelSerializer):
         fields = ("id", "nombre", "archivo_origen", "nombre_origen", "mandante", "plantilla")
         read_only_fields = ("id",)
 
-    EXTENSIONES = (".xlsx", ".xlsm", ".xls", ".csv")
-
     def validate_archivo_origen(self, archivo):
-        nombre = archivo.name.lower()
-        if not nombre.endswith(self.EXTENSIONES):
-            raise serializers.ValidationError(
-                f"El archivo «{archivo.name}» no es un Excel ni un CSV. Sube un archivo "
-                ".xlsx, .xls o .csv."
-            )
-        if archivo.size == 0:
-            raise serializers.ValidationError(
-                f"El archivo «{archivo.name}» está vacío. Revisa que se haya guardado "
-                "bien y vuelve a subirlo."
-            )
-        validar_tamano(archivo)
-        return archivo
+        return validar_planilla(archivo)
+
+    def validate_mandante(self, mandante):
+        return normalizar_mandante(mandante)
 
     def validate_plantilla(self, plantilla):
         # La plantilla debe pertenecer a la organización del usuario.
@@ -119,6 +110,7 @@ class TransformacionDetalleSerializer(serializers.ModelSerializer):
     autor_nombre = serializers.CharField(source="autor.nombre_completo", read_only=True)
     plantilla_nombre = serializers.CharField(source="plantilla.nombre", read_only=True)
     descargable = serializers.BooleanField(read_only=True)
+    duracion_proceso = serializers.IntegerField(read_only=True)
     mapeos = MapeoCampoSerializer(many=True, read_only=True)
     bitacora = BitacoraSerializer(many=True, read_only=True)
 
@@ -130,6 +122,6 @@ class TransformacionDetalleSerializer(serializers.ModelSerializer):
             "autor", "autor_nombre",
             "estado", "confianza", "detalle_error",
             "opciones_limpieza", "resultado_limpieza", "tasa_uf_clp",
-            "descargable", "creada", "actualizada",
+            "descargable", "duracion_proceso", "creada", "actualizada",
             "mapeos", "bitacora",
         )

@@ -14,6 +14,8 @@ import { useAvisos } from "@/components/ui/Avisos";
 import { describirError } from "@/lib/errores";
 import { useConfiguracion } from "@/lib/configuracion";
 import ResultadoModal, { type Resultado } from "@/components/ui/ResultadoModal";
+import ConfirmarModal from "@/components/ui/ConfirmarModal";
+import { formatearDuracion } from "@/lib/tiempo";
 import "./mapeo.css";
 
 /** Lista para la ventana de resultado: hasta `max` ítems y "… y N más". */
@@ -92,6 +94,7 @@ export default function MapeoPage() {
   const [mapeosLocal, setMapeosLocal] = useState<any[]>([]);
   const [guardandoId, setGuardandoId] = useState<string | null>(null);
   const [limpiando, setLimpiando] = useState(false);
+  const [confirmarIA, setConfirmarIA] = useState(false);   // aviso antes de gastar crédito de IA
   const [hojaActiva, setHojaActiva] = useState(0);
   const [hojaMapeo, setHojaMapeo] = useState(0);   // hoja visible en «Mapeo propuesto»
   // Ventana emergente con el resultado del procesamiento o de la generación.
@@ -237,6 +240,7 @@ export default function MapeoPage() {
       ...(total ? [{ etiqueta: "datos asignados", valor: `${asignados} de ${total}` }] : []),
       ...(colsTotal ? [{ etiqueta: "columnas de tabla", valor: `${colsOk} de ${colsTotal}` }] : []),
       { etiqueta: "confianza", valor: `${confianza}%` },
+      ...(t.duracion_proceso != null ? [{ etiqueta: "tiempo de proceso", valor: formatearDuracion(t.duracion_proceso) }] : []),
     ];
 
     const porHoja = gruposPorHoja(estados);
@@ -576,6 +580,19 @@ export default function MapeoPage() {
       </div>
 
       {resultado && <ResultadoModal resultado={resultado} onAceptar={() => setResultado(null)} />}
+      {confirmarIA && (
+        <ConfirmarModal
+          tono="normal"
+          titulo="¿Limpiar los datos con IA?"
+          mensaje={"La IA revisará los textos y fechas de esta transformación (nunca los montos) y corregirá "
+            + "tildes, espacios y palabras partidas. Esto consume un poco más del crédito de IA de tu "
+            + "organización. Si los datos no cambiaron desde la última limpieza, se reutiliza ese resultado "
+            + "y no se gasta crédito."}
+          confirmar="Sí, limpiar con IA"
+          onConfirmar={() => { setConfirmarIA(false); limpiarConIA(); }}
+          onCancelar={() => setConfirmarIA(false)}
+        />
+      )}
       {/* ───── LO QUE QUEDARÁ SIN LLENAR (antes de la vista previa) ───── */}
       {(preview?.avisos?.length ?? 0) > 0 && (
         <div className="pendientes-caja" role="status">
@@ -706,7 +723,7 @@ export default function MapeoPage() {
         </span>
         <div style={{ display: "flex", gap: 10 }}>
           <button className="btn btn-lg" onClick={() => navigate("/historial")}>Volver</button>
-          <button className="btn btn-lg" onClick={limpiarConIA} disabled={limpiando}
+          <button className="btn btn-lg" onClick={() => setConfirmarIA(true)} disabled={limpiando}
             style={{ borderColor: "var(--ai-600, #5B4E8C)", color: "var(--ai-600, #5B4E8C)" }}>
             {limpiando ? "Limpiando…" : <><i aria-hidden="true" className="ti ti-sparkles" /> Limpiar con IA</>}
           </button>

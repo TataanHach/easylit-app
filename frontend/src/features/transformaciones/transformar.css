@@ -47,6 +47,7 @@
   cursor: pointer; background: var(--surface-2);
 }
 .dropzone:hover { border-color: var(--brand-600); background: var(--brand-25); }
+.dropzone.arrastrando { border-color: var(--brand-600); border-style: solid; background: var(--brand-50); }
 /* El input va oculto con .solo-lector (no display:none) para poder elegir el archivo con teclado. */
 .dropzone:has(input:focus-visible) { border-color: var(--brand-600); box-shadow: var(--focus-ring); }
 .drop-icon {
@@ -90,7 +91,7 @@
 
 /* Selector de plantilla */
 .select-plantilla {
-  width: 100%; padding: 10px 12px; border: 1px solid var(--line-strong);
+  width: 100%; padding: 12px 14px; border: 1px solid var(--line-strong);
   border-radius: var(--r-md); font-size: var(--fs-base); background: var(--surface); cursor: pointer;
 }
 .select-plantilla:focus { outline: none; }
@@ -99,7 +100,7 @@
 .campo { margin-bottom: 14px; }
 .campo label { display: block; font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); margin-bottom: 6px; }
 .campo input {
-  width: 100%; padding: 9px 12px; border: 1px solid var(--line-strong);
+  width: 100%; padding: 12px 14px; border: 1px solid var(--line-strong);
   border-radius: var(--r-md); font-size: var(--fs-base);
 }
 .campo input:focus { outline: none; }
@@ -113,7 +114,7 @@
   border-radius: var(--r-lg); flex-wrap: wrap;
 }
 .acciones-info { font-size: var(--fs-md); color: var(--text-2); }
-.btn-lg { padding: 10px 20px; font-size: var(--fs-base); }
+.btn-lg { padding: 13px 24px; font-size: var(--fs-lg); }
 .acciones .btn:disabled { opacity: .5; cursor: not-allowed; }
 
 /* Estado de procesamiento */

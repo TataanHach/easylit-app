@@ -92,7 +92,7 @@
 /* Botón genérico para la topbar */
 .btn {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 7px 14px; border-radius: var(--r-md);
+  padding: 10px 18px; border-radius: var(--r-md);
   font-size: var(--fs-base); cursor: pointer;
   border: 1px solid var(--line-strong);
   background: var(--surface); color: var(--text);
@@ -106,7 +106,7 @@
 :where(button, a, [role="button"], [tabindex]):focus-visible {
   outline: none; box-shadow: var(--focus-ring);
 }
-.btn i { font-size: 14px; }
+.btn i { font-size: 17px; }
 .btn-primary { background: var(--brand-600); color: #fff; border-color: var(--brand-600); font-weight: 600; }
 .btn-primary:hover { background: var(--brand-700); }
 /* Acciones que borran algo. */

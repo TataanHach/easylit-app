@@ -87,6 +87,9 @@ class Transformacion(models.Model):
     )
 
     creada = models.DateTimeField(default=timezone.now)
+    # Cuándo terminó el procesamiento (quedó lista para revisar el mapeo). Con
+    # `creada` da el tiempo que tardó, desde que se subió el archivo.
+    procesada_en = models.DateTimeField(null=True, blank=True)
     actualizada = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -104,6 +107,13 @@ class Transformacion(models.Model):
     @property
     def descargable(self):
         return self.estado == EstadoTransformacion.GENERADO and bool(self.archivo_generado)
+
+    @property
+    def duracion_proceso(self):
+        """Segundos desde que se subió el archivo hasta que quedó listo el mapeo (None si no terminó)."""
+        if not self.procesada_en:
+            return None
+        return max(0, round((self.procesada_en - self.creada).total_seconds()))
 
 
 class MapeoCampo(models.Model):

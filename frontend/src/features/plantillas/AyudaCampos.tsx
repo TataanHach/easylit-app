@@ -36,7 +36,7 @@ function MiniExcel({ filas, columnas = ["A", "B", "C"], pie }: {
 // 6 pasos cortos, en el orden en que se usa el editor: qué es un campo, las hojas,
 // cuándo agregarlo, dónde se escribe, tipo/formato y la revisión final.
 // Las mini pantallas del editor usan sus mismas clases (plantillas.css) para verse igual.
-const PASOS: { titulo: string; icono: string; contenido: ReactNode }[] = [
+const PASOS: PasoGuia[] = [
   {
     titulo: "¿Qué es un campo?",
     icono: "ti ti-forms",
@@ -187,6 +187,14 @@ const PASOS: { titulo: string; icono: string; contenido: ReactNode }[] = [
 ];
 
 export default function AyudaCampos({ onCerrar }: { onCerrar: () => void }) {
+  return <GuiaPasos pasos={PASOS} onCerrar={onCerrar} />;
+}
+
+export type PasoGuia = { titulo: string; icono: string; contenido: ReactNode };
+
+/** Ventana de guía paso a paso (puntos, Anterior/Siguiente, flechas del teclado). */
+export function GuiaPasos({ pasos, onCerrar }: { pasos: PasoGuia[]; onCerrar: () => void }) {
+  const PASOS = pasos;
   const [paso, setPaso] = useState(0);
   const actual = PASOS[paso];
   const ultimo = paso === PASOS.length - 1;
@@ -200,7 +208,7 @@ export default function AyudaCampos({ onCerrar }: { onCerrar: () => void }) {
     };
     window.addEventListener("keydown", alTeclear);
     return () => window.removeEventListener("keydown", alTeclear);
-  }, [onCerrar]);
+  }, [onCerrar, PASOS.length]);
 
   return (
     <div className="ayuda-overlay">

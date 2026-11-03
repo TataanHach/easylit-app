@@ -26,13 +26,15 @@ interface Props {
   procesando?: string;
   /** Completa "No se pudo …" si falla, ej. "eliminar la plantilla". */
   accion?: string;
+  /** "peligro" (rojo, por defecto) para borrar; "normal" para acciones que no destruyen nada. */
+  tono?: "peligro" | "normal";
   onConfirmar: () => void | Promise<void>;
   onCancelar: () => void;
 }
 
 export default function ConfirmarModal({
   titulo, mensaje, confirmar, procesando = "Procesando…", accion = "completar la acción",
-  onConfirmar, onCancelar,
+  tono = "peligro", onConfirmar, onCancelar,
 }: Props) {
   const cancelarRef = useRef<HTMLButtonElement>(null);
   const [ocupado, setOcupado] = useState(false);
@@ -87,7 +89,7 @@ export default function ConfirmarModal({
             {error ? "Cerrar" : "Cancelar"}
           </button>
           {!error && (
-            <button className="btn btn-peligro" onClick={alConfirmar} disabled={ocupado}>
+            <button className={`btn ${tono === "peligro" ? "btn-peligro" : "btn-primary"}`} onClick={alConfirmar} disabled={ocupado}>
               {ocupado ? <><i aria-hidden="true" className="ti ti-loader-2" /> {procesando}</> : confirmar}
             </button>
           )}

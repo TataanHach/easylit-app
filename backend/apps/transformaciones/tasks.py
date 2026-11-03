@@ -4,6 +4,7 @@ Tareas asíncronas del worker (Celery).
 import re
 
 from celery import shared_task
+from django.utils import timezone
 
 from apps.common.archivos import ruta_local
 from .models import Bitacora, EstadoTransformacion, Transformacion
@@ -200,7 +201,8 @@ def procesar_transformacion(transformacion_id):
 
         t.confianza = int(sum(confianzas) / len(confianzas)) if confianzas else 0
         t.estado = EstadoTransformacion.EN_REVISION
-        t.save(update_fields=["confianza", "estado", "resultado_limpieza"])
+        t.procesada_en = timezone.now()
+        t.save(update_fields=["confianza", "estado", "resultado_limpieza", "procesada_en"])
         Bitacora.objects.create(
             transformacion=t, evento=Bitacora.Evento.MAPEO_IA,
             detalle={

@@ -75,7 +75,7 @@
 .input-wrap { position: relative; display: flex; align-items: center; }
 .input-wrap > i { position: absolute; left: 12px; color: var(--text-3); font-size: 16px; pointer-events: none; }
 .auth-input {
-  width: 100%; padding: 10px 12px 10px 38px;
+  width: 100%; padding: 13px 14px 13px 40px;
   border: 1px solid var(--line-strong); border-radius: var(--r-md);
   font-size: var(--fs-base); background: var(--surface); outline: none;
 }
@@ -94,7 +94,7 @@
 .hint.error { color: var(--danger-600); }
 
 .auth-btn {
-  width: 100%; justify-content: center; padding: 11px 16px;
+  width: 100%; justify-content: center; padding: 14px 18px;
   border: none; border-radius: var(--r-md); background: var(--brand-600);
   color: #fff; font-size: var(--fs-base); font-weight: 600; cursor: pointer;
   display: inline-flex; align-items: center; gap: 6px; margin-top: 6px;

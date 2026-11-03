@@ -11,6 +11,7 @@ import { plantillaService } from "./plantillaService";
 import PlantillaModal from "./PlantillaModal";
 import ConfirmarModal from "@/components/ui/ConfirmarModal";
 import CamposModal from "./CamposModal";
+import AyudaPlantilla from "./AyudaPlantilla";
 import type { Plantilla } from "@/types";
 import { useAvisos } from "@/components/ui/Avisos";
 import "./plantillas.css";
@@ -28,6 +29,7 @@ export default function PlantillasPage() {
   const [eliminando, setEliminando] = useState<Plantilla | null>(null);
   const [editandoCampos, setEditandoCampos] = useState<Plantilla | null>(null);
   const [mandanteFiltro, setMandanteFiltro] = useState<string>("");
+  const [verAyuda, setVerAyuda] = useState(false);
 
   // Lista de mandantes únicos, sacada de las plantillas que existen.
   // Así el desplegable se llena solo, sin configurar nada a mano.
@@ -73,10 +75,16 @@ export default function PlantillasPage() {
           <h1>Biblioteca de plantillas</h1>
           <p>Formatos de mandantes que puedes crear, editar y reutilizar.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setModalCrear(true)}>
-          <i aria-hidden="true" className="ti ti-plus" /> Nueva plantilla
-        </button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button className="btn" onClick={() => setVerAyuda(true)} aria-label="Ayuda: cómo subir una plantilla">
+            <i aria-hidden="true" className="ti ti-help" /> ¿Cómo subir una plantilla?
+          </button>
+          <button className="btn btn-primary" onClick={() => setModalCrear(true)}>
+            <i aria-hidden="true" className="ti ti-plus" /> Nueva plantilla
+          </button>
+        </div>
       </div>
+      {verAyuda && <AyudaPlantilla onCerrar={() => setVerAyuda(false)} />}
 
       {isLoading && (
         <div className="pl-estado"><i aria-hidden="true" className="ti ti-loader-2" /><p style={{ marginTop: 8 }}>Cargando…</p></div>

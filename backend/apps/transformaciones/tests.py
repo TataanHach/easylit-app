@@ -196,3 +196,75 @@ class LimpiezaIAEstableTest(TestCase):
         self.assertTrue(r.data["conserva_anterior"])
         self.t.refresh_from_db()
         self.assertEqual(self.t.resultado_limpieza["valores_ia"], {"Oferente": "Juan Pérez"})
+
+
+class ArchivosYMandanteTest(TestCase):
+    """Solo .xlsx y .csv de verdad, el CSV se convierte a Excel y el mandante va en mayúsculas."""
+
+    def setUp(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        self.org = Organizacion.objects.create(nombre="Org", rut="444444444")
+        self.usuario = Usuario.objects.create_user(
+            email="g@o.cl", password="Clave1234!", nombre_completo="G",
+            rol=Rol.GERENTE, organizacion=self.org)
+        self.c = APIClient()
+        self.c.credentials(HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(self.usuario).access_token}")
+
+    @staticmethod
+    def _xlsx():
+        import io
+        from openpyxl import Workbook
+        buf = io.BytesIO()
+        Workbook().save(buf)
+        return buf.getvalue()
+
+    def _crear(self, archivo, mandante="  codelco   norte "):
+        datos = {"nombre": "Formato", "archivo": archivo}
+        if mandante is not None:
+            datos["mandante"] = mandante
+        return self.c.post("/api/plantillas/", datos, format="multipart")
+
+    def test_xlsx_valido_y_mandante_en_mayusculas(self):
+        r = self._crear(SimpleUploadedFile("f.xlsx", self._xlsx()))
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(Plantilla.objects.get(id=r.data["id"]).mandante, "CODELCO NORTE")
+
+    def test_sin_mandante_se_rechaza(self):
+        r = self._crear(SimpleUploadedFile("f.xlsx", self._xlsx()), mandante=None)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Falta el mandante", str(r.data["mandante"]))
+        r = self._crear(SimpleUploadedFile("f.xlsx", self._xlsx()), mandante="   ")
+        self.assertEqual(r.status_code, 400)
+
+    def test_csv_se_convierte_a_excel(self):
+        from openpyxl import load_workbook
+        csv = "Descripción;Cantidad;Precio\nCemento;10;5000\n".encode("cp1252")
+        r = self._crear(SimpleUploadedFile("itemizado.csv", csv))
+        self.assertEqual(r.status_code, 201, r.data)
+        p = Plantilla.objects.get(id=r.data["id"])
+        self.assertTrue(p.archivo.name.endswith(".xlsx"))
+        filas = list(load_workbook(p.archivo.path).active.iter_rows(values_only=True))
+        self.assertEqual(filas[0], ("Descripción", "Cantidad", "Precio"))
+        self.assertEqual(filas[1], ("Cemento", "10", "5000"))
+
+    def test_extensiones_y_contenido_invalidos(self):
+        r = self._crear(SimpleUploadedFile("viejo.xls", b"x"))
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Guardar como", str(r.data["archivo"]))
+        r = self._crear(SimpleUploadedFile("falso.xlsx", b"esto no es un excel"))
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("no es un Excel válido", str(r.data["archivo"]))
+        r = self._crear(SimpleUploadedFile("binario.csv", b"\x00\x01\x02"))
+        self.assertEqual(r.status_code, 400)
+
+    def test_duracion_del_proceso(self):
+        from datetime import timedelta
+        p = Plantilla.objects.create(organizacion=self.org, nombre="P", mandante="X",
+                                     archivo=SimpleUploadedFile("p.xlsx", self._xlsx()))
+        t = Transformacion.objects.create(organizacion=self.org, autor=self.usuario, plantilla=p,
+                                          nombre_origen="o.xlsx",
+                                          archivo_origen=SimpleUploadedFile("o.xlsx", self._xlsx()))
+        self.assertIsNone(t.duracion_proceso)
+        t.procesada_en = t.creada + timedelta(seconds=83)
+        self.assertEqual(t.duracion_proceso, 83)

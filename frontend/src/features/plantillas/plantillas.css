@@ -93,7 +93,7 @@
 .mfield { margin-bottom: 16px; }
 .mfield label { display: block; font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); margin-bottom: 6px; }
 .mfield input, .mfield select {
-  width: 100%; padding: 9px 12px; border: 1px solid var(--line-strong);
+  width: 100%; padding: 12px 14px; border: 1px solid var(--line-strong);
   border-radius: var(--r-md); font-size: var(--fs-base); background: var(--surface);
 }
 .mfield input:focus, .mfield select:focus { border-color: var(--brand-600); box-shadow: var(--focus-ring); outline: none; }
@@ -101,7 +101,13 @@
   border: 2px dashed var(--line-strong); border-radius: var(--r-md);
   padding: 18px; text-align: center; cursor: pointer; color: var(--text-2); font-size: var(--fs-md);
 }
-.mfield .file-drop:hover { border-color: var(--brand-600); background: #F5FAFF; }
+.mfield .file-drop:hover { border-color: var(--brand-600); background: var(--brand-25); }
+.mfield .file-drop.arrastrando { border-style: solid; border-color: var(--brand-600); background: var(--brand-50); color: var(--brand-700); }
+/* El input va oculto con .solo-lector (no display:none) para poder elegir el archivo con teclado. */
+.mfield .file-drop:has(input:focus-visible) { border-color: var(--brand-600); box-shadow: var(--focus-ring); }
+.mfield input.mayusculas { text-transform: uppercase; }
+.mfield input.mayusculas::placeholder { text-transform: none; }
+.mfield-ayuda { margin-top: 6px; font-size: var(--fs-sm); color: var(--text-3); }
 .mfield .file-drop.tiene { border-style: solid; border-color: var(--dest-100); background: var(--dest-50); color: var(--dest-700); font-weight: 600; }
 .modal-error { background: var(--danger-50); border: 1px solid #f2c9c9; color: var(--danger-700); padding: 10px 14px; border-radius: var(--r-md); font-size: var(--fs-md); margin-bottom: 16px; }
 

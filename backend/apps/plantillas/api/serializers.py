@@ -7,7 +7,8 @@ llamada, que es lo que necesita el editor de mapeo.
 """
 from rest_framework import serializers
 
-from apps.common.archivos import validar_tamano
+from apps.common.archivos import validar_planilla
+from apps.common.textos import normalizar_mandante
 from apps.plantillas.models import CampoPlantilla, Plantilla, UnidadCanonica
 
 
@@ -63,21 +64,25 @@ class PlantillaSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("id", "usos", "creada")
 
-    EXTENSIONES = (".xlsx", ".xlsm", ".xls", ".csv")
-
     def validate_archivo(self, archivo):
-        if not archivo.name.lower().endswith(self.EXTENSIONES):
+        return validar_planilla(archivo)
+
+    def validate_mandante(self, mandante):
+        # Toda plantilla pertenece a un mandante: es lo que agrupa y filtra las plantillas.
+        mandante = normalizar_mandante(mandante)
+        if not mandante:
             raise serializers.ValidationError(
-                f"El archivo «{archivo.name}» no es un Excel ni un CSV. Sube el formato "
-                "del mandante como .xlsx, .xls o .csv."
+                "Falta el mandante. Escribe para quién es este formato (ej. MINEDUC, Codelco)."
             )
-        if archivo.size == 0:
-            raise serializers.ValidationError(
-                f"El archivo «{archivo.name}» está vacío. Revisa que se haya guardado "
-                "bien y vuelve a subirlo."
-            )
-        validar_tamano(archivo)
-        return archivo
+        return mandante
+
+    def validate(self, attrs):
+        # Al crear, el mandante es obligatorio aunque no se haya enviado el campo.
+        if self.instance is None and not attrs.get("mandante"):
+            raise serializers.ValidationError({
+                "mandante": "Falta el mandante. Escribe para quién es este formato (ej. MINEDUC, Codelco)."
+            })
+        return attrs
 
 
 class PlantillaListaSerializer(serializers.ModelSerializer):

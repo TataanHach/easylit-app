@@ -98,6 +98,8 @@ export interface Transformacion {
   autor: string;
   autor_nombre?: string;
   descargable: boolean;
+  /** Segundos desde que se subió el archivo hasta que quedó listo el mapeo (null si no terminó). */
+  duracion_proceso?: number | null;
   creada: string;
   mapeos?: MapeoCampo[];
   resultado_limpieza?: Record<string, unknown>;

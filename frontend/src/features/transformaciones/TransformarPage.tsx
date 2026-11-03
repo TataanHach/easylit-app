@@ -11,22 +11,9 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { plantillaService } from "@/features/plantillas/plantillaService";
 import { transformacionService } from "@/features/historial/historialService";
 import { describirError } from "@/lib/errores";
-import { LIMITES, limpiarTexto, problemaTamano } from "@/lib/limites";
+import { LIMITES, limpiarTexto } from "@/lib/limites";
+import { ACEPTA_ARCHIVO, problemaArchivo, useArrastrar } from "@/lib/archivos";
 import "./transformar.css";
-
-const EXTENSIONES = ["xlsx", "xlsm", "xls", "csv"];
-
-/** Valida el archivo antes de subirlo. Devuelve el problema o "" si está bien. */
-function problemaArchivo(f: File): string {
-  const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
-  if (!EXTENSIONES.includes(ext)) {
-    return `«${f.name}» no es un Excel ni un CSV. Sube un archivo .xlsx, .xls o .csv.`;
-  }
-  if (f.size === 0) {
-    return `«${f.name}» está vacío. Revisa que se haya guardado bien y vuelve a subirlo.`;
-  }
-  return problemaTamano(f);
-}
 
 export default function TransformarPage() {
   const navigate = useNavigate();
@@ -77,14 +64,15 @@ export default function TransformarPage() {
     }
   }
 
-  function elegirArchivo(f: File | null) {
+  async function elegirArchivo(f: File | null) {
     setError("");
     if (f) {
-      const problema = problemaArchivo(f);
+      const problema = await problemaArchivo(f);
       if (problema) { setError(problema); setArchivo(null); return; }
     }
     setArchivo(f);
   }
+  const arrastre = useArrastrar((f) => elegirArchivo(f));
 
   async function transformar() {
     if (!archivo || !plantillaId) return;
@@ -134,12 +122,12 @@ export default function TransformarPage() {
         <div className={`slot origen ${archivo ? "lleno" : ""}`}>
           <p className="slot-label">Documento fuente</p>
           {!archivo ? (
-            <label className="dropzone">
-              <input type="file" accept=".xlsx,.xlsm,.xls,.csv" className="solo-lector"
+            <label className={`dropzone ${arrastre.encima ? "arrastrando" : ""}`} {...arrastre.props}>
+              <input type="file" accept={ACEPTA_ARCHIVO} className="solo-lector"
                 onChange={(e) => { elegirArchivo(e.target.files?.[0] ?? null); e.target.value = ""; }} />
               <div className="drop-icon"><i aria-hidden="true" className="ti ti-file-upload" /></div>
-              <p className="drop-title">Sube la licitación</p>
-              <p className="drop-sub">Excel o CSV · haz clic o pulsa Enter para seleccionar</p>
+              <p className="drop-title">{arrastre.encima ? "Suelta el archivo aquí" : "Sube la licitación"}</p>
+              <p className="drop-sub">Arrastra el archivo aquí o haz clic para elegirlo · .xlsx o .csv</p>
             </label>
           ) : (
             <div className="archivo-card">

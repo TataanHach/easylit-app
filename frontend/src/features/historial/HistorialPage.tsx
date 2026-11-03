@@ -15,6 +15,7 @@ import { useAvisos } from "@/components/ui/Avisos";
 import ConfirmarModal from "@/components/ui/ConfirmarModal";
 import VistaPreviaModal from "@/features/transformaciones/VistaPreviaModal";
 import { describirError } from "@/lib/errores";
+import { formatearDuracion } from "@/lib/tiempo";
 import type { Transformacion } from "@/types";
 import "./historial.css";
 
@@ -35,6 +36,10 @@ export default function HistorialPage() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["transformaciones", alcance],
     queryFn: () => transformacionService.listar(alcance),
+    // Al entrar al historial siempre se pide la lista al servidor: la copia en
+    // memoria podía venir de antes de generar un documento o de crear una
+    // transformación, y mostraba estados viejos hasta recargar la página.
+    refetchOnMount: "always",
     // Auto-actualizar cada 3s si hay alguna transformación en proceso, para que
     // los estados (Procesando → En revisión → Completada) se vean sin refrescar.
     // Cuando todas están en un estado final, deja de refrescar para no gastar.
@@ -83,6 +88,14 @@ export default function HistorialPage() {
     return true;
   }), [data, filtroAutor, filtroEmpresa, fechaDesde, fechaHasta]);
 
+  // Confianza promedio de lo que se ve (pestaña + filtros), sin las que fallaron o siguen en proceso.
+  const promedio = useMemo(() => {
+    const conConfianza = filtradas.filter((t) => t.confianza != null && t.estado !== "ERROR");
+    if (!conConfianza.length) return null;
+    const suma = conConfianza.reduce((s, t) => s + (t.confianza ?? 0), 0);
+    return { valor: Math.round(suma / conConfianza.length), n: conConfianza.length };
+  }, [filtradas]);
+
   // Al cambiar de pestaña o de filtro se vuelve a la primera página.
   useEffect(() => { setPagina(1); }, [alcance, filtroAutor, filtroEmpresa, fechaDesde, fechaHasta]);
 
@@ -115,6 +128,13 @@ export default function HistorialPage() {
             <span className="panel-title">Transformaciones</span>
             {data && <span className="panel-count">{filtradas.length} resultado{filtradas.length !== 1 ? "s" : ""}</span>}
           </div>
+          {promedio && (
+            <div className="conf-promedio" title="Promedio de la confianza de las transformaciones de esta pestaña y filtros (sin contar las que no terminaron)">
+              <span className="conf-promedio-etiqueta">Confianza promedio</span>
+              <Confianza valor={promedio.valor} />
+              <span className="conf-promedio-detalle">de {promedio.n} transformaci{promedio.n === 1 ? "ón" : "ones"}</span>
+            </div>
+          )}
         </div>
 
         {data && data.length > 0 && (
@@ -185,6 +205,7 @@ export default function HistorialPage() {
                   <th>Formato destino</th>
                   <th>Autor</th>
                   <th>Confianza</th>
+                  <th title="Desde que se subió el archivo hasta que quedó listo el mapeo">Tiempo</th>
                   <th>Estado</th>
                   <th>Fecha</th>
                   <th></th>
@@ -289,6 +310,9 @@ function Fila({ t, esMio }: { t: Transformacion; esMio: boolean }) {
         </span>
       </td>
       <td><Confianza valor={t.confianza} /></td>
+      <td className="tiempo" title="Tiempo de procesamiento: de la subida al mapeo listo">
+        {formatearDuracion(t.duracion_proceso)}
+      </td>
       <td><Estado estado={t.estado} /></td>
       <td className="fecha">{formatFecha(t.creada)}</td>
       <td style={{ textAlign: "right" }}>
