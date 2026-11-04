@@ -6,6 +6,9 @@ psycopg[binary]==3.2.3
 dj-database-url==2.3.0
 celery==5.4.0
 redis==5.2.1
+# Fijo: sin esto se instala kombu 5.6+, que exige redis>=6.1 y el worker no
+# arranca ("Redis transport requires redis-py versions 6.1.0 or later").
+kombu==5.5.4
 pandas==2.2.3
 openpyxl==3.1.5
 requests==2.34.2  # llamadas a la API REST de Gemini (sin gRPC)

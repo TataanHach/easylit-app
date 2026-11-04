@@ -206,9 +206,6 @@ function Tarjeta({ p, onUsar, onEditar, onCampos, onEliminar }: {
             <button className="pl-icon-btn" title="Editar datos" aria-label={`Editar datos de «${p.nombre}»`} onClick={onEditar}><i aria-hidden="true" className="ti ti-edit" /></button>
             <button className="pl-icon-btn danger" title="Eliminar" aria-label={`Eliminar «${p.nombre}»`} onClick={onEliminar}><i aria-hidden="true" className="ti ti-trash" /></button>
           </div>
-          <span className="pl-usos" title="Transformaciones hechas con esta plantilla">
-            {p.usos} uso{p.usos !== 1 ? "s" : ""}
-          </span>
         </div>
       </div>
     </div>

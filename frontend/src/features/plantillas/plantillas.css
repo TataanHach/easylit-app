@@ -44,7 +44,6 @@
 .pl-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 12px; }
 .pl-tag { font-size: var(--fs-xs); padding: 2px 8px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-xs); color: var(--text-2); font-weight: 500; }
 .pl-foot { display: flex; align-items: center; justify-content: space-between; padding-top: 10px; border-top: 1px solid var(--line-soft); margin-top: auto; }
-.pl-usos { font-size: var(--fs-sm); color: var(--text-3); }
 .pl-use-btn {
   display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px;
   background: var(--brand-600); color: #fff; border: none; border-radius: var(--r-md);

@@ -10,7 +10,16 @@ set -o errexit
 
 # Worker de Celery en segundo plano. --pool=solo: un solo proceso, para no pasar
 # la memoria del plan gratis (cada proceso carga pandas).
-celery -A config worker --loglevel=info --pool=solo &
+# Va dentro de un bucle: si el worker se cae (error o falta de memoria), se vuelve a
+# levantar solo. Antes quedaba muerto y las transformaciones no avanzaban, aunque
+# la API siguiera respondiendo.
+(
+  while true; do
+    celery -A config worker --loglevel=info --pool=solo || true
+    echo "[start.sh] El worker de Celery se detuvo; se reinicia en 5 segundos..."
+    sleep 5
+  done
+) &
 
 # API. 1 proceso con hilos (misma razón: memoria). timeout alto: "Generar" procesa
 # el Excel dentro de la petición.

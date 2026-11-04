@@ -88,6 +88,18 @@ def procesar_transformacion(transformacion_id):
     except Transformacion.DoesNotExist:
         return
 
+    # La tarea puede llegar repetida (se reentrega si el worker murió a medias):
+    # si ya terminó o se marcó con error, no se rehace.
+    en_proceso = (
+        EstadoTransformacion.BORRADOR,
+        EstadoTransformacion.LIMPIEZA,
+        EstadoTransformacion.MAPEO_PROPUESTO,
+    )
+    if t.estado not in en_proceso:
+        return
+    # Restos de un intento anterior interrumpido: se parte de cero.
+    t.mapeos.all().delete()
+
     try:
         df, resumen = limpieza.limpiar_excel(
             ruta_local(t.archivo_origen), t.opciones_limpieza or {},

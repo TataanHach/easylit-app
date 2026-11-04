@@ -6,15 +6,21 @@ Dos reglas de oro que se aplican en TODAS las consultas:
   1. Aislamiento por organización: un usuario solo ve datos de SU organización.
   2. Alcance por autor: el parámetro ?alcance= filtra Mías / Equipo / Todas.
 """
+import logging
+from datetime import timedelta
+
 from django.conf import settings
 from django.db.models import Q
+from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from apps.common.archivos import ruta_local
-from apps.transformaciones.models import Bitacora, MapeoCampo, Transformacion
+from apps.transformaciones.models import (
+    Bitacora, EstadoTransformacion, MapeoCampo, Transformacion,
+)
 
 from .serializers import (
     CrearTransformacionSerializer,
@@ -23,9 +29,47 @@ from .serializers import (
     TransformacionListaSerializer,
 )
 
+logger = logging.getLogger(__name__)
+
+# Estados en que el worker está trabajando. Si una transformación lleva más que
+# esto sin avanzar, el worker se cayó (p. ej. sin memoria en Render) y no va a
+# terminar: se marca como error para que el usuario no espere para siempre.
+ESTADOS_EN_PROCESO = (
+    EstadoTransformacion.BORRADOR,
+    EstadoTransformacion.LIMPIEZA,
+    EstadoTransformacion.MAPEO_PROPUESTO,
+)
+MINUTOS_SIN_AVANCE = 20
+
+
+def marcar_colgadas(qs):
+    """Pasa a ERROR las transformaciones de `qs` que llevan demasiado sin avanzar."""
+    limite = timezone.now() - timedelta(minutes=MINUTOS_SIN_AVANCE)
+    colgadas = list(qs.filter(estado__in=ESTADOS_EN_PROCESO, actualizada__lt=limite))
+    for t in colgadas:
+        t.estado = EstadoTransformacion.ERROR
+        t.detalle_error = (
+            "El procesamiento se interrumpió y no alcanzó a terminar (el servidor se "
+            "reinició o se quedó sin memoria). Vuelve a crear la transformación; si "
+            "pasa de nuevo con este archivo, prueba con uno más liviano."
+        )
+        t.save(update_fields=["estado", "detalle_error", "actualizada"])
+        Bitacora.objects.create(
+            transformacion=t, evento=Bitacora.Evento.ERROR,
+            detalle={"error": f"sin avance por más de {MINUTOS_SIN_AVANCE} min"},
+        )
+
 
 class TransformacionViewSet(viewsets.ModelViewSet):
     """CRUD de transformaciones + acciones del flujo."""
+
+    def list(self, request, *args, **kwargs):
+        marcar_colgadas(self.get_queryset())
+        return super().list(request, *args, **kwargs)
+
+    def retrieve(self, request, *args, **kwargs):
+        marcar_colgadas(self.get_queryset().filter(pk=kwargs.get("pk")))
+        return super().retrieve(request, *args, **kwargs)
 
     def get_queryset(self):
         usuario = self.request.user
@@ -78,8 +122,19 @@ class TransformacionViewSet(viewsets.ModelViewSet):
         try:
             from apps.transformaciones.tasks import procesar_transformacion
             procesar_transformacion.delay(str(transformacion.id))
-        except Exception:
-            pass
+        except Exception as e:
+            # Antes se ignoraba y la transformación quedaba "Limpiando" para siempre.
+            logger.exception("No se pudo encolar la transformación %s", transformacion.id)
+            transformacion.estado = EstadoTransformacion.ERROR
+            transformacion.detalle_error = (
+                "El servidor no pudo empezar a procesar el archivo (la cola de tareas "
+                "no respondió). Espera un momento y vuelve a crear la transformación."
+            )
+            transformacion.save(update_fields=["estado", "detalle_error"])
+            Bitacora.objects.create(
+                transformacion=transformacion, evento=Bitacora.Evento.ERROR,
+                detalle={"error": f"encolar: {str(e)[:450]}"},
+            )
 
     def perform_destroy(self, instance):
         usuario = self.request.user
