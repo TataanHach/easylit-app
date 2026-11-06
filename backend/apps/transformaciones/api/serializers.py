@@ -2,7 +2,7 @@
 Serializers de transformaciones.
 
 Separo la vista de LISTA (ligera, para la tabla del historial) de la de DETALLE
-(completa, con partidas, mapeos y bitácora). La lista añade el nombre del autor
+(completa, con mapeos y bitácora). La lista añade el nombre del autor
 y de la plantilla para que la tabla no tenga que resolver esas referencias.
 """
 from rest_framework import serializers
@@ -12,7 +12,6 @@ from apps.common.textos import normalizar_mandante
 from apps.transformaciones.models import (
     Bitacora,
     MapeoCampo,
-    Partida,
     Transformacion,
 )
 
@@ -72,24 +71,9 @@ class MapeoCampoSerializer(serializers.ModelSerializer):
     class Meta:
         model = MapeoCampo
         fields = (
-            "id", "origen_columna", "origen_muestra",
+            "id", "origen_columna",
             "destino_campo", "destino_nombre",
             "confianza", "motivo", "ajustado_por_humano",
-        )
-
-
-class PartidaSerializer(serializers.ModelSerializer):
-    total_calculado = serializers.DecimalField(
-        max_digits=18, decimal_places=2, read_only=True
-    )
-
-    class Meta:
-        model = Partida
-        fields = (
-            "id", "codigo", "capitulo", "es_capitulo", "descripcion",
-            "unidad_origen", "unidad_canonica",
-            "cantidad", "precio_unitario", "total", "total_calculado",
-            "orden", "requiere_revision",
         )
 
 
@@ -105,7 +89,7 @@ class BitacoraSerializer(serializers.ModelSerializer):
 
 
 class TransformacionDetalleSerializer(serializers.ModelSerializer):
-    """Detalle completo: incluye mapeos, partidas y bitácora anidados."""
+    """Detalle completo: incluye mapeos y bitácora anidados."""
 
     autor_nombre = serializers.CharField(source="autor.nombre_completo", read_only=True)
     plantilla_nombre = serializers.CharField(source="plantilla.nombre", read_only=True)
@@ -121,7 +105,7 @@ class TransformacionDetalleSerializer(serializers.ModelSerializer):
             "plantilla", "plantilla_nombre",
             "autor", "autor_nombre",
             "estado", "confianza", "detalle_error",
-            "opciones_limpieza", "resultado_limpieza", "tasa_uf_clp",
+            "opciones_limpieza", "resultado_limpieza",
             "descargable", "duracion_proceso", "creada", "actualizada",
             "mapeos", "bitacora",
         )

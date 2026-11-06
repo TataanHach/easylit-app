@@ -56,32 +56,16 @@ export interface Plantilla {
   formato: "XLSX" | "CSV" | "PDF" | "DOCX";
   total_campos: number;
   favorita: boolean;
-  usos: number;
   campos?: CampoPlantilla[];
 }
 
 export interface MapeoCampo {
   id: string;
   origen_columna: string;
-  origen_muestra: string[];
   destino_campo: string | null;
   confianza: number;
   motivo: string;
   ajustado_por_humano: boolean;
-}
-
-export interface Partida {
-  id: string;
-  codigo: string;
-  capitulo: string;
-  es_capitulo: boolean;
-  descripcion: string;
-  unidad_origen: string;
-  unidad_canonica: string | null;
-  cantidad: number | null;
-  precio_unitario: number | null;
-  total: number | null;
-  requiere_revision: boolean;
 }
 
 export interface Transformacion {

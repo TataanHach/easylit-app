@@ -9,14 +9,14 @@ from rest_framework import serializers
 
 from apps.common.archivos import validar_planilla
 from apps.common.textos import normalizar_mandante
-from apps.plantillas.models import CampoPlantilla, Plantilla, UnidadCanonica
+from apps.plantillas.models import CampoPlantilla, Plantilla
 
 
 class CampoPlantillaSerializer(serializers.ModelSerializer):
     class Meta:
         model = CampoPlantilla
         fields = (
-            "id", "plantilla", "nombre", "columna_excel", "orden",
+            "id", "plantilla", "nombre", "orden",
             "tipo", "obligatorio", "moneda_destino", "descripcion",
             "celda_destino", "etiqueta_busqueda", "hoja_destino",
             "formato_numero",
@@ -58,11 +58,10 @@ class PlantillaSerializer(serializers.ModelSerializer):
         model = Plantilla
         fields = (
             "id", "nombre", "mandante", "sector", "formato",
-            "archivo", "hoja_datos", "fila_encabezado", "fila_primer_dato",
-            "favorita", "archivada", "usos", "total_campos", "campos",
+            "archivo", "favorita", "archivada", "total_campos", "campos",
             "creada",
         )
-        read_only_fields = ("id", "usos", "creada")
+        read_only_fields = ("id", "creada")
 
     def validate_archivo(self, archivo):
         return validar_planilla(archivo)
@@ -94,11 +93,5 @@ class PlantillaListaSerializer(serializers.ModelSerializer):
         model = Plantilla
         fields = (
             "id", "nombre", "mandante", "sector", "formato",
-            "favorita", "usos", "total_campos", "creada",
+            "favorita", "total_campos", "creada",
         )
-
-
-class UnidadCanonicaSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = UnidadCanonica
-        fields = ("id", "simbolo", "nombre", "alias")

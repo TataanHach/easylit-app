@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Bitacora, MapeoCampo, Partida, Transformacion
+from .models import Bitacora, MapeoCampo, Transformacion
 
 
 class MapeoCampoInline(admin.TabularInline):
@@ -23,13 +23,6 @@ class TransformacionAdmin(admin.ModelAdmin):
     search_fields = ("nombre_origen", "mandante")
     readonly_fields = ("id", "creada", "actualizada")
     inlines = [MapeoCampoInline, BitacoraInline]
-
-
-@admin.register(Partida)
-class PartidaAdmin(admin.ModelAdmin):
-    list_display = ("codigo", "descripcion", "unidad_origen", "cantidad", "total", "requiere_revision")
-    list_filter = ("requiere_revision", "es_capitulo")
-    search_fields = ("codigo", "descripcion")
 
 
 @admin.register(Bitacora)

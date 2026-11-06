@@ -9,12 +9,11 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.common.archivos import ruta_local
-from apps.plantillas.models import Plantilla, UnidadCanonica
+from apps.plantillas.models import Plantilla
 
 from .serializers import (
     PlantillaListaSerializer,
     PlantillaSerializer,
-    UnidadCanonicaSerializer,
 )
 
 
@@ -47,7 +46,7 @@ class PlantillaViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(
             organizacion=self.request.user.organizacion,
-            creada_por=self.request.user,
+            usuario=self.request.user,
         )
 
     def destroy(self, request, *args, **kwargs):
@@ -134,19 +133,6 @@ class PlantillaViewSet(viewsets.ModelViewSet):
         plantilla.save(update_fields=["tipos_hoja"])
         return self.hojas(request, pk=pk)
 
-
-class UnidadCanonicaViewSet(viewsets.ModelViewSet):
-    """Catálogo de unidades canónicas de la organización."""
-    serializer_class = UnidadCanonicaSerializer
-
-    def get_queryset(self):
-        usuario = self.request.user
-        if usuario.es_superadmin:
-            return UnidadCanonica.objects.all()
-        return UnidadCanonica.objects.filter(organizacion=usuario.organizacion)
-
-    def perform_create(self, serializer):
-        serializer.save(organizacion=self.request.user.organizacion)
 
 
 class CampoPlantillaViewSet(viewsets.ModelViewSet):

@@ -1,8 +1,7 @@
 """
 El corazón del sistema: la Transformación y sus piezas.
 
-Una Transformacion recorre una máquina de estados explícita. Cada partida del
-itemizado origen se guarda como fila (Partida) para poder reconciliar totales.
+Una Transformacion recorre una máquina de estados explícita.
 El MapeoCampo guarda la correspondencia origen→destino que la IA propone y el
 humano aprueba. La Bitacora registra cada acción para trazabilidad: en una
 licitación adjudicada, poder reconstruir de dónde salió un número seis meses
@@ -80,12 +79,6 @@ class Transformacion(models.Model):
     # Resumen de lo que la limpieza hizo, para mostrar cifras reales al usuario.
     resultado_limpieza = models.JSONField(default=dict, blank=True)
 
-    # Tasa UF→CLP confirmada por el humano, si la conversión aplica. Se guarda
-    # para que quede registrada junto al documento (auditoría).
-    tasa_uf_clp = models.DecimalField(
-        max_digits=12, decimal_places=2, null=True, blank=True
-    )
-
     creada = models.DateTimeField(default=timezone.now)
     # Cuándo terminó el procesamiento (quedó lista para revisar el mapeo). Con
     # `creada` da el tiempo que tardó, desde que se subió el archivo.
@@ -132,7 +125,6 @@ class MapeoCampo(models.Model):
 
     # Lo que detectó la IA en el origen.
     origen_columna = models.CharField(max_length=150)      # "Monto estimado (UF)"
-    origen_muestra = models.JSONField(default=list, blank=True)  # pocas celdas de ejemplo
 
     # A qué campo destino va. Null = sin asignar (bloquea la generación).
     destino_campo = models.ForeignKey(
@@ -157,62 +149,6 @@ class MapeoCampo(models.Model):
     def __str__(self):
         destino = self.destino_campo.nombre if self.destino_campo else "— sin asignar —"
         return f"{self.origen_columna} → {destino} ({self.confianza}%)"
-
-
-class Partida(models.Model):
-    """
-    Una fila del itemizado origen, ya limpia.
-
-    Guardarlas permite reconciliar totales (cantidad×precio, subtotales por
-    capítulo, total contra el documento original) antes de dejar generar. Es la
-    base de la validación aritmética determinista que corre el worker.
-    """
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    transformacion = models.ForeignKey(
-        Transformacion, on_delete=models.CASCADE, related_name="partidas"
-    )
-
-    # Jerarquía del itemizado: "2", "2.1", "2.1.3".
-    codigo = models.CharField(max_length=30, blank=True)
-    capitulo = models.CharField(max_length=30, blank=True)  # capítulo al que pertenece
-    es_capitulo = models.BooleanField(default=False)        # fila de subtotal/título
-
-    descripcion = models.TextField(blank=True)
-
-    # Unidad tal como vino y su forma canónica resuelta. Si canonica queda vacía
-    # en una partida no-capítulo, la validación de unidades falla.
-    unidad_origen = models.CharField(max_length=30, blank=True)
-    unidad_canonica = models.ForeignKey(
-        "plantillas.UnidadCanonica",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="partidas",
-    )
-
-    cantidad = models.DecimalField(max_digits=16, decimal_places=4, null=True, blank=True)
-    precio_unitario = models.DecimalField(max_digits=16, decimal_places=2, null=True, blank=True)
-    total = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
-
-    orden = models.PositiveIntegerField(default=0)
-    # True si la fila necesita atención humana (baja confianza o sin unidad).
-    requiere_revision = models.BooleanField(default=False)
-
-    class Meta:
-        db_table = "partida"
-        ordering = ["orden"]
-        indexes = [models.Index(fields=["transformacion", "orden"])]
-
-    def __str__(self):
-        return f"{self.codigo} · {self.descripcion[:40]}"
-
-    @property
-    def total_calculado(self):
-        """cantidad × precio, para comparar contra `total` en la validación."""
-        if self.cantidad is None or self.precio_unitario is None:
-            return None
-        return self.cantidad * self.precio_unitario
 
 
 class Bitacora(models.Model):

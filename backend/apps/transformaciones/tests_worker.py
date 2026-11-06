@@ -1,12 +1,11 @@
 """
-Pruebas de los servicios del worker: limpieza, IA (modo simulado) y validación.
+Pruebas de los servicios del worker: limpieza e IA (modo simulado).
 Corre con: python manage.py test apps.transformaciones.tests_worker
 """
-from decimal import Decimal
 
 from django.test import TestCase
 
-from apps.transformaciones.services import ia, limpieza, validacion
+from apps.transformaciones.services import ia, limpieza
 
 
 class LimpiezaTest(TestCase):
@@ -42,40 +41,6 @@ class IATest(TestCase):
         propuesta, modelo = ia.proponer_mapeo(df, ["Monto estimado"], campos, anonimizar=True)
         self.assertEqual(modelo, "heuristica-local")
         self.assertEqual(len(propuesta), 1)
-
-
-class ValidacionTest(TestCase):
-    class _P:
-        def __init__(s, codigo, cap, es_cap, cant, precio, total, unidad=1):
-            s.codigo=codigo; s.capitulo=cap; s.es_capitulo=es_cap
-            s.cantidad=cant; s.precio_unitario=precio; s.total=total
-            s.descripcion=codigo; s.unidad_canonica_id=unidad
-        @property
-        def total_calculado(s):
-            if s.cantidad is None or s.precio_unitario is None: return None
-            return Decimal(str(s.cantidad)) * Decimal(str(s.precio_unitario))
-
-    def test_valida_cuando_todo_cuadra(self):
-        P = self._P
-        partidas = [
-            P("1", "1", True, None, None, Decimal("30000")),
-            P("1.1", "1", False, Decimal("2"), Decimal("10000"), Decimal("20000")),
-            P("1.2", "1", False, Decimal("1"), Decimal("10000"), Decimal("10000")),
-        ]
-        r = validacion.validar(partidas, total_documento=Decimal("30000"))
-        self.assertTrue(r["todo_ok"])
-
-    def test_bloquea_cuando_linea_no_cuadra(self):
-        P = self._P
-        partidas = [P("1.1", "1", False, Decimal("2"), Decimal("10000"), Decimal("25000"))]
-        r = validacion.validar(partidas)
-        self.assertFalse(r["todo_ok"])
-
-    def test_bloquea_sin_unidad(self):
-        P = self._P
-        partidas = [P("1.1", "1", False, Decimal("1"), Decimal("100"), Decimal("100"), unidad=None)]
-        r = validacion.validar(partidas)
-        self.assertFalse(r["todo_ok"])
 
 
 class RevisionPlantillaTest(TestCase):

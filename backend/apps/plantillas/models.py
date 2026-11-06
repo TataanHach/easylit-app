@@ -1,47 +1,15 @@
 """
-Plantillas (formatos destino) y catálogo de unidades canónicas.
+Plantillas: los formatos destino de cada mandante.
 
 Una Plantilla es el formato exigido por un mandante (ej. "Formato Codelco 2024").
 Guarda el archivo Excel original para poder escribir DENTRO de él preservando
 fórmulas y estilos, y una definición estructurada de sus campos para que la IA
 sepa a qué debe mapear.
-
-La UnidadCanonica es la lista maestra de unidades de la organización (m², m³, ml,
-gl, kg…). Todo lo que venga en el origen ("M3", "mt2", "metros cúbicos") debe
-resolverse a una de estas. Que sea una tabla y no texto libre es lo que permite
-validar que ninguna partida quede con una unidad no reconocida.
 """
 import uuid
 
 from django.db import models
 from django.utils import timezone
-
-
-class UnidadCanonica(models.Model):
-    """Unidad de medida oficial de la organización, con sus alias conocidos."""
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    organizacion = models.ForeignKey(
-        "organizaciones.Organizacion",
-        on_delete=models.CASCADE,
-        related_name="unidades",
-    )
-    simbolo = models.CharField(max_length=20)          # "m²"
-    nombre = models.CharField(max_length=100)          # "metro cuadrado"
-    alias = models.JSONField(default=list, blank=True)
-
-    class Meta:
-        db_table = "unidad_canonica"
-        ordering = ["simbolo"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["organizacion", "simbolo"],
-                name="unidad_unica_por_organizacion",
-            )
-        ]
-
-    def __str__(self):
-        return self.simbolo
 
 
 class Plantilla(models.Model):
@@ -70,14 +38,11 @@ class Plantilla(models.Model):
 
     archivo = models.FileField(upload_to="plantillas/%Y/%m/")
 
-    hoja_datos = models.CharField(max_length=100, blank=True, default="")
-    fila_encabezado = models.PositiveIntegerField(default=1)
-    fila_primer_dato = models.PositiveIntegerField(default=2)
-
     favorita = models.BooleanField(default=False)
     archivada = models.BooleanField(default=False)
 
-    creada_por = models.ForeignKey(
+    # Quién creó la plantilla.
+    usuario = models.ForeignKey(
         "usuarios.Usuario",
         on_delete=models.SET_NULL,
         null=True,
@@ -85,7 +50,6 @@ class Plantilla(models.Model):
     )
     creada = models.DateTimeField(default=timezone.now)
     actualizada = models.DateTimeField(auto_now=True)
-    usos = models.PositiveIntegerField(default=0)
 
     class Meta:
         db_table = "plantilla"
@@ -135,7 +99,6 @@ class CampoPlantilla(models.Model):
     )
 
     nombre = models.CharField(max_length=150)
-    columna_excel = models.CharField(max_length=10, blank=True)
     orden = models.PositiveIntegerField(default=0)
 
     celda_destino = models.CharField(max_length=10, blank=True)
