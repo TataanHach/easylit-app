@@ -3,12 +3,11 @@
  *
  * El trabajador llega aquí con el código de invitación que le envió su gerente
  * (pantalla Equipo): por el enlace del mensaje (?codigo=…) o pegándolo a mano.
- * Define su contraseña, opcionalmente su RUT, y entra directo.
+ * Define su contraseña y entra directo (el RUT ya lo ingresó el gerente al invitarlo).
  */
 import { FormEvent, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "./AuthContext";
-import { formatearRut, rutValido } from "@/lib/rut";
 import "./auth.css";
 import { limpiarTexto, LIMITES } from "@/lib/limites";
 import { requisitosContrasena } from "@/lib/contrasena";
@@ -28,7 +27,6 @@ export default function CrearContrasenaPage() {
   const [token, setToken] = useState(location.state?.token ?? params.get("codigo")?.trim() ?? "");
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
-  const [rut, setRut] = useState("");
   const [verPw, setVerPw] = useState(false);
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
@@ -37,7 +35,6 @@ export default function CrearContrasenaPage() {
   const nivel = password ? REQUISITOS_CONTRASENA.filter((r) => r.cumple(password)).length : 0;
   const pwOk = REQUISITOS_CONTRASENA.every((r) => r.cumple(password));
   const coinciden = password2.length > 0 && password === password2;
-  const rutOk = rut === "" || rutValido(rut);
 
   async function enviar(e: FormEvent) {
     e.preventDefault();
@@ -51,10 +48,9 @@ export default function CrearContrasenaPage() {
       return;
     }
     if (!coinciden) { setError("Las contraseñas no coinciden. Escribe la misma contraseña en los dos campos."); return; }
-    if (!rutOk) { setError("El RUT no es válido: el dígito verificador no corresponde. Revísalo o deja el campo vacío."); return; }
     setCargando(true);
     try {
-      await crearContrasena({ token: codigo, password, password2, rut: limpiarTexto(rut) || undefined });
+      await crearContrasena({ token: codigo, password, password2 });
       navigate("/");
     } catch (e) {
       const { titulo, detalle } = describirError(e, "crear la contraseña");
@@ -151,18 +147,6 @@ export default function CrearContrasenaPage() {
                   {coinciden ? "Las contraseñas coinciden" : "Las contraseñas no coinciden"}
                 </p>
               )}
-            </div>
-
-            <div className="field">
-              <label htmlFor="rut">RUT (opcional)</label>
-              <div className="input-wrap">
-                <i aria-hidden="true" className="ti ti-id" />
-                <input id="rut" type="text"
-                  className={`auth-input ${rut ? (rutOk ? "ok" : "error") : ""}`}
-                  placeholder="12.345.678-9" maxLength={LIMITES.rut}
-                  value={rut} onChange={(e) => setRut(formatearRut(e.target.value))} />
-              </div>
-              {rut && !rutOk && <p className="hint error">El dígito verificador no corresponde</p>}
             </div>
 
             <button className="auth-btn" type="submit" disabled={cargando}>
