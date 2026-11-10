@@ -6,10 +6,8 @@ crear el usuario sin contraseña + su token (invitar), y consumir el token
 fijando la contraseña (primer ingreso). Todo lo que cambia estado deja además
 un registro en la bitácora cuando corresponde.
 """
-import secrets
-from django.conf import settings
-from datetime import timedelta
-
+from django.db import transaction
+from django.db.models import Prefetch
 from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -28,11 +26,9 @@ from .serializers import (
     EstadoCorreoSerializer,
     InvitarUsuarioSerializer,
     LoginSerializer,
+    MiembroEquipoSerializer,
     UsuarioSerializer,
 )
-
-# Cuántos días vale una invitación antes de expirar.
-DIAS_VIGENCIA_INVITACION = settings.INVITACION_DIAS_VIGENCIA
 
 
 class LoginView(TokenObtainPairView):
@@ -89,9 +85,9 @@ class InvitarUsuarioView(APIView):
     POST /api/auth/invitar/  (solo gerente/superadmin)
 
     Da de alta a un trabajador: crea el usuario SIN contraseña, dentro de la
-    organización de quien invita, y genera el token de invitación. En producción,
-    el worker enviará el correo con el enlace; aquí devolvemos el token para poder
-    probar el flujo completo.
+    organización de quien invita, y genera el código de invitación. No se envía
+    correo: el código vuelve en la respuesta y el gerente se lo hace llegar
+    (pantalla Equipo → Copiar mensaje).
     """
     permission_classes = [IsAuthenticated, EsGerenteOSuperadmin]
 
@@ -110,32 +106,83 @@ class InvitarUsuarioView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Crear el usuario sin contraseña utilizable.
-        usuario = Usuario.objects.create_user(
-            email=datos["email"],
-            password=None,
-            nombre_completo=datos["nombre_completo"],
-            rut=datos.get("rut", ""),
-            telefono=datos.get("telefono", ""),
-            rol=Rol.TRABAJADOR,
-            organizacion=organizacion,
-        )
-
-        invitacion = Invitacion.objects.create(
-            usuario=usuario,
-            token=secrets.token_urlsafe(32),
-            invitado_por=request.user,
-            expira=timezone.now() + timedelta(days=DIAS_VIGENCIA_INVITACION),
-        )
+        # Usuario sin contraseña utilizable + su código, juntos o ninguno.
+        with transaction.atomic():
+            usuario = Usuario.objects.create_user(
+                email=datos["email"],
+                password=None,
+                nombre_completo=datos["nombre_completo"],
+                rut=datos["rut"],
+                telefono=datos.get("telefono", ""),
+                rol=Rol.TRABAJADOR,
+                organizacion=organizacion,
+            )
+            invitacion = Invitacion.nueva(usuario, request.user)
 
         return Response(
             {
                 "usuario": UsuarioSerializer(usuario).data,
-                # En producción esto NO se devuelve: viaja por correo. En dev sí,
-                # para poder probar el primer ingreso sin servidor de correo.
+                # Solo lo recibe el gerente que invita (no hay envío de correo).
                 "token_invitacion": invitacion.token,
                 "expira": invitacion.expira,
             },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class EquipoView(generics.ListAPIView):
+    """
+    GET /api/auth/equipo/  (solo gerente/superadmin)
+
+    Las personas de la organización de quien consulta, con el estado de su acceso
+    y, si tienen un código vigente, el código para que el gerente se lo reenvíe.
+    Nunca muestra personas de otra organización.
+    """
+    permission_classes = [IsAuthenticated, EsGerenteOSuperadmin]
+    serializer_class = MiembroEquipoSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        organizacion = self.request.user.organizacion
+        if organizacion is None:
+            return Usuario.objects.none()
+        return (
+            Usuario.objects.filter(organizacion=organizacion)
+            .prefetch_related(Prefetch("invitaciones", queryset=Invitacion.objects.order_by("-creada")))
+            .order_by("nombre_completo")
+        )
+
+
+class NuevaInvitacionView(APIView):
+    """
+    POST /api/auth/equipo/<id>/invitacion/  (solo gerente/superadmin)
+
+    Genera un código nuevo para alguien del equipo que aún no activa su cuenta:
+    porque el anterior venció, se perdió, o porque lo crearon desde el panel de
+    administración. El código anterior deja de servir.
+    """
+    permission_classes = [IsAuthenticated, EsGerenteOSuperadmin]
+
+    def post(self, request, pk):
+        organizacion = request.user.organizacion
+        usuario = (
+            Usuario.objects.filter(pk=pk, organizacion=organizacion, is_active=True).first()
+            if organizacion else None
+        )
+        if usuario is None:
+            return Response(
+                {"detail": "Esa persona no está en tu equipo o no tiene el acceso habilitado."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if not usuario.necesita_crear_contrasena:
+            return Response(
+                {"detail": "Esta persona ya activó su cuenta: puede entrar con su correo y su contraseña."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        invitacion = Invitacion.nueva(usuario, request.user)
+        return Response(
+            {"token_invitacion": invitacion.token, "expira": invitacion.expira},
             status=status.HTTP_201_CREATED,
         )
 

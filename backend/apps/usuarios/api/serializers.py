@@ -83,13 +83,15 @@ class EstadoCorreoSerializer(serializers.Serializer):
 
 class InvitarUsuarioSerializer(serializers.Serializer):
     """
-    Lo que el gerente envía para dar de alta a un trabajador. Solo el correo y el
-    nombre son obligatorios; el trabajador completará su RUT y teléfono al crear
-    su contraseña.
+    Lo que el gerente envía para dar de alta a un trabajador. Correo, nombre y
+    RUT son obligatorios; el teléfono es opcional.
     """
     email = serializers.EmailField(max_length=254)
     nombre_completo = serializers.CharField(max_length=200)
-    rut = serializers.CharField(max_length=12, required=False, allow_blank=True)
+    rut = serializers.CharField(max_length=12, error_messages={
+        "required": "Falta el RUT del trabajador.",
+        "blank": "Falta el RUT del trabajador.",
+    })
     telefono = serializers.CharField(max_length=30, required=False, allow_blank=True)
     # El gerente solo puede crear TRABAJADOR. Un gerente no crea otros gerentes;
     # eso queda para el superadmin. Por eso el rol no se acepta como entrada.
@@ -101,7 +103,55 @@ class InvitarUsuarioSerializer(serializers.Serializer):
         return value
 
     def validate_rut(self, value):
-        return _validar_rut(value)
+        rut = _validar_rut(value)
+        if Usuario.objects.filter(rut=rut).exists():
+            raise serializers.ValidationError("Ya existe un usuario con este RUT.")
+        return rut
+
+
+class MiembroEquipoSerializer(serializers.ModelSerializer):
+    """
+    Una persona del equipo, vista por su gerente, con el estado de su acceso:
+
+      ACTIVO          ya creó su contraseña y puede entrar
+      PENDIENTE       tiene un código vigente (se incluye, para que el gerente lo copie)
+      VENCIDA         su último código expiró o fue reemplazado
+      SIN_INVITACION  se creó sin código (por ejemplo, desde el panel de administración)
+      DESACTIVADO     un administrador le quitó el acceso
+
+    Espera las invitaciones precargadas de la más nueva a la más vieja.
+    """
+    estado = serializers.SerializerMethodField()
+    codigo = serializers.SerializerMethodField()
+    expira = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Usuario
+        fields = ("id", "nombre_completo", "email", "rut", "rol", "estado", "codigo", "expira")
+
+    def _ultima(self, usuario):
+        invitaciones = list(usuario.invitaciones.all())
+        return invitaciones[0] if invitaciones else None
+
+    def get_estado(self, usuario):
+        if not usuario.is_active:
+            return "DESACTIVADO"
+        if not usuario.necesita_crear_contrasena:
+            return "ACTIVO"
+        ultima = self._ultima(usuario)
+        if ultima is None:
+            return "SIN_INVITACION"
+        return "PENDIENTE" if ultima.vigente else "VENCIDA"
+
+    def get_codigo(self, usuario):
+        if self.get_estado(usuario) != "PENDIENTE":
+            return None
+        return self._ultima(usuario).token
+
+    def get_expira(self, usuario):
+        if self.get_estado(usuario) != "PENDIENTE":
+            return None
+        return self._ultima(usuario).expira
 
 
 class CrearContrasenaSerializer(serializers.Serializer):

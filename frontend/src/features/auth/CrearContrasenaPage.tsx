@@ -1,12 +1,12 @@
 /**
  * Pantalla de primer ingreso: crear contraseña.
  *
- * El trabajador llega aquí con el token de la invitación (por ahora, en
- * desarrollo, se puede pegar a mano; en producción viaja en el enlace del
- * correo). Define su contraseña, opcionalmente su RUT, y entra directo.
+ * El trabajador llega aquí con el código de invitación que le envió su gerente
+ * (pantalla Equipo): por el enlace del mensaje (?codigo=…) o pegándolo a mano.
+ * Define su contraseña, opcionalmente su RUT, y entra directo.
  */
 import { FormEvent, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 import { formatearRut, rutValido } from "@/lib/rut";
 import "./auth.css";
@@ -24,7 +24,8 @@ export default function CrearContrasenaPage() {
   const navigate = useNavigate();
   const location = useLocation() as { state?: { email?: string; token?: string } };
 
-  const [token, setToken] = useState(location.state?.token ?? "");
+  const [params] = useSearchParams();
+  const [token, setToken] = useState(location.state?.token ?? params.get("codigo")?.trim() ?? "");
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
   const [rut, setRut] = useState("");
@@ -43,7 +44,7 @@ export default function CrearContrasenaPage() {
     setError("");
     const codigo = limpiarTexto(token);
     setToken(codigo);
-    if (!codigo) { setError("Falta el código de invitación. Cópialo desde el correo que te llegó y pégalo en el primer campo."); return; }
+    if (!codigo) { setError("Falta el código de invitación. Cópialo desde el mensaje que te envió tu gerente y pégalo en el primer campo."); return; }
     if (!pwOk) {
       const faltan = REQUISITOS_CONTRASENA.filter((r) => !r.cumple(password)).map((r) => r.texto.toLowerCase());
       setError(`La contraseña no cumple los requisitos. Le falta: ${faltan.join(", ")}.`);
@@ -104,9 +105,7 @@ export default function CrearContrasenaPage() {
                     value={token} onChange={(e) => setToken(e.target.value)}
                     onBlur={(e) => setToken(limpiarTexto(e.target.value))} />
                 </div>
-                {import.meta.env.DEV && (
-                  <p className="hint">En desarrollo, este código lo entrega el endpoint de invitación.</p>
-                )}
+                <p className="hint">Te lo envía tu gerente desde la pantalla Equipo de EasyLit.</p>
               </div>
             )}
 

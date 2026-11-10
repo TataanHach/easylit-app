@@ -7,6 +7,7 @@ import HistorialPage from "@/features/historial/HistorialPage";
 import TransformarPage from "@/features/transformaciones/TransformarPage";
 import MapeoPage from "@/features/transformaciones/MapeoPage";
 import PlantillasPage from "@/features/plantillas/PlantillasPage";
+import EquipoPage from "@/features/equipo/EquipoPage";
 
 /**
  * Rutas de la aplicación.
@@ -29,6 +30,7 @@ export const router = createBrowserRouter([
       { path: "transformar/:id/mapeo", element: <MapeoPage /> },
       { path: "historial", element: <HistorialPage /> },
       { path: "plantillas", element: <PlantillasPage /> },
+      { path: "equipo", element: <EquipoPage /> },
     ],
   },
   { path: "*", element: <Navigate to="/" replace /> },

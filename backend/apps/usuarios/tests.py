@@ -34,7 +34,7 @@ class FlujoAuthTest(TestCase):
         login = self._login("gerente@test.cl", "ClaveGerente1!")
         self.c.credentials(HTTP_AUTHORIZATION=f"Bearer {login.data['access']}")
         inv = self.c.post("/api/auth/invitar/",
-            {"email": "trab@test.cl", "nombre_completo": "Trabajador"}, format="json")
+            {"email": "trab@test.cl", "nombre_completo": "Trabajador", "rut": "11.111.111-1"}, format="json")
         self.assertEqual(inv.status_code, 201)
         self.assertTrue(inv.data["usuario"]["necesita_crear_contrasena"])
         token = inv.data["token_invitacion"]
@@ -55,7 +55,7 @@ class FlujoAuthTest(TestCase):
         login = self._login("gerente@test.cl", "ClaveGerente1!")
         self.c.credentials(HTTP_AUTHORIZATION=f"Bearer {login.data['access']}")
         inv = self.c.post("/api/auth/invitar/",
-            {"email": "trab@test.cl", "nombre_completo": "Trabajador"}, format="json")
+            {"email": "trab@test.cl", "nombre_completo": "Trabajador", "rut": "11.111.111-1"}, format="json")
         token = inv.data["token_invitacion"]
         self.c.credentials()
         self.c.post("/api/auth/crear-contrasena/",
@@ -65,7 +65,7 @@ class FlujoAuthTest(TestCase):
         tl = self._login("trab@test.cl", "ClaveTrab1!")
         self.c.credentials(HTTP_AUTHORIZATION=f"Bearer {tl.data['access']}")
         r = self.c.post("/api/auth/invitar/",
-            {"email": "otro@test.cl", "nombre_completo": "Otro"}, format="json")
+            {"email": "otro@test.cl", "nombre_completo": "Otro", "rut": "22.222.222-2"}, format="json")
         self.assertEqual(r.status_code, 403)
 
 
@@ -111,3 +111,91 @@ class ValidacionesAuthTest(TestCase):
             {"email": "t2@test.cl", "nombre_completo": "T", "rut": "12.345.678-5"}, format="json")
         self.assertEqual(bueno.status_code, 201)
         self.assertEqual(bueno.data["usuario"]["rut"], "123456785")
+
+
+class EquipoTest(TestCase):
+    """Pantalla Equipo: el gerente ve y da acceso solo a la gente de su organización."""
+
+    def setUp(self):
+        self.org = Organizacion.objects.create(nombre="Test SpA", rut="761234567")
+        self.otra = Organizacion.objects.create(nombre="Otra SpA", rut="765432103")
+        Usuario.objects.create_user(
+            email="gerente@test.cl", password="ClaveGerente1!",
+            nombre_completo="Gerente Test", rol=Rol.GERENTE, organizacion=self.org)
+        Usuario.objects.create_user(
+            email="ajeno@otra.cl", password="ClaveAjeno1!",
+            nombre_completo="Ajeno", rol=Rol.TRABAJADOR, organizacion=self.otra)
+        self.c = APIClient()
+        login = self.c.post("/api/auth/login/",
+            {"email": "gerente@test.cl", "password": "ClaveGerente1!"}, format="json")
+        self.c.credentials(HTTP_AUTHORIZATION=f"Bearer {login.data['access']}")
+
+    def _invitar(self, email="trab@test.cl", rut="11.111.111-1"):
+        return self.c.post("/api/auth/invitar/",
+            {"email": email, "nombre_completo": "Trabajador", "rut": rut}, format="json")
+
+    def _estados(self):
+        r = self.c.get("/api/auth/equipo/")
+        self.assertEqual(r.status_code, 200)
+        return {m["email"]: m for m in r.data}
+
+    def test_invitar_sin_rut_se_rechaza(self):
+        r = self.c.post("/api/auth/invitar/",
+            {"email": "trab@test.cl", "nombre_completo": "Trabajador"}, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("rut", r.data)
+        self.assertFalse(Usuario.objects.filter(email="trab@test.cl").exists())
+
+    def test_rut_repetido_se_rechaza(self):
+        self.assertEqual(self._invitar().status_code, 201)
+        r = self._invitar(email="otro@test.cl", rut="11111111-1")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("rut", r.data)
+
+    def test_lista_solo_mi_organizacion_con_estados(self):
+        codigo = self._invitar().data["token_invitacion"]
+        # Creado "desde el admin": sin invitación ni contraseña.
+        Usuario.objects.create_user(email="admin@test.cl", nombre_completo="Desde Admin",
+                                    rol=Rol.TRABAJADOR, organizacion=self.org)
+        equipo = self._estados()
+        self.assertNotIn("ajeno@otra.cl", equipo)
+        self.assertEqual(equipo["gerente@test.cl"]["estado"], "ACTIVO")
+        self.assertIsNone(equipo["gerente@test.cl"]["codigo"])
+        self.assertEqual(equipo["trab@test.cl"]["estado"], "PENDIENTE")
+        self.assertEqual(equipo["trab@test.cl"]["codigo"], codigo)
+        self.assertEqual(equipo["admin@test.cl"]["estado"], "SIN_INVITACION")
+
+    def test_nuevo_codigo_anula_el_anterior(self):
+        viejo = self._invitar().data["token_invitacion"]
+        uid = Usuario.objects.get(email="trab@test.cl").id
+        r = self.c.post(f"/api/auth/equipo/{uid}/invitacion/")
+        self.assertEqual(r.status_code, 201)
+        nuevo = r.data["token_invitacion"]
+        self.assertNotEqual(viejo, nuevo)
+
+        self.c.credentials()
+        datos = {"password": "ClaveTrab1!", "password2": "ClaveTrab1!"}
+        self.assertEqual(self.c.post("/api/auth/crear-contrasena/",
+            {"token": viejo, **datos}, format="json").status_code, 400)
+        self.assertEqual(self.c.post("/api/auth/crear-contrasena/",
+            {"token": nuevo, **datos}, format="json").status_code, 200)
+
+    def test_codigo_para_creado_desde_admin(self):
+        u = Usuario.objects.create_user(email="admin@test.cl", nombre_completo="Desde Admin",
+                                        rol=Rol.TRABAJADOR, organizacion=self.org)
+        r = self.c.post(f"/api/auth/equipo/{u.id}/invitacion/")
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(self._estados()["admin@test.cl"]["estado"], "PENDIENTE")
+
+    def test_no_da_codigo_a_otra_organizacion_ni_a_quien_ya_entra(self):
+        ajeno = Usuario.objects.get(email="ajeno@otra.cl")
+        self.assertEqual(self.c.post(f"/api/auth/equipo/{ajeno.id}/invitacion/").status_code, 404)
+        yo = Usuario.objects.get(email="gerente@test.cl")
+        self.assertEqual(self.c.post(f"/api/auth/equipo/{yo.id}/invitacion/").status_code, 400)
+
+    def test_trabajador_no_ve_el_equipo(self):
+        self.c.credentials()
+        login = self.c.post("/api/auth/login/",
+            {"email": "ajeno@otra.cl", "password": "ClaveAjeno1!"}, format="json")
+        self.c.credentials(HTTP_AUTHORIZATION=f"Bearer {login.data['access']}")
+        self.assertEqual(self.c.get("/api/auth/equipo/").status_code, 403)

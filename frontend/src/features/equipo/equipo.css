@@ -1,0 +1,24 @@
+/* Equipo · lista de personas e invitaciones. Usa la tabla y las píldoras del
+   historial y el modal de plantillas; aquí solo lo propio de esta pantalla. */
+
+.eq-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.eq-rut { font-family: var(--font-num); font-size: var(--fs-md); color: var(--text-2); white-space: nowrap; }
+.eq-correo { color: var(--text-2); font-size: var(--fs-md); }
+.eq-accion { text-align: right; white-space: nowrap; }
+
+/* Modal del código */
+.eq-codigo-intro { font-size: var(--fs-base); color: var(--text-2); line-height: 1.5; margin-bottom: 14px; }
+.eq-codigo-intro strong { color: var(--text); }
+.eq-mensaje {
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: 12px 14px; font-size: var(--fs-md); line-height: 1.5; color: var(--text);
+  white-space: pre-wrap; overflow-wrap: anywhere; user-select: all;
+}
+.eq-codigo-solo { margin-top: 14px; }
+.eq-codigo-solo span { display: block; font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); margin-bottom: 6px; }
+.eq-codigo-solo code {
+  display: block; font-family: var(--font-num); font-size: var(--fs-md);
+  background: var(--brand-50); color: var(--brand-900); border-radius: var(--r-sm);
+  padding: 8px 10px; overflow-wrap: anywhere; user-select: all;
+}
+.eq-modal-ancho { max-width: 520px; }

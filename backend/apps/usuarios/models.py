@@ -15,7 +15,9 @@ Roles:
   - GERENTE:    admin de su organización. Puede crear usuarios de su empresa.
   - TRABAJADOR: usa la plataforma dentro de su organización.
 """
+import secrets
 import uuid
+from datetime import timedelta
 
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
@@ -178,3 +180,20 @@ class Invitacion(models.Model):
     @property
     def vigente(self):
         return self.usada_en is None and self.expira > timezone.now()
+
+    @classmethod
+    def nueva(cls, usuario, invitado_por):
+        """
+        Crea un código nuevo para `usuario` y anula los que aún servían: así solo
+        vale el último que entregó el gerente (si reenvía uno, el viejo ya no entra).
+        """
+        from django.conf import settings
+
+        ahora = timezone.now()
+        cls.objects.filter(usuario=usuario, usada_en__isnull=True, expira__gt=ahora).update(expira=ahora)
+        return cls.objects.create(
+            usuario=usuario,
+            token=secrets.token_urlsafe(32),
+            invitado_por=invitado_por,
+            expira=ahora + timedelta(days=settings.INVITACION_DIAS_VIGENCIA),
+        )

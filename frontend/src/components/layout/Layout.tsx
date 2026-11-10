@@ -65,6 +65,14 @@ export default function Layout() {
           <NavLink to="/historial" className={({ isActive }) => `nav-item ${isActive ? "activo" : ""}`}>
             <i aria-hidden="true" className="ti ti-clock-hour-4" /> Historial
           </NavLink>
+          {usuario?.rol === "GERENTE" && (
+            <>
+              <p className="nav-section">Administración</p>
+              <NavLink to="/equipo" className={({ isActive }) => `nav-item ${isActive ? "activo" : ""}`}>
+                <i aria-hidden="true" className="ti ti-users" /> Equipo
+              </NavLink>
+            </>
+          )}
         </nav>
 
         <button type="button" className="sidebar-bottom" onClick={cerrarSesion}
