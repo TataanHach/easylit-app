@@ -115,7 +115,6 @@ class CampoPlantilla(models.Model):
     )
 
     moneda_destino = models.CharField(max_length=10, blank=True)
-    descripcion = models.CharField(max_length=300, blank=True)
 
     class Meta:
         db_table = "campo_plantilla"

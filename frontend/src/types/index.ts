@@ -41,7 +41,6 @@ export interface CampoPlantilla {
   tipo: "TEXTO" | "NUMERO" | "MONEDA" | "FECHA" | "UNIDAD";
   obligatorio: boolean;
   moneda_destino: string;
-  descripcion: string;
   hoja_destino?: string;
   etiqueta_busqueda?: string;
   formato_numero?: string;

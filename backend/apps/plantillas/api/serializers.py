@@ -17,7 +17,7 @@ class CampoPlantillaSerializer(serializers.ModelSerializer):
         model = CampoPlantilla
         fields = (
             "id", "plantilla", "nombre", "orden",
-            "tipo", "obligatorio", "moneda_destino", "descripcion",
+            "tipo", "obligatorio", "moneda_destino",
             "celda_destino", "etiqueta_busqueda", "hoja_destino",
             "formato_numero",
         )

@@ -90,7 +90,7 @@ def _construir_prompt(muestra, campos_destino):
         f'  - "{c["nombre"]}" (tipo: {c["tipo"]}'
         + (f', moneda: {c["moneda_destino"]}' if c.get("moneda_destino") else "")
         + (", OBLIGATORIO" if c.get("obligatorio") else "")
-        + (f') — {c["descripcion"]}' if c.get("descripcion") else ")")
+        + ")"
         for c in campos_destino
     )
     columnas_origen = json.dumps(muestra, ensure_ascii=False, indent=2)
@@ -155,7 +155,7 @@ def _propuesta_heuristica(muestra, campos_destino):
 
         for c in campos_destino:
             d_norm = normaliza(c["nombre"])
-            d_pals = expandir(palabras(c["nombre"]) | palabras(c.get("descripcion", "")))
+            d_pals = expandir(palabras(c["nombre"]))
 
             if o_norm == d_norm:
                 mejor, score = c["nombre"], 95

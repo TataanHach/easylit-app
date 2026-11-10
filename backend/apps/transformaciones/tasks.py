@@ -133,7 +133,6 @@ def procesar_transformacion(transformacion_id):
             {
                 "nombre": c.nombre, "tipo": c.tipo,
                 "obligatorio": c.obligatorio, "moneda_destino": c.moneda_destino,
-                "descripcion": c.descripcion,
             }
             for c in t.plantilla.campos.all()
         ]

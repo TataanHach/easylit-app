@@ -37,7 +37,7 @@ class IATest(TestCase):
     def test_modo_simulado_sin_clave(self):
         import pandas as pd
         df = pd.DataFrame({"Monto estimado": ["1000"]})
-        campos = [{"nombre": "Presupuesto_CLP", "tipo": "MONEDA", "descripcion": "monto estimado"}]
+        campos = [{"nombre": "Presupuesto_CLP", "tipo": "MONEDA"}]
         propuesta, modelo = ia.proponer_mapeo(df, ["Monto estimado"], campos, anonimizar=True)
         self.assertEqual(modelo, "heuristica-local")
         self.assertEqual(len(propuesta), 1)
