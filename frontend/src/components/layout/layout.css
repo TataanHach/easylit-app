@@ -34,7 +34,9 @@
 }
 .logo-icon i { color: #fff; font-size: 17px; }
 .logo-text { font-size: var(--fs-base); font-weight: 600; line-height: 1.2; }
+.logo-img { display: block; height: 40px; width: auto; }
 .logo-sub { font-size: var(--fs-xs); color: var(--text-3); margin-top: 1px; }
+.sidebar-logo .logo-sub { margin-top: 4px; padding-left: 2px; }
 
 .sidebar-nav { padding: 14px 10px; flex: 1; overflow-y: auto; }
 .nav-section {

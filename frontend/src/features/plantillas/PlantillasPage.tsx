@@ -75,7 +75,8 @@ export default function PlantillasPage() {
           <h1>Biblioteca de plantillas</h1>
           <p>Formatos de mandantes que puedes crear, editar y reutilizar.</p>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        {/* flexWrap: en celular los dos botones no caben lado a lado. */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <button className="btn" onClick={() => setVerAyuda(true)} aria-label="Ayuda: cómo subir una plantilla">
             <i aria-hidden="true" className="ti ti-help" /> ¿Cómo subir una plantilla?
           </button>

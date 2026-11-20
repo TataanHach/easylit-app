@@ -1,0 +1,59 @@
+/* Casilla "Acepto los términos" y ventana de Términos y condiciones. */
+
+.terminos-check {
+  display: flex; align-items: flex-start; gap: 10px;
+  margin: 4px 0 14px; font-size: var(--fs-md); color: var(--text-2); line-height: 1.45;
+}
+.terminos-check input {
+  width: 18px; height: 18px; margin: 1px 0 0; flex-shrink: 0;
+  accent-color: var(--brand-600); cursor: pointer;
+}
+.terminos-check label { cursor: pointer; }
+.terminos-check.error input { outline: 2px solid var(--danger-500); outline-offset: 1px; }
+
+/* Enlace azul que abre la ventana (es un botón, se ve como enlace). */
+.terminos-link {
+  border: none; background: none; padding: 0; font: inherit; cursor: pointer;
+  color: var(--brand-600); font-weight: 600; text-decoration: underline; text-underline-offset: 2px;
+}
+.terminos-link:hover { color: var(--brand-700); }
+
+.terminos-overlay {
+  position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center;
+  padding: 16px; background: rgba(15, 23, 42, .45); animation: terminos-fondo .2s ease-out;
+}
+.terminos-modal {
+  width: 100%; max-width: 640px; max-height: calc(100dvh - 32px);
+  display: flex; flex-direction: column;
+  background: var(--surface); border-radius: var(--r-lg);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, .25); animation: terminos-entrada .25s ease-out;
+}
+.terminos-cabecera {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 22px 24px 14px; border-bottom: 1px solid var(--line);
+}
+.terminos-cabecera h2 { font-size: var(--fs-lg); font-weight: 700; }
+.terminos-version { font-size: var(--fs-sm); color: var(--text-3); margin-top: 2px; }
+.terminos-x {
+  width: 32px; height: 32px; flex-shrink: 0; border: none; background: none; cursor: pointer;
+  border-radius: var(--r-md); color: var(--text-3); font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+}
+.terminos-x:hover { background: var(--surface-2); color: var(--text); }
+
+.terminos-cuerpo { padding: 16px 24px; overflow-y: auto; position: relative; }
+.terminos-cuerpo section + section { margin-top: 16px; }
+.terminos-cuerpo h3 { font-size: var(--fs-base); font-weight: 700; margin-bottom: 6px; }
+.terminos-cuerpo p { font-size: var(--fs-md); color: var(--text-2); line-height: 1.6; text-wrap: pretty; }
+.terminos-cuerpo p + p { margin-top: 6px; }
+
+.terminos-pie {
+  display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap;
+  padding: 14px 24px 18px; border-top: 1px solid var(--line);
+}
+
+@keyframes terminos-fondo { from { opacity: 0; } }
+@keyframes terminos-entrada { from { opacity: 0; transform: translateY(12px); } }
+@media (prefers-reduced-motion: reduce) {
+  .terminos-overlay, .terminos-modal { animation: none; }
+}

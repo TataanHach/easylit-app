@@ -15,6 +15,7 @@ Roles:
   - GERENTE:    admin de su organización. Puede crear usuarios de su empresa.
   - TRABAJADOR: usa la plataforma dentro de su organización.
 """
+import re
 import secrets
 import uuid
 from datetime import timedelta
@@ -22,6 +23,38 @@ from datetime import timedelta
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 from django.utils import timezone
+from django.utils.crypto import salted_hmac
+
+# --- Código de invitación ---
+# 8 caracteres de mayúsculas y números, sin los que se confunden al copiarlo o
+# dictarlo (I, O, 0, 1): 32^8 ≈ 1,1 billón de combinaciones.
+ALFABETO_CODIGO = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+LARGO_CODIGO = 8
+_SAL_CODIGO = "easylit.invitacion"
+
+
+def normalizar_codigo(texto):
+    """'k7m2-qx9p ' → 'K7M2QX9P': da igual si lo pegan con guion, espacios o en minúsculas."""
+    return re.sub(r"[\s-]", "", texto or "").upper()
+
+
+def codigo_valido(texto):
+    codigo = normalizar_codigo(texto)
+    return len(codigo) == LARGO_CODIGO and all(c in ALFABETO_CODIGO for c in codigo)
+
+
+def huella_codigo(texto):
+    """
+    Lo que se guarda en la base en vez del código: un HMAC-SHA256 con la
+    SECRET_KEY del servidor. No se puede volver atrás, y sin la clave tampoco se
+    puede adivinar probando códigos contra una copia de la base.
+    """
+    return salted_hmac(_SAL_CODIGO, normalizar_codigo(texto), algorithm="sha256").hexdigest()
+
+
+def formatear_codigo(codigo):
+    """'K7M2QX9P' → 'K7M2-QX9P' (más fácil de leer y copiar)."""
+    return f"{codigo[:4]}-{codigo[4:]}"
 
 
 class Rol(models.TextChoices):
@@ -146,17 +179,20 @@ class Invitacion(models.Model):
     """
     Token de un solo uso para el flujo de primer ingreso.
 
-    Se crea cuando el gerente da de alta a un trabajador. El correo con el enlace
-    (que en producción envía el worker) lleva este token. Al crear su contraseña,
-    el trabajador lo consume y queda inutilizable.
+    Se crea cuando el gerente invita a un colaborador. El gerente le envía el
+    código (8 caracteres) y, al crear su contraseña, el colaborador lo consume y
+    queda inutilizable.
+
+    El código NO se guarda: solo su huella (ver huella_codigo). Por eso el
+    gerente lo ve una sola vez, al invitar o al generar uno nuevo.
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     usuario = models.ForeignKey(
         Usuario, on_delete=models.CASCADE, related_name="invitaciones"
     )
-    # Token aleatorio que viaja en el enlace. Se genera en el serializer/servicio.
-    token = models.CharField(max_length=64, unique=True, db_index=True)
+    # HMAC-SHA256 del código (64 caracteres hexadecimales).
+    codigo_hash = models.CharField(max_length=64, unique=True, db_index=True)
 
     invitado_por = models.ForeignKey(
         Usuario,
@@ -186,14 +222,31 @@ class Invitacion(models.Model):
         """
         Crea un código nuevo para `usuario` y anula los que aún servían: así solo
         vale el último que entregó el gerente (si reenvía uno, el viejo ya no entra).
+
+        Devuelve la invitación con el atributo `codigo` (formato K7M2-QX9P) para
+        mostrárselo al gerente esa única vez; en la base queda solo la huella.
         """
         from django.conf import settings
 
         ahora = timezone.now()
         cls.objects.filter(usuario=usuario, usada_en__isnull=True, expira__gt=ahora).update(expira=ahora)
-        return cls.objects.create(
+        while True:
+            codigo = "".join(secrets.choice(ALFABETO_CODIGO) for _ in range(LARGO_CODIGO))
+            huella = huella_codigo(codigo)
+            if not cls.objects.filter(codigo_hash=huella).exists():   # choque: casi imposible
+                break
+        invitacion = cls.objects.create(
             usuario=usuario,
-            token=secrets.token_urlsafe(32),
+            codigo_hash=huella,
             invitado_por=invitado_por,
             expira=ahora + timedelta(days=settings.INVITACION_DIAS_VIGENCIA),
         )
+        invitacion.codigo = formatear_codigo(codigo)
+        return invitacion
+
+    @classmethod
+    def buscar(cls, codigo):
+        """La invitación de ese código, o None (también si el formato no calza)."""
+        if not codigo_valido(codigo):
+            return None
+        return cls.objects.select_related("usuario").filter(codigo_hash=huella_codigo(codigo)).first()

@@ -91,6 +91,9 @@ export function describirError(e: unknown, accion: string): MensajeError {
       return { titulo, detalle: delBackend || "No tienes permiso para hacer esto. Si lo necesitas, pídeselo a tu gerente." };
     case 404:
       return { titulo, detalle: delBackend || "No se encontró lo que buscas. Puede que alguien lo haya eliminado; recarga la página." };
+    case 429:
+      // Límite de intentos: el backend dice cuántos minutos esperar.
+      return { titulo, detalle: delBackend || "Hiciste demasiados intentos seguidos. Espera unos minutos y vuelve a intentarlo." };
     case 413:
       return { titulo, detalle: `El archivo es demasiado grande: el máximo es ${configuracionActual().archivo_max_mb} MB. Quita hojas o filas que no sean necesarias (o guárdalo sin imágenes) y vuelve a subirlo.` };
     default:

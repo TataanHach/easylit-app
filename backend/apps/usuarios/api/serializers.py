@@ -13,7 +13,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from apps.organizaciones.models import Organizacion
-from apps.usuarios.models import Invitacion, Rol, Usuario
+from apps.usuarios.models import Invitacion, Rol, Usuario, codigo_valido
 from apps.usuarios.validadores import normalizar_rut
 
 
@@ -122,12 +122,13 @@ class MiembroEquipoSerializer(serializers.ModelSerializer):
     Espera las invitaciones precargadas de la más nueva a la más vieja.
     """
     estado = serializers.SerializerMethodField()
-    codigo = serializers.SerializerMethodField()
     expira = serializers.SerializerMethodField()
 
+    # Sin "codigo": en la base solo está su huella, así que no se puede volver a
+    # mostrar. Si se pierde, el gerente genera uno nuevo.
     class Meta:
         model = Usuario
-        fields = ("id", "nombre_completo", "email", "rut", "rol", "estado", "codigo", "expira")
+        fields = ("id", "nombre_completo", "email", "rut", "rol", "estado", "expira")
 
     def _ultima(self, usuario):
         invitaciones = list(usuario.invitaciones.all())
@@ -142,11 +143,6 @@ class MiembroEquipoSerializer(serializers.ModelSerializer):
         if ultima is None:
             return "SIN_INVITACION"
         return "PENDIENTE" if ultima.vigente else "VENCIDA"
-
-    def get_codigo(self, usuario):
-        if self.get_estado(usuario) != "PENDIENTE":
-            return None
-        return self._ultima(usuario).token
 
     def get_expira(self, usuario):
         if self.get_estado(usuario) != "PENDIENTE":
@@ -173,13 +169,17 @@ class CrearContrasenaSerializer(serializers.Serializer):
         if attrs["password"] != attrs["password2"]:
             raise serializers.ValidationError({"password2": "Las contraseñas no coinciden. Escribe la misma en los dos campos."})
 
-        # Localizar la invitación y comprobar que siga vigente.
-        try:
-            invitacion = Invitacion.objects.select_related("usuario").get(token=attrs["token"])
-        except Invitacion.DoesNotExist:
+        # Localizar la invitación (por la huella del código) y comprobar que siga vigente.
+        if not codigo_valido(attrs["token"]):
+            raise serializers.ValidationError({
+                "token": "El código de invitación tiene 8 letras y números (por ejemplo K7M2-QX9P). "
+                         "Revisa que lo hayas copiado completo."
+            })
+        invitacion = Invitacion.buscar(attrs["token"])
+        if invitacion is None:
             raise serializers.ValidationError({
                 "token": "El código de invitación no existe. Cópialo completo desde el "
-                         "correo de invitación o pide uno nuevo a tu gerente."
+                         "mensaje de tu gerente o pídele uno nuevo."
             })
 
         if not invitacion.vigente:

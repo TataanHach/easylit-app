@@ -7,7 +7,7 @@ import { configuracionActual } from "./configuracion";
 
 export const LIMITES = {
   email: 254,
-  tokenInvitacion: 64,
+  tokenInvitacion: 20,   // 8 caracteres (K7M2-QX9P); margen por si lo pegan con espacios
   rut: 12,                  // "12.345.678-9"
   nombrePlantilla: 200,
   mandante: 200,

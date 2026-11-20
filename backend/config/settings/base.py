@@ -50,6 +50,14 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    # Límites de intentos de los endpoints públicos (apps/usuarios/api/limites.py).
+    # Formato "cantidad/periodo" (second, minute, hour, day).
+    "DEFAULT_THROTTLE_RATES": {
+        "login": config("LIMITE_LOGIN_IP", default="10/minute"),             # por IP
+        "login_cuenta": config("LIMITE_LOGIN_CUENTA", default="20/hour"),    # por correo
+        "estado_correo": config("LIMITE_ESTADO_CORREO", default="30/minute"),
+        "crear_contrasena": config("LIMITE_CREAR_CONTRASENA", default="20/hour"),
+    },
 }
 
 SIMPLE_JWT = {

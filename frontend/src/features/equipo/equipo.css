@@ -9,6 +9,14 @@
 /* Modal del código */
 .eq-codigo-intro { font-size: var(--fs-base); color: var(--text-2); line-height: 1.5; margin-bottom: 14px; }
 .eq-codigo-intro strong { color: var(--text); }
+/* Aviso: el código se muestra una sola vez. */
+.eq-codigo-unavez {
+  display: flex; gap: 10px; align-items: flex-start; margin-bottom: 14px;
+  background: var(--warn-50); border: 1px solid var(--warn-100); border-radius: var(--r-md);
+  padding: 10px 12px; font-size: var(--fs-md); line-height: 1.5; color: var(--warn-700);
+}
+.eq-codigo-unavez i { font-size: 18px; margin-top: 1px; flex-shrink: 0; }
+.eq-codigo-unavez strong { color: inherit; }
 .eq-mensaje {
   background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-md);
   padding: 12px 14px; font-size: var(--fs-md); line-height: 1.5; color: var(--text);

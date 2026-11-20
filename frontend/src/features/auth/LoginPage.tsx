@@ -13,6 +13,7 @@ import axios from "axios";
 import { useAuth } from "./AuthContext";
 import { authService } from "./authService";
 import "./auth.css";
+import logoSlogan from "@/assets/logo-slogan.png";
 import { LIMITES, limpiarTexto } from "@/lib/limites";
 import { useConfiguracion } from "@/lib/configuracion";
 import { firebaseActivo } from "@/lib/firebase";
@@ -21,9 +22,9 @@ import { problemaCorreo } from "@/lib/validar";
 
 /** Lo que ofrece EasyLit, en el panel azul del login. */
 const PUNTOS = [
-  { icono: "ti ti-shield-lock", titulo: "Datos Privados", texto: "Tus datos no salen de EasyLit: la IA solo ve la estructura." },
-  { icono: "ti ti-calculator", titulo: "Totales verificados", texto: "Cada total se reconcilia contra el documento original." },
-  { icono: "ti ti-history", titulo: "Trazabilidad completa", texto: "Bitácora de quién cambió qué y cuándo." },
+  { icono: "ti ti-template", titulo: "Plantillas reutilizables", texto: "Crea una vez la plantilla y úsala cuantas veces quieras." },
+  { icono: "ti ti-user-check", titulo: "EasyLit propone, tú decides", texto: "Revisa y aprueba cómo se ordenan tus datos antes de generar el documento." },
+  { icono: "ti ti-history", titulo: "Todo queda registrado", texto: "El historial muestra quién hizo cada cambio y cuándo." },
 ];
 
 export default function LoginPage() {
@@ -100,15 +101,15 @@ export default function LoginPage() {
     <div className="auth-wrap">
       <aside className="auth-brand">
         <div className="auth-brand-top">
-          <span className="auth-logo"><i aria-hidden="true" className="ti ti-file-invoice" /></span>
+          <span className="auth-logo"><img src="/favicon-192.png" alt="" /></span>
           <div>
             <div className="auth-brand-name">EasyLit</div>
-            <div className="auth-brand-sub">v1.0 · Beta</div>
+            <div className="auth-brand-sub">v2.5 · Beta</div>
           </div>
         </div>
         <div className="auth-brand-mid">
-          <h2>Transforma licitaciones<br /> Rapido y preciso.</h2>
-          <p>Sube tu documento y plantilla, limpia los datos y genera el formato exigido.</p>
+          <h2>Tus archivos, en el formato que pides.</h2>
+          <p>Sube tu Excel, elige la plantilla y descarga el documento listo, de forma rápida y precisa.</p>
           <ul className="auth-points">
             {PUNTOS.map((p) => (
               <li key={p.titulo} className="auth-point">
@@ -126,17 +127,16 @@ export default function LoginPage() {
 
       <main className="auth-form-col">
         <div className="auth-card">
-          <div className="auth-mini-logo">
-            <span className="logo-icon"><i aria-hidden="true" className="ti ti-file-invoice" /></span>
-            <div>
-              <div className="auth-brand-name">EasyLit</div>
-              <div className="auth-brand-sub" style={{ color: "var(--text-3)" }}>v1.0 · Beta</div>
-            </div>
-          </div>
+          <img
+            className="auth-logo-slogan"
+            src={logoSlogan}
+            alt="EasyLit · Tú defines el formato, EasyLit lo transforma para ti"
+            width={900}
+            height={288}
+          />
 
           <div className="auth-head">
             <h1>Inicia sesión</h1>
-            <p>Accede a tus transformaciones y a las de tu equipo.</p>
           </div>
 
           {error && (

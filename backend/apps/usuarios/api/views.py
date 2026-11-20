@@ -20,6 +20,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from apps.usuarios import firebase
 from apps.usuarios.models import Invitacion, Rol, Usuario
 
+from .limites import LimiteDeIntentos, PorCuentaThrottle
 from .permissions import EsGerenteOSuperadmin
 from .serializers import (
     CrearContrasenaSerializer,
@@ -31,10 +32,16 @@ from .serializers import (
 )
 
 
-class LoginView(TokenObtainPairView):
-    """POST /api/auth/login/  → { access, refresh, usuario }"""
+class LoginView(LimiteDeIntentos, TokenObtainPairView):
+    """
+    POST /api/auth/login/  → { access, refresh, usuario }
+
+    Con límite de intentos por IP y por cuenta (ver limites.py).
+    """
     serializer_class = LoginSerializer
     permission_classes = [AllowAny]
+    throttle_scope = "login"
+    throttles_extra = (PorCuentaThrottle,)
 
 
 class LogoutView(APIView):
@@ -55,15 +62,17 @@ class LogoutView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class EstadoCorreoView(APIView):
+class EstadoCorreoView(LimiteDeIntentos, APIView):
     """
     POST /api/auth/estado-correo/  → dice cómo continuar según el correo.
 
     Es el paso previo al login que definiste: si el usuario existe pero no tiene
     contraseña, el frontend lo manda a "crear contraseña"; si ya tiene, a login.
-    Por seguridad no revela datos: solo 'existe' y 'necesita_contrasena'.
+    Por seguridad no revela datos: solo 'existe' y 'necesita_contrasena'. El
+    límite de intentos frena a quien prueba correos para ver cuáles existen.
     """
     permission_classes = [AllowAny]
+    throttle_scope = "estado_correo"
 
     def post(self, request):
         serializer = EstadoCorreoSerializer(data=request.data)
@@ -123,7 +132,7 @@ class InvitarUsuarioView(APIView):
             {
                 "usuario": UsuarioSerializer(usuario).data,
                 # Solo lo recibe el gerente que invita (no hay envío de correo).
-                "token_invitacion": invitacion.token,
+                "token_invitacion": invitacion.codigo,
                 "expira": invitacion.expira,
             },
             status=status.HTTP_201_CREATED,
@@ -182,19 +191,21 @@ class NuevaInvitacionView(APIView):
 
         invitacion = Invitacion.nueva(usuario, request.user)
         return Response(
-            {"token_invitacion": invitacion.token, "expira": invitacion.expira},
+            {"token_invitacion": invitacion.codigo, "expira": invitacion.expira},
             status=status.HTTP_201_CREATED,
         )
 
 
-class CrearContrasenaView(APIView):
+class CrearContrasenaView(LimiteDeIntentos, APIView):
     """
     POST /api/auth/crear-contrasena/  (primer ingreso, sin autenticación)
 
     El trabajador llega con el token de la invitación, define su contraseña y
     queda listo para iniciar sesión. Consume el token para que no se reutilice.
+    El límite de intentos impide probar códigos de invitación en masa.
     """
     permission_classes = [AllowAny]
+    throttle_scope = "crear_contrasena"
 
     def post(self, request):
         serializer = CrearContrasenaSerializer(data=request.data)

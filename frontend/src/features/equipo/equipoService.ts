@@ -1,7 +1,7 @@
 /**
  * Servicio del equipo: lo usa el gerente para ver a su gente e invitar
- * trabajadores. EasyLit no envía correos: el gerente copia el mensaje con el
- * código y se lo hace llegar al trabajador (WhatsApp, correo, etc.).
+ * colaboradores. EasyLit no envía correos: el gerente copia el mensaje con el
+ * código y se lo hace llegar al colaborador (WhatsApp, correo, etc.).
  */
 import { api } from "@/api/client";
 import type { Rol } from "@/types";
@@ -15,11 +15,10 @@ export interface MiembroEquipo {
   rut: string;
   rol: Rol;
   estado: EstadoAcceso;
-  /** Solo viene si el estado es PENDIENTE. */
-  codigo: string | null;
   expira: string | null;
 }
 
+/** El código (K7M2-QX9P) llega solo al invitar o al generar uno nuevo: no se puede volver a pedir. */
 export interface CodigoInvitacion {
   codigo: string;
   expira: string;
@@ -31,7 +30,7 @@ export const equipoService = {
     return data;
   },
 
-  /** Crea al trabajador (sin contraseña) y devuelve su código de invitación. */
+  /** Crea al colaborador (sin contraseña) y devuelve su código de invitación. */
   async invitar(datos: { email: string; nombre_completo: string; rut: string }): Promise<CodigoInvitacion> {
     const { data } = await api.post("/auth/invitar/", datos);
     return { codigo: data.token_invitacion, expira: data.expira };
@@ -44,9 +43,13 @@ export const equipoService = {
   },
 };
 
-/** Enlace que abre «Crear contraseña» con el código ya puesto. */
-export function enlaceInvitacion(codigo: string): string {
-  return `${window.location.origin}/crear-contrasena?codigo=${encodeURIComponent(codigo)}`;
+/**
+ * Enlace a «Crear contraseña», SIN el código: si el código fuera en la dirección
+ * quedaría guardado en el historial del navegador y en los registros de los
+ * servidores por donde pasa. La persona lo escribe en la página.
+ */
+export function enlaceInvitacion(): string {
+  return `${window.location.origin}/crear-contrasena`;
 }
 
 /** "14 de noviembre" */
@@ -60,10 +63,11 @@ export function mensajeInvitacion(nombre: string, organizacion: string | null, i
   return [
     `Hola ${primerNombre}, te invité a EasyLit${organizacion ? ` (${organizacion})` : ""}.`,
     "",
-    `1. Entra a este enlace: ${enlaceInvitacion(inv.codigo)}`,
-    "2. Crea tu contraseña. Si te pide un código de invitación, usa este:",
+    `1. Entra a este enlace: ${enlaceInvitacion()}`,
+    "2. Escribe este código de invitación:",
     inv.codigo,
+    "3. Crea tu contraseña y listo.",
     "",
-    `El código sirve una sola vez y vence el ${fechaVencimiento(inv.expira)}.`,
+    `El código sirve una sola vez y vence el ${fechaVencimiento(inv.expira)}. No lo compartas con nadie.`,
   ].join("\n");
 }

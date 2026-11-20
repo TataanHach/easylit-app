@@ -1,6 +1,8 @@
 /**
  * Muestra el código de invitación de una persona y un mensaje listo para
  * enviarle (WhatsApp, correo…). EasyLit no envía correos: lo hace el gerente.
+ * Se abre solo al invitar o al generar un código nuevo: después ya no se puede
+ * ver (en la base solo queda su huella).
  */
 import { useEffect } from "react";
 import { useAvisos } from "@/components/ui/Avisos";
@@ -41,9 +43,16 @@ export default function CodigoModal({ nombre, organizacion, inv, onCerrar }: Pro
         </div>
         <div className="modal-body">
           <p className="eq-codigo-intro">
-            Envíale este mensaje a <strong>{nombre}</strong>. Con el enlace crea su contraseña y queda
-            listo para entrar. El código sirve una sola vez y vence el <strong>{fechaVencimiento(inv.expira)}</strong>.
+            Envíale este mensaje a <strong>{nombre}</strong>. Entra al enlace, escribe el código y crea
+            su contraseña. El código sirve una sola vez y vence el <strong>{fechaVencimiento(inv.expira)}</strong>.
           </p>
+          <div className="eq-codigo-unavez" role="note">
+            <i aria-hidden="true" className="ti ti-eye-off" />
+            <span>
+              <strong>Cópialo ahora: este código no se vuelve a mostrar.</strong> Por seguridad, EasyLit
+              no lo guarda. Si se pierde, usa «Nuevo código» en la lista del equipo.
+            </span>
+          </div>
           <div className="eq-mensaje">{mensaje}</div>
           <div className="eq-codigo-solo">
             <span>Solo el código</span>

@@ -1,0 +1,75 @@
+/* Burbuja de soporte: pestaña asomada en el borde derecho, abajo. */
+
+.soporte {
+  position: fixed; z-index: 900;   /* bajo las ventanas (1000) y los avisos */
+  right: 0; bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+}
+
+/* La pestaña: pegada al borde, redondeada solo a la izquierda. En reposo se
+   ve solo el ícono, un poco escondida (asomada); al pasar el mouse sale entera
+   y despliega el texto. */
+.soporte-pestana {
+  display: flex; align-items: center; gap: 0;
+  height: 48px; padding: 0 14px 0 14px; margin-right: -8px;
+  border: none; border-radius: var(--r-pill) 0 0 var(--r-pill);
+  background: var(--brand-600); color: #fff; cursor: pointer;
+  font: inherit; font-size: var(--fs-md); font-weight: 600; white-space: nowrap;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, .22);
+  transform: translateX(6px);
+  transition: transform .22s ease, margin-right .22s ease, gap .22s ease, background .15s ease;
+}
+.soporte-pestana i { font-size: 22px; }
+.soporte-texto {
+  display: inline-block; max-width: 0; overflow: hidden; opacity: 0;
+  transition: max-width .25s ease, opacity .2s ease;
+}
+
+.soporte-pestana:hover,
+.soporte-pestana:focus-visible,
+.soporte.abierto .soporte-pestana {
+  transform: translateX(0); margin-right: 0; gap: 8px; padding-right: 18px;
+  background: var(--brand-700);
+}
+.soporte-pestana:hover .soporte-texto,
+.soporte-pestana:focus-visible .soporte-texto,
+.soporte.abierto .soporte-texto { max-width: 200px; opacity: 1; }
+.soporte-pestana:focus-visible { outline: 3px solid var(--brand-500); outline-offset: 2px; }
+
+/* Panel con los canales */
+.soporte-panel {
+  width: min(320px, calc(100vw - 32px)); margin-right: 16px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, .2); padding: 16px 16px 14px;
+  animation: soporte-entrada .2s ease-out;
+}
+.soporte-panel-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.soporte-panel h2 { font-size: var(--fs-base); font-weight: 700; }
+.soporte-panel > p { font-size: var(--fs-sm); color: var(--text-2); line-height: 1.5; margin: 6px 0 12px; }
+.soporte-x {
+  width: 28px; height: 28px; border: none; background: none; cursor: pointer;
+  border-radius: var(--r-md); color: var(--text-3); font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+}
+.soporte-x:hover { background: var(--surface-2); color: var(--text); }
+
+.soporte-canales { display: flex; flex-direction: column; gap: 8px; }
+.soporte-canal {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  color: var(--text); text-decoration: none; background: var(--surface);
+}
+.soporte-canal:hover { border-color: var(--brand-500); background: var(--surface-2); }
+.soporte-canal i { font-size: 22px; color: var(--brand-600); }
+.soporte-canal strong { display: block; font-size: var(--fs-md); }
+.soporte-canal small { display: block; font-size: var(--fs-sm); color: var(--text-3); }
+.soporte-sin-canal {
+  font-size: var(--fs-sm); color: var(--text-2); background: var(--surface-2);
+  border: 1px dashed var(--line-strong); border-radius: var(--r-md); padding: 10px 12px;
+}
+
+@keyframes soporte-entrada { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) {
+  .soporte-pestana, .soporte-texto { transition: none; }
+  .soporte-panel { animation: none; }
+}

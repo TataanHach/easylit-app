@@ -1,4 +1,4 @@
-# Prueba de despliegue · Render + Cloudflare R2 + Firebase
+# Despliegue en Render · EasyLit v2.5
 
 ```
 Navegador ──▶ easylit-web (Render, React)
@@ -14,15 +14,11 @@ Navegador ──▶ easylit-web (Render, React)
 Todo en planes gratuitos. Los nombres de botones de cada panel pueden variar un
 poco; la idea de cada paso es la misma.
 
-> En tu PC no cambia nada: sin estas variables la app sigue usando el login
-> propio y la carpeta `media/`.
-
 > ⚠️ **La base de datos gratis de Render vence a los 30 días** de creada. Después
 > hay unos 14 días para pasarla a un plan de pago; si no, **se borra con todos los
 > datos** (usuarios, plantillas, historial; los Excel en R2 quedan, pero sin nada
 > que los referencie). Anota la fecha. Si la app debe seguir viva más tiempo
-> (por ejemplo, para la defensa), antes de que venza: pasa a un plan de pago, o
-> copia los datos a otra base (`pg_dump` → `pg_restore`) y cambia `DATABASE_URL`.
+> (por ejemplo, para la defensa), pásala a un plan de pago antes de que venza.
 
 ---
 
@@ -54,10 +50,11 @@ necesita CORS ni acceso público.
    - `appId` → `VITE_FIREBASE_APP_ID`
 4. **Configuración del proyecto** → **Cuentas de servicio** → **Generar nueva
    clave privada**. Se descarga un `.json`: su contenido completo es
-   `FIREBASE_CREDENCIALES`. **Es secreto: no lo subas a git.**
+   `FIREBASE_CREDENCIALES`. **Es secreto: no lo subas a git ni lo compartas.**
+   El `project_id` de ese archivo debe ser el mismo de `FIREBASE_PROJECT_ID`.
 5. Cuando tengas la URL de `easylit-web` (paso 3): **Authentication** →
-   **Configuración** → **Dominios autorizados** → agrega
-   `easylit-web.onrender.com`.
+   **Configuración** → **Dominios autorizados** → agrega esa URL
+   (por ejemplo `easylit-web-xxxx.onrender.com`).
 
 Nadie puede registrarse por su cuenta: aunque cree una cuenta en Firebase, la API
 la rechaza si no fue invitada o vinculada en EasyLit.
@@ -67,14 +64,19 @@ la rechaza si no fue invitada o vinculada en EasyLit.
 1. Sube los cambios a GitHub (`git push`).
 2. En render.com → **New** → **Blueprint** → elige el repo `easylit-app`.
    Render lee `render.yaml` y propone: la base `easylit-db`, `easylit-redis`,
-   `easylit-api` y `easylit-web`. La base se conecta sola a la API
-   (`DATABASE_URL` no se pega a mano).
-3. Te pedirá las variables marcadas como secretas. Para `easylit-api`:
+   `easylit-api` y `easylit-web`. La base y Redis se conectan solos a la API
+   (`DATABASE_URL` y `REDIS_URL` no se pegan a mano), y `SECRET_KEY` la genera
+   Render.
+3. Te pedirá las variables secretas. **Usa las URLs reales que Render asigna** a
+   cada servicio (suelen llevar un sufijo, como `easylit-web-a1b2.onrender.com`),
+   siempre con `https://` y **sin `/` al final**.
+
+   Para `easylit-api`:
 
    | Variable | Valor |
    |---|---|
-   | `FRONTEND_URL` | `https://easylit-web.onrender.com` |
-   | `GEMINI_API_KEY` | tu clave de Gemini |
+   | `FRONTEND_URL` | URL de `easylit-web`, ej. `https://easylit-web-a1b2.onrender.com` |
+   | `GEMINI_API_KEY` | tu clave de Gemini (aistudio.google.com/apikey) |
    | `R2_BUCKET`, `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | paso 1 |
    | `FIREBASE_PROJECT_ID` | paso 2 |
    | `FIREBASE_CREDENCIALES` | el contenido completo del `.json` (paso 2.4) |
@@ -83,55 +85,93 @@ la rechaza si no fue invitada o vinculada en EasyLit.
 
    | Variable | Valor |
    |---|---|
-   | `VITE_API_URL` | `https://easylit-api.onrender.com` |
+   | `VITE_API_URL` | URL de `easylit-api`, sin `/api` |
    | `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID` | paso 2.3 |
+   | `VITE_SOPORTE_CORREO` | correo de soporte (burbuja y footer) |
+   | `VITE_SOPORTE_WHATSAPP` | WhatsApp de soporte, con código de país y solo números (ej. `56912345678`) |
 
-   Si Render asigna otra URL a algún servicio (por ejemplo `easylit-api-x1y2`),
-   usa esa en `FRONTEND_URL` / `VITE_API_URL` y vuelve a desplegar el servicio.
+   Las variables `VITE_*` se meten en la página al compilarla: **si cambias una,
+   vuelve a desplegar `easylit-web`** (Manual Deploy → *Clear build cache & deploy*).
 4. **Apply**. El primer despliegue de la API crea las tablas en la base
    (`build.sh` corre `migrate`).
-5. Revisa `https://easylit-api.onrender.com/api/health/` → `{"status": "ok"}`.
+5. Revisa `https://<url-de-easylit-api>/api/health/` → `{"status": "ok"}`.
 
-## 4. Primer usuario (desde tu PC, contra la base de Render)
+### Variables opcionales de `easylit-api`
 
-El plan gratis no tiene consola (Shell), así que los primeros usuarios se crean
-desde tu PC. En Render → `easylit-db` → **Connect** → pestaña **External**, copia
-la **External Database URL** (termina en `.oregon-postgres.render.com/easylit`).
-Luego, en PowerShell, dentro de `backend/` con el `.venv` activo:
+| Variable | Por defecto | Para qué |
+|---|---|---|
+| `ARCHIVO_MAX_MB` | `20` | Peso máximo de los archivos |
+| `INVITACION_DIAS_VIGENCIA` | `7` | Días que dura un código de invitación |
+| `LIMITE_CREAR_CONTRASENA` | `20/hour` | Intentos en «Crear contraseña» por IP |
+| `LIMITE_ESTADO_CORREO` | `30/minute` | Intentos de revisar un correo por IP |
+| `LIMITE_LOGIN_IP`, `LIMITE_LOGIN_CUENTA` | `10/minute`, `20/hour` | Login propio (si no se usa Firebase) |
+| `NUM_PROXIES` | `1` | Proxies delante de la API, para leer la IP real del visitante |
+
+## 4. Primer usuario (una sola vez)
+
+El plan gratis de Render no tiene consola (Shell), así que el primer
+superadministrador se crea **una sola vez**, ejecutando los comandos de Django
+contra la base de Render. Si tienes un plan de pago, puedes correrlos en
+`easylit-api` → **Shell**.
+
+En Render → `easylit-db` → **Connect** → pestaña **External**, copia la
+**External Database URL**. Luego, en la carpeta `backend` del repositorio (con
+sus dependencias instaladas):
 
 ```powershell
 $env:DJANGO_SETTINGS_MODULE = "config.settings.prod"
-$env:SECRET_KEY = "cualquier-valor-local"
-$env:REDIS_URL = "redis://localhost:6379/0"
-$env:DATABASE_URL = "postgresql://easylit:...@dpg-xxxx-a.oregon-postgres.render.com/easylit"
-$env:FIREBASE_PROJECT_ID = "tu-proyecto"
-$env:FIREBASE_CREDENCIALES = Get-Content "C:\ruta\clave-firebase.json" -Raw
+$env:SECRET_KEY = "cualquier-valor"
+$env:REDIS_URL = "redis://sin-uso:6379/0"
+$env:DATABASE_URL = "<External Database URL de easylit-db>"
+$env:FIREBASE_PROJECT_ID = "<tu-proyecto>"
+$env:FIREBASE_CREDENCIALES = Get-Content "C:\ruta\completa\clave-firebase.json" -Raw
 
-# 1. Superadmin (también sirve para entrar a /admin/)
+# 1. Superadmin (para entrar a /admin/)
 python manage.py createsuperuser
 
 # 2. Su cuenta de Firebase, para entrar a la app
 python manage.py vincular_firebase tu@correo.cl --password "Clave#2026"
 ```
 
-Luego, en `https://easylit-api.onrender.com/admin/` (con la contraseña del
-superadmin) crea la **Organización** y su **Gerente**, y vincula al gerente:
+Luego, en `https://<url-de-easylit-api>/admin/` (con la contraseña del
+superadmin) crea la **Organización** y su **Gerente**, y vincúlalo igual:
 
 ```powershell
 python manage.py vincular_firebase gerente@empresa.cl --password "Otra#2026"
 ```
 
-El gerente entra a la app e invita a sus trabajadores como siempre: al activar
-la invitación, EasyLit les crea su cuenta en Firebase.
+Desde ahí todo se hace en la app: el gerente entra, va a **Equipo → Invitar
+colaborador** y le envía el código. Al activar la invitación, EasyLit le crea su
+cuenta de Firebase. **No crees colaboradores desde `/admin/`**: quedarían sin
+cuenta de Firebase y no podrían entrar.
 
 ## 5. Qué probar
 
-- [ ] Entrar con el gerente en `https://easylit-web.onrender.com`.
+- [ ] Entrar con el gerente en la URL de `easylit-web`.
 - [ ] Contraseña incorrecta → aviso bajo el campo.
 - [ ] Crear una plantilla (el Excel queda en R2: revísalo en el bucket).
 - [ ] Nueva transformación → animación de pasos → mapeo (lo procesa Celery).
+      En la revisión **no** debe aparecer el aviso «La IA no estuvo disponible».
 - [ ] Generar y descargar el documento.
-- [ ] Invitar un trabajador, activar la invitación y entrar con él.
+- [ ] Invitar un colaborador, crear su contraseña con el código y entrar con él.
+- [ ] La burbuja «¿Necesitas soporte?» y el footer muestran el correo de soporte.
+
+## 6. Problemas frecuentes
+
+| Síntoma | Causa | Solución |
+|---|---|---|
+| Build de la API falla con `corsheaders.E014 ... should not have path` | `FRONTEND_URL` termina en `/` | Quita la `/` final |
+| «No se pudo verificar el correo. No hay conexión con el servidor» | `VITE_API_URL` mal escrita, de otra cuenta o sin redesplegar; o `FRONTEND_URL` no calza con la URL de la app | Corrige la variable y vuelve a desplegar `easylit-web` |
+| El usuario existe pero no puede entrar | Se creó en `/admin/` sin cuenta de Firebase | `vincular_firebase` (paso 4) o invítalo desde **Equipo** |
+| `vincular_firebase` da `INSUFFICIENT_PERMISSION` | `FIREBASE_PROJECT_ID` no es el proyecto del `.json` | Usa el `project_id` que trae el `.json` |
+| El login de Firebase se bloquea en la URL nueva | Falta la URL en **Dominios autorizados** | Agrégala en Firebase (paso 2.5) |
+| Aviso «La IA no estuvo disponible» y en los logs `InvalidHeader ... \n` | La clave de Gemini quedó con un salto de línea al pegarla | Borra la variable, créala de nuevo y pega la clave sin espacios ni Enter |
+| Aviso «La IA no estuvo disponible» con `Gemini respondió 404` | El modelo de `IA_MODEL` ya no existe | Usa `models/gemini-3.5-flash-lite` |
+| La burbuja y el footer no muestran el correo | Falta `VITE_SOPORTE_CORREO` o no se redesplegó | Agrégala y vuelve a desplegar `easylit-web` |
+| «Hiciste demasiados intentos seguidos» | Límite de intentos | Esperar los minutos que indica el aviso |
+
+Para ver el motivo de un error, Render → `easylit-api` → **Logs**, y busca el
+texto del aviso (por ejemplo `Gemini respondió`).
 
 ## Límites del plan gratis
 
@@ -141,6 +181,8 @@ la invitación, EasyLit les crea su cuenta en Firebase.
 - API y Celery comparten la memoria del plan gratis (512 MB). Con archivos muy
   grandes podría quedarse corto; en ese caso, separar el worker (plan de pago):
   ver el comentario al inicio de `backend/start.sh`.
+- Los contadores de los límites de intentos viven en la memoria del servidor:
+  se reinician cuando el servicio se duerme o se vuelve a desplegar.
 - La base gratis: 1 GB y **vence a los 30 días** (ver aviso al inicio). No
   tiene copias de seguridad automáticas.
 - R2 gratis (10 GB) alcanza de sobra para una prueba.

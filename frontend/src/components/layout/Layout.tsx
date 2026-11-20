@@ -7,6 +7,8 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/features/auth/AuthContext";
+import logo from "@/assets/logo.png";
+import Footer from "./Footer";
 import "./layout.css";
 
 export default function Layout() {
@@ -42,10 +44,9 @@ export default function Layout() {
     <div className={`app-shell ${navAbierto ? "nav-open" : ""}`}>
       <aside className="sidebar">
         <div className="sidebar-logo">
-          <div className="logo-icon"><i aria-hidden="true" className="ti ti-file-invoice" /></div>
           <div>
-            <div className="logo-text">EasyLit</div>
-            <div className="logo-sub">v1.0 · Beta</div>
+            <img className="logo-img" src={logo} alt="EasyLit" width={600} height={162} />
+            <div className="logo-sub">v2.5 · Beta</div>
           </div>
           {/* Solo en pantalla angosta: el menú tapa el botón ☰, así que lleva su propio cierre. */}
           <button className="nav-cerrar" onClick={cerrarNav} aria-label="Cerrar menú">
@@ -109,6 +110,7 @@ export default function Layout() {
         <main className="content">
           <Outlet />
         </main>
+        <Footer />
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ organizaciones. Lo segundo es crítico: una empresa jamás debe ver datos de otr
 Corre con: python manage.py test apps.transformaciones
 """
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.cache import cache
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -16,6 +17,7 @@ from apps.usuarios.models import Rol, Usuario
 
 class AlcanceYAislamientoTest(TestCase):
     def setUp(self):
+        cache.clear()   # los límites de intentos guardan sus contadores en la caché
         # Dos organizaciones distintas
         self.org_a = Organizacion.objects.create(nombre="Constructora A", rut="111111111")
         self.org_b = Organizacion.objects.create(nombre="Constructora B", rut="222222222")
@@ -125,6 +127,7 @@ class LimpiezaIAEstableTest(TestCase):
     """
 
     def setUp(self):
+        cache.clear()   # los límites de intentos guardan sus contadores en la caché
         import io
         import shutil
         import tempfile
@@ -202,6 +205,7 @@ class ArchivosYMandanteTest(TestCase):
     """Solo .xlsx y .csv de verdad, el CSV se convierte a Excel y el mandante va en mayúsculas."""
 
     def setUp(self):
+        cache.clear()   # los límites de intentos guardan sus contadores en la caché
         from rest_framework_simplejwt.tokens import RefreshToken
 
         self.org = Organizacion.objects.create(nombre="Org", rut="444444444")

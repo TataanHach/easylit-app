@@ -51,4 +51,4 @@ class InvitacionAdmin(admin.ModelAdmin):
     list_display = ("usuario", "invitado_por", "creada", "expira", "usada_en", "vigente")
     list_filter = ("creada", "expira")
     search_fields = ("usuario__email",)
-    readonly_fields = ("id", "token", "creada", "usada_en")
+    readonly_fields = ("id", "codigo_hash", "creada", "usada_en")

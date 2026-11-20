@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "react-router-dom";
 import { AuthProvider } from "@/features/auth/AuthContext";
 import { AvisosProvider } from "@/components/ui/Avisos";
+import BurbujaSoporte from "@/components/ui/BurbujaSoporte";
 import { router } from "./app/router";
 import "./styles/tokens.css";
 import "./styles/global.css";
@@ -22,6 +23,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <AuthProvider>
         <AvisosProvider>
           <RouterProvider router={router} />
+          {/* En todas las pantallas, también en el inicio de sesión. */}
+          <BurbujaSoporte />
         </AvisosProvider>
       </AuthProvider>
     </QueryClientProvider>

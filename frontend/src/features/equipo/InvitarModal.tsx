@@ -1,5 +1,5 @@
 /**
- * Modal para invitar a un trabajador: nombre, correo y RUT (los tres obligatorios).
+ * Modal para invitar a un colaborador: nombre, correo y RUT (los tres obligatorios).
  * Al guardar, el backend crea a la persona sin contraseña y devuelve su código;
  * la pantalla Equipo lo muestra enseguida para copiarlo.
  */
@@ -30,11 +30,11 @@ export default function InvitarModal({ onCerrar, onInvitado }: Props) {
       rut: limpiarTexto(rut),
     };
     setNombre(datos.nombre_completo); setEmail(datos.email);
-    if (!datos.nombre_completo) { setError("Falta el nombre. Escribe el nombre y apellido del trabajador."); return; }
+    if (!datos.nombre_completo) { setError("Falta el nombre. Escribe el nombre y apellido del colaborador."); return; }
     if (!datos.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(datos.email)) {
       setError("Falta el correo o no es válido. Escríbelo como nombre@empresa.cl."); return;
     }
-    if (!datos.rut) { setError("Falta el RUT del trabajador. Escríbelo como 12.345.678-9."); return; }
+    if (!datos.rut) { setError("Falta el RUT del colaborador. Escríbelo como 12.345.678-9."); return; }
     if (!rutValido(datos.rut)) { setError("El RUT no es válido: el dígito verificador no corresponde. Revísalo."); return; }
 
     setGuardando(true);
@@ -42,7 +42,7 @@ export default function InvitarModal({ onCerrar, onInvitado }: Props) {
     try {
       inv = await equipoService.invitar(datos);
     } catch (err) {
-      const { titulo, detalle } = describirError(err, "invitar al trabajador");
+      const { titulo, detalle } = describirError(err, "invitar al colaborador");
       setError(`${titulo}. ${detalle}`);
       setGuardando(false);
       return;
@@ -62,7 +62,7 @@ export default function InvitarModal({ onCerrar, onInvitado }: Props) {
     <div className="modal-overlay">
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="invitar-titulo">
         <div className="modal-head">
-          <h2 id="invitar-titulo">Invitar trabajador</h2>
+          <h2 id="invitar-titulo">Invitar colaborador</h2>
           <button className="modal-close" onClick={onCerrar} aria-label="Cerrar"><i aria-hidden="true" className="ti ti-x" /></button>
         </div>
         <form onSubmit={guardar} noValidate>

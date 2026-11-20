@@ -1,14 +1,17 @@
 /**
  * Pantalla de primer ingreso: crear contraseña.
  *
- * El trabajador llega aquí con el código de invitación que le envió su gerente
- * (pantalla Equipo): por el enlace del mensaje (?codigo=…) o pegándolo a mano.
+ * El colaborador llega aquí con el código de invitación que le envió su gerente
+ * (pantalla Equipo) y lo escribe o pega a mano. El código nunca viaja en la
+ * dirección (?codigo=…): quedaría en el historial y en los registros de servidores.
  * Define su contraseña y entra directo (el RUT ya lo ingresó el gerente al invitarlo).
  */
 import { FormEvent, useState } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 import "./auth.css";
+import logoSlogan from "@/assets/logo-slogan.png";
+import TerminosModal from "./TerminosModal";
 import { limpiarTexto, LIMITES } from "@/lib/limites";
 import { requisitosContrasena } from "@/lib/contrasena";
 import { useConfiguracion } from "@/lib/configuracion";
@@ -23,13 +26,15 @@ export default function CrearContrasenaPage() {
   const navigate = useNavigate();
   const location = useLocation() as { state?: { email?: string; token?: string } };
 
-  const [params] = useSearchParams();
-  const [token, setToken] = useState(location.state?.token ?? params.get("codigo")?.trim() ?? "");
+  const [token, setToken] = useState(location.state?.token ?? "");
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
   const [verPw, setVerPw] = useState(false);
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
+  const [aceptaTerminos, setAceptaTerminos] = useState(false);
+  const [verTerminos, setVerTerminos] = useState(false);
+  const [faltaAceptar, setFaltaAceptar] = useState(false);
 
   // La barra muestra cuántos requisitos se cumplen (0 a 4).
   const nivel = password ? REQUISITOS_CONTRASENA.filter((r) => r.cumple(password)).length : 0;
@@ -48,6 +53,11 @@ export default function CrearContrasenaPage() {
       return;
     }
     if (!coinciden) { setError("Las contraseñas no coinciden. Escribe la misma contraseña en los dos campos."); return; }
+    if (!aceptaTerminos) {
+      setFaltaAceptar(true);
+      setError("Para crear tu cuenta debes aceptar los términos y condiciones. Marca la casilla de abajo.");
+      return;
+    }
     setCargando(true);
     try {
       await crearContrasena({ token: codigo, password, password2 });
@@ -64,10 +74,10 @@ export default function CrearContrasenaPage() {
     <div className="auth-wrap">
       <aside className="auth-brand">
         <div className="auth-brand-top">
-          <span className="auth-logo"><i aria-hidden="true" className="ti ti-file-invoice" /></span>
+          <span className="auth-logo"><img src="/favicon-192.png" alt="" /></span>
           <div>
             <div className="auth-brand-name">EasyLit</div>
-            <div className="auth-brand-sub">v1.0 · Beta</div>
+            <div className="auth-brand-sub">v2.5 · Beta</div>
           </div>
         </div>
         <div className="auth-brand-mid">
@@ -79,6 +89,13 @@ export default function CrearContrasenaPage() {
 
       <main className="auth-form-col">
         <div className="auth-card">
+          <img
+            className="auth-logo-slogan"
+            src={logoSlogan}
+            alt="EasyLit · Tú defines el formato, EasyLit lo transforma para ti"
+            width={900}
+            height={288}
+          />
           <div className="auth-head">
             <h1>Crea tu contraseña</h1>
             <p>Es tu primer ingreso. Define una contraseña segura.</p>
@@ -97,9 +114,9 @@ export default function CrearContrasenaPage() {
                 <div className="input-wrap">
                   <i aria-hidden="true" className="ti ti-key" />
                   <input id="token" type="text" className="auth-input"
-                    placeholder="Pega aquí el código de tu invitación" maxLength={LIMITES.tokenInvitacion}
+                    placeholder="Ej: K7M2-QX9P" maxLength={LIMITES.tokenInvitacion}
                     value={token} onChange={(e) => setToken(e.target.value)}
-                    onBlur={(e) => setToken(limpiarTexto(e.target.value))} />
+                    onBlur={(e) => setToken(limpiarTexto(e.target.value).toUpperCase())} />
                 </div>
                 <p className="hint">Te lo envía tu gerente desde la pantalla Equipo de EasyLit.</p>
               </div>
@@ -149,12 +166,31 @@ export default function CrearContrasenaPage() {
               )}
             </div>
 
+            <div className={`terminos-check ${faltaAceptar && !aceptaTerminos ? "error" : ""}`}>
+              <input id="terminos" type="checkbox" checked={aceptaTerminos}
+                onChange={(e) => { setAceptaTerminos(e.target.checked); setFaltaAceptar(false); }} />
+              <label htmlFor="terminos">
+                Acepto los{" "}
+                <button type="button" className="terminos-link" onClick={() => setVerTerminos(true)}>
+                  términos y condiciones
+                </button>{" "}
+                de uso de EasyLit.
+              </label>
+            </div>
+
             <button className="auth-btn" type="submit" disabled={cargando}>
               {cargando ? "Creando…" : <><i aria-hidden="true" className="ti ti-check" /> Crear contraseña y entrar</>}
             </button>
           </form>
         </div>
       </main>
+
+      {verTerminos && (
+        <TerminosModal
+          onCerrar={() => setVerTerminos(false)}
+          onAceptar={() => { setAceptaTerminos(true); setFaltaAceptar(false); setVerTerminos(false); }}
+        />
+      )}
     </div>
   );
 }

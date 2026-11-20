@@ -2,8 +2,9 @@
  * Pantalla Equipo (solo gerente).
  *
  * Lista a las personas de la organización con el estado de su acceso, permite
- * invitar trabajadores y ver o renovar su código de invitación. El código se
- * crea aquí y el gerente se lo envía al trabajador: EasyLit no manda correos.
+ * invitar colaboradores y generar su código de invitación. El código se crea
+ * aquí, se muestra una sola vez (en la base solo queda su huella) y el gerente
+ * se lo envía al colaborador: EasyLit no manda correos.
  */
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -20,7 +21,7 @@ import "./equipo.css";
 
 const ESTADOS: Record<EstadoAcceso, { clase: string; icono: string; texto: string; ayuda: string }> = {
   ACTIVO: { clase: "done", icono: "ti ti-circle-check", texto: "Activo", ayuda: "Ya creó su contraseña y puede entrar." },
-  PENDIENTE: { clase: "review", icono: "ti ti-clock", texto: "Pendiente", ayuda: "Tiene un código vigente; aún no crea su contraseña." },
+  PENDIENTE: { clase: "review", icono: "ti ti-clock", texto: "Pendiente", ayuda: "Tiene un código vigente; aún no crea su contraseña. Si lo perdió, genera uno nuevo." },
   VENCIDA: { clase: "error", icono: "ti ti-clock-x", texto: "Código vencido", ayuda: "Su código ya no sirve. Genera uno nuevo." },
   SIN_INVITACION: { clase: "draft", icono: "ti ti-key-off", texto: "Sin código", ayuda: "Se creó sin código de invitación. Genera uno para que pueda entrar." },
   DESACTIVADO: { clase: "draft", icono: "ti ti-ban", texto: "Desactivado", ayuda: "Un administrador le quitó el acceso." },
@@ -83,10 +84,10 @@ export default function EquipoPage() {
       <div className="page-header eq-header">
         <div>
           <h1>Equipo</h1>
-          <p>Las personas de {usuario?.organizacion_nombre ?? "tu empresa"} que usan EasyLit. Invita a un trabajador y envíale su código para que cree su contraseña.</p>
+          <p>Las personas de {usuario?.organizacion_nombre ?? "tu empresa"} que usan EasyLit. Invita a un colaborador y envíale su código para que cree su contraseña.</p>
         </div>
         <button className="btn btn-primary" onClick={() => setInvitando(true)}>
-          <i aria-hidden="true" className="ti ti-user-plus" /> Invitar trabajador
+          <i aria-hidden="true" className="ti ti-user-plus" /> Invitar colaborador
         </button>
       </div>
 
@@ -115,8 +116,8 @@ export default function EquipoPage() {
         {data && data.length <= 1 && (
           <div className="estado-caja">
             <i aria-hidden="true" className="ti ti-users" />
-            <h3>Aún no hay trabajadores</h3>
-            <p>Invita al primero con el botón «Invitar trabajador».</p>
+            <h3>Aún no hay colaboradores</h3>
+            <p>Invita al primero con el botón «Invitar colaborador».</p>
           </div>
         )}
 
@@ -136,7 +137,6 @@ export default function EquipoPage() {
               <tbody>
                 {data.map((m) => (
                   <Fila key={m.id} m={m} esYo={m.id === usuario?.id} generando={generando === m.id}
-                    onVerCodigo={() => setCodigo({ nombre: m.nombre_completo, inv: { codigo: m.codigo!, expira: m.expira! } })}
                     onGenerar={() => generarCodigo(m)} />
                 ))}
               </tbody>
@@ -154,8 +154,8 @@ export default function EquipoPage() {
   );
 }
 
-function Fila({ m, esYo, generando, onVerCodigo, onGenerar }: {
-  m: MiembroEquipo; esYo: boolean; generando: boolean; onVerCodigo: () => void; onGenerar: () => void;
+function Fila({ m, esYo, generando, onGenerar }: {
+  m: MiembroEquipo; esYo: boolean; generando: boolean; onGenerar: () => void;
 }) {
   const e = ESTADOS[m.estado];
   const iniciales = m.nombre_completo.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -173,15 +173,12 @@ function Fila({ m, esYo, generando, onVerCodigo, onGenerar }: {
       <td>{ROLES[m.rol] ?? m.rol}</td>
       <td><span className={`pill ${e.clase}`} title={e.ayuda}><i aria-hidden="true" className={e.icono} /> {e.texto}</span></td>
       <td className="eq-accion">
-        {m.estado === "PENDIENTE" && m.codigo && (
-          <button className="btn" onClick={onVerCodigo} aria-label={`Ver el código de ${m.nombre_completo}`}>
-            <i aria-hidden="true" className="ti ti-key" /> Ver código
-          </button>
-        )}
-        {(m.estado === "VENCIDA" || m.estado === "SIN_INVITACION") && (
+        {/* El código no se puede volver a ver (solo se guarda su huella): si el
+            colaborador lo perdió, se genera uno nuevo y el anterior deja de servir. */}
+        {(m.estado === "PENDIENTE" || m.estado === "VENCIDA" || m.estado === "SIN_INVITACION") && (
           <button className="btn" onClick={onGenerar} disabled={generando}
             aria-label={`Generar un código nuevo para ${m.nombre_completo}`}>
-            <i aria-hidden="true" className="ti ti-refresh" /> {generando ? "Generando…" : "Generar código"}
+            <i aria-hidden="true" className="ti ti-refresh" /> {generando ? "Generando…" : m.estado === "PENDIENTE" ? "Nuevo código" : "Generar código"}
           </button>
         )}
       </td>

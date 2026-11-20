@@ -78,7 +78,10 @@ CORS_ALLOWED_ORIGINS = [FRONTEND_URL] if FRONTEND_URL else []
 CSRF_TRUSTED_ORIGINS = [FRONTEND_URL] if FRONTEND_URL else []
 
 # --- DRF + JWT ---
+# Parte de lo de base.py (así se conservan los límites de intentos,
+# DEFAULT_THROTTLE_RATES) y cambia solo lo propio de producción.
 REST_FRAMEWORK = {
+    **REST_FRAMEWORK,
     # Firebase si está configurado (FIREBASE_PROJECT_ID); si no, el login propio con JWT.
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "apps.usuarios.firebase.FirebaseAuthentication"
@@ -100,6 +103,12 @@ CELERY_BROKER_URL = config("CELERY_BROKER_URL", default=REDIS_URL)
 CELERY_RESULT_BACKEND = REDIS_URL
 
 # La IA (GEMINI_API_KEY, IA_MODEL) y las reglas de negocio se leen en base.py.
+
+# --- IP del visitante para los límites de intentos ---
+# Render pone un proxy delante: la IP real llega en X-Forwarded-For y el proxy la
+# agrega al final. NUM_PROXIES=1 toma esa última, así nadie puede saltarse el
+# límite inventando una cabecera X-Forwarded-For.
+REST_FRAMEWORK["NUM_PROXIES"] = config("NUM_PROXIES", default=1, cast=int)
 
 # --- Carpeta de archivos sin R2 (solo fuera de Render) ---
 MEDIA_ROOT = config("MEDIA_ROOT", default=str(BASE_DIR / "media"))
