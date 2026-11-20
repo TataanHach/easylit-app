@@ -36,3 +36,6 @@ Thumbs.db
 # Claves de cuenta de servicio de Firebase (secretas)
 *-firebase-adminsdk-*.json
 clave-firebase*.json
+
+# Archivos temporales de Office (se crean mientras un documento está abierto)
+~$*

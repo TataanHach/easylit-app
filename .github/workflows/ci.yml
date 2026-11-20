@@ -20,6 +20,15 @@ jobs:
         run: |
           python manage.py makemigrations --check --dry-run
           python manage.py check
+      # Pruebas automáticas (login, invitaciones, límites de intentos, aislamiento
+      # entre organizaciones, archivos, IA y generación). Sin clave de Gemini: las
+      # pruebas usan el modo simulado y nunca llaman a servicios externos.
+      - name: Pruebas automáticas
+        working-directory: backend
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.dev
+          GEMINI_API_KEY: ""
+        run: python manage.py test --verbosity 2
 
   frontend:
     runs-on: ubuntu-latest
@@ -27,7 +36,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: "24" }
-      - name: Instalar y compilar
+      # «npm run build» revisa los tipos de TypeScript (tsc) antes de compilar.
+      - name: Revisar tipos y compilar
         working-directory: frontend
         run: |
           npm ci

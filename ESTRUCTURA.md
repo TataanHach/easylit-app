@@ -1,125 +1,109 @@
-# Estructura del proyecto y despliegue
+# Estructura del proyecto · EasyLit v2.5
 
-Este documento explica **dónde va cada cosa** y **cómo se despliega**. Es el mapa
-del monorepo.
+Mapa del repositorio: qué hay en cada carpeta y en qué servicio de Render corre.
+La visión general está en [README.md](README.md) y los pasos para desplegar, en
+[DESPLIEGUE.md](DESPLIEGUE.md).
 
-## Árbol completo
+## Árbol del repositorio
 
 ```
-easylit-app/                      ← raíz del repositorio en GitHub
+easylit-app/
+├── render.yaml                    servicios de Render (Blueprint)
+├── README.md                      visión general, arquitectura, seguridad
+├── DESPLIEGUE.md                  guía de despliegue paso a paso
+├── ESTRUCTURA.md                  este archivo
+├── .github/workflows/ci.yml       pruebas y compilación en cada push a main
 │
-├── render.yaml                   ← define los 5 servicios de Render
-├── .gitignore
-├── README.md                     ← visión general y modelo de datos
-├── ESTRUCTURA.md                 ← este archivo
-│
-├── .github/workflows/ci.yml      ← compila back y front en cada push
-│
-├── backend/                      ← Django (Web Service + Worker en Render)
-│   ├── build.sh                  ← script que Render ejecuta al desplegar
-│   ├── manage.py
+├── backend/                       Django + DRF + Celery → servicio easylit-api
+│   ├── build.sh                   Render: instala, junta estáticos y aplica migraciones
+│   ├── start.sh                   Render: arranca gunicorn y el worker Celery juntos
 │   ├── requirements.txt
-│   ├── .env.example              ← plantilla de variables (copiar a .env)
-│   │
-│   ├── config/                   ← configuración del proyecto
-│   │   ├── settings/
-│   │   │   ├── base.py           ← común a todos los entornos
-│   │   │   ├── dev.py            ← desarrollo local (SQLite, DEBUG)
-│   │   │   └── prod.py           ← Render (Postgres, seguridad, CORS)
-│   │   ├── celery.py             ← configuración del worker
-│   │   ├── urls.py               ← rutas raíz (health + API)
-│   │   ├── wsgi.py / asgi.py
-│   │   └── __init__.py
-│   │
-│   └── apps/                     ← una app por dominio
-│       ├── common/               ← health check y utilidades transversales
-│       ├── organizaciones/       ← Organizacion
-│       ├── usuarios/             ← Usuario, roles, Invitacion
-│       │   └── api/              ← serializers, views, urls (bloque 2)
-│       ├── plantillas/           ← Plantilla, CampoPlantilla, UnidadCanonica
-│       │   └── api/              ← (bloque 3)
-│       └── transformaciones/     ← Transformacion, Partida, MapeoCampo, Bitacora
-│           ├── api/              ← (bloque 3)
-│           └── services/         ← limpieza, IA, validación (bloque 4)
+│   ├── .env.example               lista de variables de entorno (sin valores reales)
+│   ├── config/
+│   │   ├── settings/base.py       configuración común, límites de intentos, IA
+│   │   ├── settings/prod.py       Render: PostgreSQL, R2, HTTPS/HSTS, CORS
+│   │   ├── settings/dev.py        usada por las pruebas automáticas (CI)
+│   │   ├── celery.py              configuración del worker
+│   │   └── urls.py                /api/health/, /api/config/, /api/... y /admin/
+│   └── apps/
+│       ├── common/                validación de archivos, textos, health check
+│       ├── organizaciones/        Organizacion (cada empresa cliente)
+│       ├── usuarios/              Usuario, roles, Invitacion, login con Firebase
+│       │   ├── api/limites.py     límites de intentos (respuesta 429)
+│       │   ├── api/permissions.py permisos por rol
+│       │   ├── firebase.py        verifica tokens y crea cuentas de invitados
+│       │   ├── validadores.py     reglas de contraseña
+│       │   ├── management/commands/vincular_firebase.py
+│       │   └── tests.py
+│       ├── plantillas/            Plantilla, CampoPlantilla
+│       └── transformaciones/      Transformacion, MapeoCampo, Bitacora
+│           ├── tasks.py           tarea Celery: limpieza + mapeo con IA
+│           ├── services/
+│           │   ├── limpieza.py       lectura y limpieza con pandas
+│           │   ├── normalizacion.py  RUT, fechas, plazos, unidades, tildes
+│           │   ├── ia.py             consulta a Gemini (montos ocultos)
+│           │   ├── generacion.py     escribe la plantilla con openpyxl
+│           │   └── errores.py        errores en palabras simples
+│           └── tests.py, tests_worker.py, tests_normalizacion.py
 │
-└── frontend/                     ← React (Static Site en Render)
-    ├── package.json
-    ├── vite.config.ts            ← proxy /api → :8000 en dev
-    ├── tsconfig.json
-    ├── index.html                ← raíz de Vite
-    ├── .env.example
-    │
+└── frontend/                      React + TypeScript + Vite → servicio easylit-web
+    ├── index.html
+    ├── vite.config.ts
+    ├── .env.example               variables VITE_* (sin valores reales)
+    ├── public/                    íconos de la pestaña (isotipo)
     └── src/
-        ├── main.tsx              ← punto de entrada (React Query + Router)
-        ├── api/
-        │   └── client.ts         ← axios con JWT y refresco automático
-        ├── app/
-        │   └── router.tsx        ← mapa de rutas
+        ├── main.tsx               punto de entrada (React Query, Router, burbuja de soporte)
+        ├── api/client.ts          axios: token de sesión y renovación automática
+        ├── app/router.tsx         rutas y rutas protegidas
+        ├── assets/                logos
         ├── components/
-        │   ├── ui/               ← botones, inputs, badges (bloque frontend)
-        │   └── layout/           ← sidebar, topbar (bloque frontend)
-        ├── features/             ← una carpeta por dominio de pantalla
-        │   ├── auth/             ← login, registro, crear contraseña
-        │   ├── transformaciones/ ← wizard: cargar, limpiar, mapear, generar
-        │   ├── plantillas/       ← biblioteca de formatos
-        │   ├── historial/        ← tabla con filtros por alcance
-        │   └── equipo/           ← gestión de usuarios (gerente)
-        ├── hooks/                ← hooks compartidos
-        ├── lib/                  ← formato de RUT, montos, fechas
-        ├── types/
-        │   └── index.ts          ← tipos en espejo con Django
-        └── styles/
-            ├── tokens.css        ← paleta y escala (del prototipo)
-            └── global.css
+        │   ├── layout/            menú lateral, barra superior y footer
+        │   └── ui/                avisos, confirmaciones, burbuja de soporte
+        ├── features/
+        │   ├── auth/              login, crear contraseña, términos y condiciones
+        │   ├── plantillas/        biblioteca, campos y ayudas
+        │   ├── transformaciones/  transformar, revisar el mapeo, vista previa
+        │   ├── historial/         tabla con filtros
+        │   └── equipo/            invitar colaboradores (solo gerente)
+        ├── lib/                   Firebase, RUT, errores, límites, soporte
+        ├── types/index.ts         tipos en espejo con la API
+        └── styles/                tokens.css y estilos globales
 ```
 
-## Cómo se despliega en Render
+## Servicios en Render
 
-Al conectar el repositorio a Render y apuntar al `render.yaml`, se crean cinco
-servicios cableados entre sí automáticamente:
+`render.yaml` crea cuatro servicios conectados entre sí. Además se usan tres
+servicios externos.
 
-| Servicio | Tipo Render | Qué corre | Carpeta |
+| Servicio | Tipo | Qué corre | Carpeta |
 |---|---|---|---|
-| easylit-web | Static Site | React compilado | `frontend/` |
-| easylit-api | Web Service | Django + Gunicorn | `backend/` |
-| easylit-worker | Background Worker | Celery | `backend/` |
-| easylit-db | PostgreSQL | Base de datos | — |
-| easylit-redis | Key Value | Cola de Celery | — |
+| `easylit-web` | Static Site | React compilado | `frontend/` |
+| `easylit-api` | Web Service | Django con gunicorn y el worker Celery (vía `start.sh`) | `backend/` |
+| `easylit-db` | PostgreSQL | Base de datos | — |
+| `easylit-redis` | Key Value | Cola de tareas de Celery | — |
+| Cloudflare R2 | Externo | Plantillas, licitaciones y documentos generados | — |
+| Firebase Authentication | Externo | Credenciales de los usuarios | — |
+| Gemini | Externo | Propuesta de mapeo y limpieza de textos | — |
 
-Cada push a `main` redespliega lo que cambió. Las variables secretas
-(`GEMINI_API_KEY`, `ALLOWED_HOSTS`, `FRONTEND_URL`, `VITE_API_URL`) se pegan una
-vez en el panel de Render; las demás se generan o cablean solas.
+Cada push a `main` vuelve a desplegar lo que cambió, y `build.sh` aplica las
+migraciones de la base. Las variables secretas se cargan en el panel de Render
+(detalle en [DESPLIEGUE.md](DESPLIEGUE.md)).
 
-## Cómo correrlo en tu máquina
+## Dónde corre cada paso de una transformación
 
-**Backend:**
-```bash
-cd backend
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env          # ajusta si quieres
-python manage.py migrate
-python manage.py createsuperuser
-python manage.py runserver    # http://localhost:8000
-```
+| Paso | Dónde corre | Código |
+|---|---|---|
+| Subir la licitación | `easylit-api` (guarda el archivo en R2) | `transformaciones/api/views.py` |
+| Limpieza y mapeo con IA | Worker Celery, en el mismo servicio | `transformaciones/tasks.py`, `services/limpieza.py`, `services/ia.py` |
+| Revisión y vista previa | `easylit-api` | `transformaciones/api/views.py` |
+| Generar el documento | `easylit-api` (escribe en R2) | `services/generacion.py` |
 
-**Frontend** (en otra terminal):
-```bash
-cd frontend
-npm install
-npm run dev                   # http://localhost:5173
-```
+## Integración continua
 
-El proxy de Vite reenvía `/api` al Django local, así que no hay problemas de CORS
-en desarrollo.
+GitHub Actions ([ci.yml](.github/workflows/ci.yml)) corre en cada push y pull
+request a `main`:
 
-## Qué falta (próximos bloques)
-
-Este esqueleto tiene el modelo de datos, la infraestructura y el cableado
-completos y verificados. Falta llenar la lógica:
-
-2. **Autenticación** — endpoints JWT, invitación del gerente, primer ingreso.
-3. **Endpoints REST** — subir, listar, mapear, aprobar, generar.
-4. **Worker** — limpieza con pandas, propuesta con Gemini, validación aritmética.
-5. **Frontend** — las pantallas React conectadas a la API.
-```
+- **Backend:** revisa que no falten migraciones, ejecuta `manage.py check` y
+  corre las 64 pruebas automáticas. Usa el modo simulado de la IA, así que no
+  llama a Gemini ni a otros servicios externos.
+- **Frontend:** revisa los tipos de TypeScript y compila la aplicación.
