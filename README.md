@@ -12,7 +12,7 @@ La IA solo sugiere qué columna del archivo de origen va a cada campo de la
 plantilla. Los datos los lee y limpia **pandas** con reglas fijas y los escribe
 **openpyxl** en la plantilla. Los montos y cantidades nunca se envían a la IA.
 
-Versión **2.6 · Beta**, desplegada en **Render**. Los cambios de cada versión
+Versión **2.7 · Beta**, desplegada en **Render**. Los cambios de cada versión
 están en [CAMBIOS.md](CAMBIOS.md).
 
 Proyecto de Título — INACAP, Informática y Telecomunicaciones (TIHI84).
@@ -51,7 +51,8 @@ No se publican en este repositorio.
 - **Revisión del mapeo:** resumen con el porcentaje de confianza, vista previa
   del documento, mover campos, elegir columnas de las tablas y el botón opcional
   «Limpiar con IA».
-- **Generar y descargar** el Excel final con el formato del mandante.
+- **Generar y descargar** el Excel final con el formato del mandante. Si la
+  confianza de la transformación es menor a 50%, EasyLit pregunta antes de generar.
 - **Historial:** filtros por empresa, estado y fechas; ver, descargar o eliminar;
   tiempo de proceso y confianza promedio. El trabajador ve solo sus
   transformaciones; el gerente ve también las de sus colaboradores.

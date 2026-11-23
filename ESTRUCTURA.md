@@ -1,4 +1,4 @@
-# Estructura del proyecto · EasyLit v2.6
+# Estructura del proyecto · EasyLit v2.7
 
 Mapa del repositorio: qué hay en cada carpeta y en qué servicio de Render corre.
 La visión general está en [README.md](README.md) y los pasos para desplegar, en

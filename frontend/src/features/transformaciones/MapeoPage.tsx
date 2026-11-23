@@ -75,6 +75,12 @@ function gruposPorHoja(estados: EstadoCampo[]) {
   }).filter((g) => g.items.length > 0);
 }
 
+/**
+ * Bajo esta confianza (promedio de la transformación, el mismo del historial),
+ * «Generar documento» primero pregunta si se quiere generar igual.
+ */
+const CONFIANZA_MINIMA_GENERAR = 50;
+
 /** Opciones del control de IVA; el porcentaje lo define el backend (IVA_TASA). */
 function opcionesIVA(porcentaje: number) {
   return [
@@ -95,6 +101,7 @@ export default function MapeoPage() {
   const [guardandoId, setGuardandoId] = useState<string | null>(null);
   const [limpiando, setLimpiando] = useState(false);
   const [confirmarIA, setConfirmarIA] = useState(false);   // aviso antes de gastar crédito de IA
+  const [confirmarBaja, setConfirmarBaja] = useState(false);   // aviso de confianza baja antes de generar
   const [hojaActiva, setHojaActiva] = useState(0);
   const [hojaMapeo, setHojaMapeo] = useState(0);   // hoja visible en «Mapeo propuesto»
   // Ventana emergente con el resultado del procesamiento o de la generación.
@@ -415,6 +422,15 @@ export default function MapeoPage() {
     }
   }
 
+  /** Antes de generar: si la confianza es baja, pregunta primero. */
+  function pedirGenerar() {
+    if (t?.confianza != null && t.confianza < CONFIANZA_MINIMA_GENERAR) {
+      setConfirmarBaja(true);
+      return;
+    }
+    generar();
+  }
+
   async function generar() {
     if (!id) return;
     setGenerando(true);
@@ -593,6 +609,18 @@ export default function MapeoPage() {
           onCancelar={() => setConfirmarIA(false)}
         />
       )}
+      {confirmarBaja && t && (
+        <ConfirmarModal
+          tono="normal"
+          titulo="La confianza de esta transformación es baja"
+          mensaje={`EasyLit tiene un ${t.confianza}% de confianza en este mapeo (menos del `
+            + `${CONFIANZA_MINIMA_GENERAR}%), así que algunos datos podrían quedar en el campo equivocado. `
+            + "Revisa la vista previa y el mapeo antes de continuar. ¿Quieres generar el documento de todas formas?"}
+          confirmar="Sí, generar igual"
+          onConfirmar={() => { setConfirmarBaja(false); generar(); }}
+          onCancelar={() => setConfirmarBaja(false)}
+        />
+      )}
       {/* ───── LO QUE QUEDARÁ SIN LLENAR (antes de la vista previa) ───── */}
       {(preview?.avisos?.length ?? 0) > 0 && (
         <div className="pendientes-caja" role="status">
@@ -727,7 +755,7 @@ export default function MapeoPage() {
             style={{ borderColor: "var(--ai-600, #5B4E8C)", color: "var(--ai-600, #5B4E8C)" }}>
             {limpiando ? "Limpiando…" : <><i aria-hidden="true" className="ti ti-sparkles" /> Limpiar con IA</>}
           </button>
-          <button className="btn btn-primary btn-lg" onClick={generar}
+          <button className="btn btn-primary btn-lg" onClick={pedirGenerar}
             disabled={generando || (mapeos.length === 0 && !soloTablas) || ningunoAsignado}
             title={ningunoAsignado ? "Asigna un dato a al menos un campo para poder generar" : undefined}>
             {generando ? "Generando…" : <><i aria-hidden="true" className="ti ti-file-export" /> Generar documento</>}
