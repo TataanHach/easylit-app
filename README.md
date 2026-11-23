@@ -12,7 +12,7 @@ La IA solo sugiere qué columna del archivo de origen va a cada campo de la
 plantilla. Los datos los lee y limpia **pandas** con reglas fijas y los escribe
 **openpyxl** en la plantilla. Los montos y cantidades nunca se envían a la IA.
 
-Versión **2.7 · Beta**, desplegada en **Render**. Los cambios de cada versión
+Versión **2.8 · Beta**, desplegada en **Render**. Los cambios de cada versión
 están en [CAMBIOS.md](CAMBIOS.md).
 
 Proyecto de Título — INACAP, Informática y Telecomunicaciones (TIHI84).
@@ -146,7 +146,8 @@ BORRADOR → LIMPIEZA → MAPEO_PROPUESTO → EN_REVISION → APROBADO → GENER
 
 ## Roles
 
-- **Superadmin:** administra el sistema y las organizaciones (panel `/admin/`).
+- **Superadmin:** administra el sistema y las organizaciones (panel `/admin/`),
+  y da de alta a los gerentes con su código de invitación.
 - **Gerente:** administra su organización, invita a sus colaboradores y ve,
   descarga o elimina las transformaciones de todo su equipo.
 - **Trabajador:** crea plantillas y transformaciones, y solo ve las suyas.
@@ -190,6 +191,8 @@ cosas:
 - invitaciones: formato del código, que no quede legible en la base y que sirva
   una sola vez;
 - límites de intentos en crear contraseña, revisar correo y login;
+- el panel de Django: crear usuarios con código de invitación y la acción
+  «Generar código de invitación»;
 - aislamiento de datos entre organizaciones, y que un trabajador no pueda abrir
   ni borrar la transformación de otra persona;
 - rechazo de símbolos no permitidos en plantillas e invitaciones;

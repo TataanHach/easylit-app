@@ -4,6 +4,30 @@ Cada cambio en la funcionalidad del sistema sube la versión (2.5 → 2.6 → 2.
 El número se cambia en un solo lugar, `frontend/src/lib/version.ts`, y aquí se
 anota qué cambió. La versión más nueva va primero.
 
+## v2.8 · 23 de noviembre de 2026
+
+**Códigos de invitación desde el panel de Django**
+- Al crear un usuario en `/admin/` se elige «Cómo entrará»: **con código de
+  invitación** (por defecto) o con contraseña. Con código, al guardar el panel
+  muestra el código una sola vez, igual que la pantalla Equipo. Así el
+  superadministrador da de alta a un gerente sin correr comandos.
+- Nueva acción en la lista de usuarios: **«Generar código de invitación»**, para
+  quien lo perdió, lo tiene vencido o se creó sin código. Omite (y avisa) a quien
+  ya tiene acceso, está desactivado o es superadministrador.
+- El formulario del panel valida el correo y el nombre (sin símbolos), el RUT y
+  que un gerente o trabajador tenga organización. Un superadministrador creado
+  ahí queda con acceso al panel (`is_staff` y `is_superuser`).
+- Ya no se pueden crear invitaciones a mano en «Invitaciones» (no servían: el
+  código solo existe al crearlo).
+- 6 pruebas automáticas nuevas (78 en total).
+
+**Casilla del código de invitación**
+- En «Crea tu contraseña», la casilla del código acepta como máximo los 8
+  caracteres del código: solo letras y números, en mayúsculas, y el guion se pone
+  solo (escribir o pegar «k7m2 qx9p» deja «K7M2-QX9P»; lo que sobra se corta).
+- Si el código está incompleto, avisa antes de enviar cuántos caracteres se
+  escribieron, en vez de esperar la respuesta del servidor.
+
 ## v2.7 · 23 de noviembre de 2026
 
 **Aviso de confianza baja al generar**

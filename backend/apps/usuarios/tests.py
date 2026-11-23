@@ -289,3 +289,74 @@ class LimiteDeIntentosTest(TestCase):
     def test_estado_correo_bloquea_tras_30(self):
         r = self._hasta_bloqueo("/api/auth/estado-correo/", {"email": "x@test.cl"}, 30)
         self.assertEqual(r.status_code, 429)
+
+
+class PanelAdminTest(TestCase):
+    """Panel de Django: crear usuarios con código de invitación y la acción «Generar código»."""
+
+    def setUp(self):
+        import re
+        from django.test import Client
+        from django.urls import reverse
+        cache.clear()
+        self.re, self.reverse = re, reverse
+        self.org = Organizacion.objects.create(nombre="Panel SpA", rut="761111111")
+        self.admin = Usuario.objects.create_superuser("admin@easylit.cl", "Admin#2026", nombre_completo="Admin")
+        self.c = Client()
+        self.c.force_login(self.admin)
+
+    def _crear(self, **cambios):
+        datos = {"email": "gerente@panel.cl", "nombre_completo": "Gerente Panel", "rut": "",
+                 "rol": "GERENTE", "organizacion": str(self.org.id), "usable_password": "false",
+                 "password1": "", "password2": "", "_save": "Guardar"}
+        datos.update(cambios)
+        return self.c.post(self.reverse("admin:usuarios_usuario_add"), datos, follow=True)
+
+    def _codigos(self, r):
+        return self.re.findall(r"\b[A-Z0-9]{4}-[A-Z0-9]{4}\b", " ".join(str(m) for m in r.context["messages"]))
+
+    def test_crear_con_codigo_lo_muestra_una_vez_y_sirve(self):
+        from apps.usuarios.models import Invitacion
+        r = self._crear()
+        self.assertEqual(r.status_code, 200)
+        usuario = Usuario.objects.get(email="gerente@panel.cl")
+        self.assertFalse(usuario.has_usable_password())
+        codigos = self._codigos(r)
+        self.assertEqual(len(codigos), 1)
+        self.assertEqual(Invitacion.buscar(codigos[0]).usuario, usuario)
+        self.assertNotIn(codigos[0].replace("-", ""), Invitacion.objects.get(usuario=usuario).codigo_hash)
+
+    def test_gerente_sin_organizacion_o_superadmin_sin_contrasena_se_rechazan(self):
+        r = self._crear(organizacion="")
+        self.assertIn("debe pertenecer a una organización", r.content.decode())
+        r = self._crear(email="otro@easylit.cl", rol="SUPERADMIN", organizacion="")
+        self.assertIn("entra a este panel con contraseña", r.content.decode())
+        self.assertEqual(Usuario.objects.count(), 1)   # solo el admin del setUp
+
+    def test_superadmin_con_contrasena_queda_como_staff(self):
+        self._crear(email="otro@easylit.cl", rol="SUPERADMIN", organizacion="", usable_password="true",
+                    password1="Clave#2026x", password2="Clave#2026x")
+        nuevo = Usuario.objects.get(email="otro@easylit.cl")
+        self.assertTrue(nuevo.is_staff and nuevo.is_superuser and nuevo.has_usable_password())
+
+    def test_simbolos_en_nombre_o_correo_se_rechazan(self):
+        self._crear(nombre_completo="Juan #Pérez")
+        self._crear(email="ju$an@panel.cl")
+        self.assertEqual(Usuario.objects.count(), 1)
+
+    def test_accion_generar_codigo(self):
+        sin_codigo = Usuario.objects.create_user("sin@panel.cl", None, nombre_completo="Sin Codigo",
+                                                 rol=Rol.TRABAJADOR, organizacion=self.org)
+        con_acceso = Usuario.objects.create_user("con@panel.cl", "Clave#2026", nombre_completo="Con Acceso",
+                                                 rol=Rol.TRABAJADOR, organizacion=self.org)
+        r = self.c.post(self.reverse("admin:usuarios_usuario_changelist"), {
+            "action": "generar_codigo", "_selected_action": [str(sin_codigo.id), str(con_acceso.id)],
+        }, follow=True)
+        self.assertEqual(len(self._codigos(r)), 1)
+        self.assertTrue(sin_codigo.invitaciones.exists())
+        self.assertFalse(con_acceso.invitaciones.exists())
+        self.assertIn("Con Acceso", " ".join(str(m) for m in r.context["messages"]))
+
+    def test_no_se_crea_una_invitacion_a_mano(self):
+        r = self.c.get(self.reverse("admin:usuarios_invitacion_add"))
+        self.assertEqual(r.status_code, 403)

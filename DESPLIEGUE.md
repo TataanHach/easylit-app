@@ -1,4 +1,4 @@
-# Despliegue en Render · EasyLit v2.7
+# Despliegue en Render · EasyLit v2.8
 
 ```
 Navegador ──▶ easylit-web (Render, React)
@@ -126,24 +126,28 @@ $env:DATABASE_URL = "<External Database URL de easylit-db>"
 $env:FIREBASE_PROJECT_ID = "<tu-proyecto>"
 $env:FIREBASE_CREDENCIALES = Get-Content "C:\ruta\completa\clave-firebase.json" -Raw
 
-# 1. Superadmin (para entrar a /admin/)
+# Superadmin (para entrar a /admin/)
 python manage.py createsuperuser
 
-# 2. Su cuenta de Firebase, para entrar a la app
+# Opcional: su cuenta de Firebase, solo si el superadmin también usará la app
 python manage.py vincular_firebase tu@correo.cl --password "Clave#2026"
 ```
 
-Luego, en `https://<url-de-easylit-api>/admin/` (con la contraseña del
-superadmin) crea la **Organización** y su **Gerente**, y vincúlalo igual:
+Lo demás se hace desde el panel, sin comandos. En
+`https://<url-de-easylit-api>/admin/` (con la contraseña del superadmin):
 
-```powershell
-python manage.py vincular_firebase gerente@empresa.cl --password "Otra#2026"
-```
+1. **Organizaciones → Añadir**: crea la empresa.
+2. **Usuarios → Añadir**: correo, nombre, rol **Gerente**, la organización y, en
+   «Cómo entrará», **Con código de invitación**. Al guardar, arriba aparece su
+   **código** (ej. `K7M2-QX9P`): cópialo, porque no se vuelve a mostrar.
+3. Envíale el código al gerente. Él entra a la app, escribe su correo, pega el
+   código y crea su contraseña; EasyLit le crea su cuenta de Firebase.
 
-Desde ahí todo se hace en la app: el gerente entra, va a **Equipo → Invitar
-colaborador** y le envía el código. Al activar la invitación, EasyLit le crea su
-cuenta de Firebase. **No crees colaboradores desde `/admin/`**: quedarían sin
-cuenta de Firebase y no podrían entrar.
+Si el código se pierde o vence: **Usuarios** → marca a la persona → acción
+**«Generar código de invitación»** → **Ir**. El anterior deja de servir.
+
+Desde ahí, el gerente invita a su equipo en la app: **Equipo → Invitar
+colaborador**.
 
 ## 5. Qué probar
 
@@ -162,7 +166,7 @@ cuenta de Firebase y no podrían entrar.
 |---|---|---|
 | Build de la API falla con `corsheaders.E014 ... should not have path` | `FRONTEND_URL` termina en `/` | Quita la `/` final |
 | «No se pudo verificar el correo. No hay conexión con el servidor» | `VITE_API_URL` mal escrita, de otra cuenta o sin redesplegar; o `FRONTEND_URL` no calza con la URL de la app | Corrige la variable y vuelve a desplegar `easylit-web` |
-| El usuario existe pero no puede entrar | Se creó en `/admin/` sin cuenta de Firebase | `vincular_firebase` (paso 4) o invítalo desde **Equipo** |
+| El usuario existe pero no puede entrar | Se creó en `/admin/` «Con contraseña», sin cuenta de Firebase | En **Usuarios**, acción «Generar código de invitación» (paso 4) y que cree su contraseña con el código |
 | `vincular_firebase` da `INSUFFICIENT_PERMISSION` | `FIREBASE_PROJECT_ID` no es el proyecto del `.json` | Usa el `project_id` que trae el `.json` |
 | El login de Firebase se bloquea en la URL nueva | Falta la URL en **Dominios autorizados** | Agrégala en Firebase (paso 2.5) |
 | Aviso «La IA no estuvo disponible» y en los logs `InvalidHeader ... \n` | La clave de Gemini quedó con un salto de línea al pegarla | Borra la variable, créala de nuevo y pega la clave sin espacios ni Enter |

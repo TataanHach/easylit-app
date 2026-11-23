@@ -18,6 +18,19 @@ import { useConfiguracion } from "@/lib/configuracion";
 import { describirError } from "@/lib/errores";
 import { VERSION_TEXTO } from "@/lib/version";
 
+/** Largo del código de invitación (LARGO_CODIGO en backend/apps/usuarios/models.py). */
+const LARGO_CODIGO = 8;
+
+/**
+ * Lo que se escribe o pega en la casilla del código: solo letras y números, en
+ * mayúsculas y como máximo 8; el guion se pone solo tras los 4 primeros
+ * («k7m2 qx9p» → «K7M2-QX9P»).
+ */
+function formatearCodigo(texto: string): string {
+  const limpio = texto.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, LARGO_CODIGO);
+  return limpio.length > 4 ? `${limpio.slice(0, 4)}-${limpio.slice(4)}` : limpio;
+}
+
 export default function CrearContrasenaPage() {
   const cfg = useConfiguracion();
   const REQUISITOS_CONTRASENA = requisitosContrasena(cfg);
@@ -27,7 +40,7 @@ export default function CrearContrasenaPage() {
   const navigate = useNavigate();
   const location = useLocation() as { state?: { email?: string; token?: string } };
 
-  const [token, setToken] = useState(location.state?.token ?? "");
+  const [token, setToken] = useState(formatearCodigo(location.state?.token ?? ""));
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
   const [verPw, setVerPw] = useState(false);
@@ -48,6 +61,11 @@ export default function CrearContrasenaPage() {
     const codigo = limpiarTexto(token);
     setToken(codigo);
     if (!codigo) { setError("Falta el código de invitación. Cópialo desde el mensaje que te envió tu gerente y pégalo en el primer campo."); return; }
+    const largo = codigo.replace("-", "").length;
+    if (largo < LARGO_CODIGO) {
+      setError(`El código de invitación tiene ${LARGO_CODIGO} letras y números y escribiste ${largo}. Revisa que lo hayas copiado completo.`);
+      return;
+    }
     if (!pwOk) {
       const faltan = REQUISITOS_CONTRASENA.filter((r) => !r.cumple(password)).map((r) => r.texto.toLowerCase());
       setError(`La contraseña no cumple los requisitos. Le falta: ${faltan.join(", ")}.`);
@@ -114,12 +132,14 @@ export default function CrearContrasenaPage() {
                 <label htmlFor="token">Código de invitación</label>
                 <div className="input-wrap">
                   <i aria-hidden="true" className="ti ti-key" />
+                  {/* maxLength amplio para poder pegarlo con espacios o guion: formatearCodigo
+                      deja solo los 8 caracteres del código. */}
                   <input id="token" type="text" className="auth-input"
                     placeholder="Ej: K7M2-QX9P" maxLength={LIMITES.tokenInvitacion}
-                    value={token} onChange={(e) => setToken(e.target.value)}
-                    onBlur={(e) => setToken(limpiarTexto(e.target.value).toUpperCase())} />
+                    autoComplete="off" autoCapitalize="characters" spellCheck={false}
+                    value={token} onChange={(e) => setToken(formatearCodigo(e.target.value))} />
                 </div>
-                <p className="hint">Te lo envía tu gerente desde la pantalla Equipo de EasyLit.</p>
+                <p className="hint">8 letras y números. Te lo envía tu gerente desde la pantalla Equipo de EasyLit.</p>
               </div>
             )}
 

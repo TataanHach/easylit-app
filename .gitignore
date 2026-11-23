@@ -39,3 +39,6 @@ clave-firebase*.json
 
 # Archivos temporales de Office (se crean mientras un documento está abierto)
 ~$*
+
+# Manual técnico: se mantiene fuera del repositorio
+EasyLit_Manual_Tecnico*.docx
