@@ -252,6 +252,34 @@ class ColumnasConIATest(TestCase):
             ["Telefono", "Correo"], ["Fono", "Correo"], {"Fono": "Telefono", "Correo": "Telefono"})
         self.assertEqual(mapa, {"Fono": "Telefono", "Correo": "Correo"})
 
+    def test_por_nombre_no_empareja_por_palabras_vacias_ni_repite_columnas(self):
+        # Caso real: todas compartían solo «de» con «Formato de venta» y se la llevaban.
+        from apps.transformaciones.services import generacion
+        mapa = generacion._emparejar_por_nombre(
+            ["Proceso al que postula", "Formato de venta", "Fono comercial", "Cobertura de garantía en meses",
+             "Oferta válida por días", "Fabricante / modelo / código"],
+            ["Código de licitación", "Teléfono de contacto", "Unidad de medida", "Garantía (meses)",
+             "Vigencia de la oferta (días)", "Código de ítem"])
+        self.assertEqual(mapa, {
+            "Código de licitación": None, "Teléfono de contacto": None, "Unidad de medida": None,
+            "Código de ítem": None,                                     # «código» solo no basta: a la IA
+            "Garantía (meses)": "Cobertura de garantía en meses",       # 2 palabras en común
+            "Vigencia de la oferta (días)": "Oferta válida por días",
+        })
+
+    def test_por_nombre_abreviaturas_y_una_columna_para_un_solo_destino(self):
+        from apps.transformaciones.services import generacion
+        mapa = generacion._emparejar_por_nombre(
+            ["N°", "Descripción del bien", "Unid.", "Cant.", "P. Unitario", "Precio total"],
+            ["Ítem", "Descripción", "Unidad", "Cantidad", "Precio unitario", "Precio", "Total"])
+        self.assertEqual(mapa["Unidad"], "Unid.")
+        self.assertEqual(mapa["Cantidad"], "Cant.")
+        self.assertEqual(mapa["Descripción"], "Descripción del bien")
+        self.assertEqual(mapa["Precio unitario"], "P. Unitario")
+        self.assertIsNone(mapa["Ítem"])
+        usadas = [o for o in mapa.values() if o]
+        self.assertEqual(len(usadas), len(set(usadas)))                # ninguna columna del origen se repite
+
     def test_lo_que_elige_el_usuario_manda_sobre_nombre_e_ia(self):
         from apps.transformaciones.services import generacion
         parejas = generacion.parejas_columnas(

@@ -28,6 +28,16 @@ anota qué cambió. La versión más nueva va primero.
 - Si el código está incompleto, avisa antes de enviar cuántos caracteres se
   escribieron, en vez de esperar la respuesta del servidor.
 
+**Columnas de tablas: emparejamiento por nombre corregido**
+- Antes bastaba una palabra en común, aunque fuera «de»: «Formato de venta»
+  terminaba en «Código de licitación», «Correo de contacto», «Fecha de
+  presentación», etc., y esas columnas no se le preguntaban a la IA.
+- Ahora se ignoran palabras como «de», «del», «la», «y», «o», y solo se empareja
+  por nombre con el mismo nombre, 2 palabras en común o un nombre de una palabra
+  contenido en el otro (se aceptan abreviaturas: «Cant.» / «Cantidad»). Cada
+  columna del origen se usa una sola vez. Lo demás lo sugiere la IA.
+- 2 pruebas automáticas nuevas (80 en total).
+
 ## v2.7 · 23 de noviembre de 2026
 
 **Aviso de confianza baja al generar**

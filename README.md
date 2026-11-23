@@ -199,6 +199,8 @@ cosas:
 - rechazo de archivos inválidos o de más de 20 MB;
 - que los montos nunca se envíen a la IA;
 - que la elección del usuario mande sobre la sugerencia de la IA;
+- que el emparejamiento por nombre no use palabras sueltas como «de» ni repita
+  una columna del origen en varios destinos;
 - que una falla de Gemini no rompa el proceso;
 - generación del documento, incluidas tablas y fórmulas.
 

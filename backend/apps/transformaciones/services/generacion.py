@@ -473,20 +473,49 @@ def _emparejar_columnas(cols_origen, cols_destino, sugeridas=None, usuario=None)
     return {d: o for d, (o, _) in parejas_columnas(cols_origen, cols_destino, sugeridas, usuario).items()}
 
 
+# Palabras que no dicen de qué trata una columna: compartirlas no empareja nada
+# («Código de licitación» y «Formato de venta» solo comparten «de»).
+_PALABRAS_VACIAS = {"de", "del", "la", "las", "el", "los", "lo", "y", "e", "o", "u", "en", "por", "para",
+                    "a", "al", "con", "sin", "un", "una", "que", "su", "sus", "nro", "num"}
+
+
+def _palabras_columna(texto):
+    """Palabras que identifican una columna: sin tildes, sin palabras vacías ni letras sueltas."""
+    return {p for p in _normalizar(texto).split() if len(p) > 1 and p not in _PALABRAS_VACIAS}
+
+
+def _misma_palabra(a, b):
+    """Igual, o una es abreviatura de la otra («cant» / «cantidad», «unid» / «unidad»)."""
+    if a == b:
+        return True
+    corta, larga = sorted((a, b), key=len)
+    return len(corta) >= 3 and larga.startswith(corta)
+
+
 def _emparejar_por_nombre(cols_origen, cols_destino):
-    mapa = {}
+    """
+    {columna destino: columna origen o None}, solo cuando el nombre lo deja claro:
+    el mismo nombre, al menos 2 palabras en común, o un nombre de una sola palabra
+    contenida en el otro («Descripción» / «Descripción del bien»). Una palabra suelta
+    compartida entre nombres más largos no basta: esa columna se le pregunta a la IA.
+    Cada columna del origen se usa una sola vez; primero se asignan las más claras.
+    """
+    candidatas = []
     for col_dest in cols_destino:
-        nd = set(_normalizar(col_dest).split())
-        mejor, mejor_score = None, None
+        nd = _palabras_columna(col_dest)
         for col_ori in cols_origen:
-            no = set(_normalizar(col_ori).split())
-            comunes = nd & no
-            if not comunes:
-                continue
-            score = (_normalizar(col_ori) == _normalizar(col_dest), len(comunes), -len(no - nd))
-            if mejor_score is None or score > mejor_score:
-                mejor, mejor_score = col_ori, score
-        mapa[col_dest] = mejor
+            no = _palabras_columna(col_ori)
+            exacta = bool(_normalizar(col_dest)) and _normalizar(col_ori) == _normalizar(col_dest)
+            comunes = sum(1 for p in nd if any(_misma_palabra(p, q) for q in no))
+            clara = exacta or comunes >= 2 or (comunes >= 1 and min(len(nd), len(no)) == 1)
+            if clara:
+                candidatas.append(((exacta, comunes, -len(no ^ nd)), col_dest, col_ori))
+    mapa = dict.fromkeys(cols_destino)
+    usadas = set()
+    for _, col_dest, col_ori in sorted(candidatas, key=lambda c: c[0], reverse=True):
+        if mapa[col_dest] is None and col_ori not in usadas:
+            mapa[col_dest] = col_ori
+            usadas.add(col_ori)
     return mapa
 
 

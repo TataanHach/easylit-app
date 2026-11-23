@@ -105,6 +105,6 @@ GitHub Actions ([ci.yml](.github/workflows/ci.yml)) corre en cada push y pull
 request a `main`:
 
 - **Backend:** revisa que no falten migraciones, ejecuta `manage.py check` y
-  corre las 78 pruebas automáticas. Usa el modo simulado de la IA, así que no
+  corre las 80 pruebas automáticas. Usa el modo simulado de la IA, así que no
   llama a Gemini ni a otros servicios externos.
 - **Frontend:** revisa los tipos de TypeScript y compila la aplicación.
