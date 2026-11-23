@@ -190,8 +190,10 @@ def procesar_transformacion(transformacion_id):
             from .services import generacion
             ruta_plantilla, ruta_origen = ruta_local(t.plantilla.archivo), ruta_local(t.archivo_origen)
             tablas = generacion.emparejamiento_tablas(ruta_plantilla, ruta_origen, t.plantilla.tipos_hoja)
-            # Las columnas que no calzaron por nombre se le preguntan a la IA.
-            sin_pareja = {h: i["sin_pareja"] for h, i in tablas.items() if i["sin_pareja"]}
+            # Las columnas que no calzaron por nombre (o solo por una palabra) se le
+            # preguntan a la IA.
+            sin_pareja = {h: i["sin_pareja"] + i["parecidas"] for h, i in tablas.items()
+                          if i["sin_pareja"] or i["parecidas"]}
             if sin_pareja:
                 try:
                     pedido = generacion.pedido_ia_columnas(

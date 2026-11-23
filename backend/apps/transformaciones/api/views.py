@@ -431,7 +431,8 @@ class TransformacionViewSet(viewsets.ModelViewSet):
                     datos, cols_dest, calcular, ia_tablas, columnas_ia, columnas_usuario)
                 # De dónde sale cada columna, para que el usuario lo vea y lo cambie.
                 parejas = [
-                    {"destino": d, "origen": o, "fuente": f,
+                    # «parecido» se muestra como «nombre»: en la pantalla es lo mismo.
+                    {"destino": d, "origen": o, "fuente": "nombre" if f == "parecido" else f,
                      "motivo": (sugeridas_ia.get(d) or {}).get("motivo", "") if f == "ia" else ""}
                     for d, (o, f) in generacion.parejas_columnas(
                         datos["encabezados"], cols_dest, columnas_ia, columnas_usuario).items()

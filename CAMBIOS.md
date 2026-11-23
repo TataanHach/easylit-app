@@ -45,6 +45,20 @@ anota qué cambió. La versión más nueva va primero.
   IA siguen marcadas con ✦ en la vista previa para revisarlas.
 - 1 prueba automática nueva (81 en total).
 
+**Campos con la etiqueta en una celda combinada**
+- Si la etiqueta de un campo estaba en una celda combinada (ej. «ID Licitación»
+  en A5:B5), el valor se escribía en B5, que es parte de la etiqueta, y la
+  borraba. Ahora va en la primera celda después de la combinación (C5), y el
+  editor de campos muestra esa celda.
+- 1 prueba automática nueva (82 en total).
+
+**Una sola palabra en común ya no le gana a la IA**
+- «PRODUCTO» se emparejaba por nombre con «Código Producto» (el código era
+  «SKU»). Ahora una pareja de una sola palabra en común se le pregunta igual a la
+  IA y solo se usa si la IA no sugiere nada, como último recurso y con menos
+  confianza (60). Las parejas claras por nombre no cambian.
+- 1 prueba automática nueva (83 en total).
+
 ## v2.7 · 23 de noviembre de 2026
 
 **Aviso de confianza baja al generar**

@@ -269,16 +269,48 @@ class ColumnasConIATest(TestCase):
 
     def test_por_nombre_abreviaturas_y_una_columna_para_un_solo_destino(self):
         from apps.transformaciones.services import generacion
-        mapa = generacion._emparejar_por_nombre(
-            ["N°", "Descripción del bien", "Unid.", "Cant.", "P. Unitario", "Precio total"],
-            ["Ítem", "Descripción", "Unidad", "Cantidad", "Precio unitario", "Precio", "Total"])
+        origen = ["N°", "Descripción del bien", "Unid.", "Cant.", "P. Unitario", "Precio total"]
+        destino = ["Ítem", "Descripción", "Unidad", "Cantidad", "Precio unitario", "Precio", "Total"]
+        mapa = generacion._emparejar_por_nombre(origen, destino)
         self.assertEqual(mapa["Unidad"], "Unid.")
         self.assertEqual(mapa["Cantidad"], "Cant.")
         self.assertEqual(mapa["Descripción"], "Descripción del bien")
-        self.assertEqual(mapa["Precio unitario"], "P. Unitario")
+        self.assertIsNone(mapa["Precio unitario"])           # una sola palabra en común: primero la IA
         self.assertIsNone(mapa["Ítem"])
-        usadas = [o for o in mapa.values() if o]
+        # Sin sugerencia de la IA, la de una palabra en común queda como último recurso.
+        parejas = generacion.parejas_columnas(origen, destino)
+        self.assertEqual(parejas["Precio unitario"], ("P. Unitario", "parecido"))
+        usadas = [o for o, _ in parejas.values() if o]
         self.assertEqual(len(usadas), len(set(usadas)))                # ninguna columna del origen se repite
+
+    def test_una_palabra_en_comun_no_le_gana_a_la_ia(self):
+        # Caso real: «PRODUCTO» se iba a «Código Producto» (el código es «SKU»).
+        from apps.transformaciones.services import generacion
+        origen = ["SKU", "PRODUCTO", "MARCA"]
+        destino = ["Código Producto", "Nombre Genérico", "Marca Ofertada"]
+        sin_ia = generacion.parejas_columnas(origen, destino)
+        self.assertEqual(sin_ia["Código Producto"], ("PRODUCTO", "parecido"))
+        con_ia = generacion.parejas_columnas(origen, destino,
+                                             {"Código Producto": "SKU", "Nombre Genérico": "PRODUCTO"})
+        self.assertEqual(con_ia["Código Producto"], ("SKU", "ia"))
+        self.assertEqual(con_ia["Nombre Genérico"], ("PRODUCTO", "ia"))
+        self.assertEqual(con_ia["Marca Ofertada"], ("MARCA", "parecido"))   # la IA no dijo nada: último recurso
+
+    def test_etiqueta_en_celda_combinada_no_se_sobrescribe(self):
+        # Caso real: «ID Licitación» en A5:B5 y la casilla en C5:G5. Antes se
+        # escribía en B5, que es parte de la etiqueta, y el valor la borraba.
+        from types import SimpleNamespace
+        from openpyxl import Workbook
+        from apps.transformaciones.services import generacion
+        ws = Workbook().active
+        ws["A5"] = "ID Licitación"
+        ws.merge_cells("A5:B5")
+        ws.merge_cells("C5:G5")
+        ws["A6"] = "Comuna"                                    # sin combinar: la de al lado
+        campo = SimpleNamespace(nombre="ID Licitación", etiqueta_busqueda="", celda_destino="", hoja_destino="")
+        self.assertEqual(generacion.ubicar_campo(ws, campo, tabla=None), ((5, 3), ""))
+        campo.nombre = "Comuna"
+        self.assertEqual(generacion.ubicar_campo(ws, campo, tabla=None), ((6, 2), ""))
 
     def test_confianza_de_tablas_usa_la_de_la_ia(self):
         # Antes la de la IA se cortaba en 60: con todo bien emparejado salía 61%.

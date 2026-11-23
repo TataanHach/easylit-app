@@ -449,9 +449,11 @@ def columnas_usuario_hoja(resultado_limpieza, hoja):
 def parejas_columnas(cols_origen, cols_destino, sugeridas=None, usuario=None):
     """
     De qué columna del origen sale cada columna destino, y por qué:
-    {destino: (origen o None, fuente)}, con fuente "usuario", "nombre", "ia" o "ninguna".
-    Manda lo que eligió el usuario (también "" = dejarla vacía); si no eligió,
-    la del mismo nombre o parecido; si no hay, la que sugirió la IA.
+    {destino: (origen o None, fuente)}, con fuente "usuario", "nombre", "ia",
+    "parecido" o "ninguna". Manda lo que eligió el usuario (también "" = dejarla
+    vacía); si no eligió, la de nombre claramente igual; si no hay, la que sugirió
+    la IA; y como último recurso, una de nombre parecido («Código Producto» /
+    «PRODUCTO») que no esté ocupada por otra columna.
     """
     por_nombre = _emparejar_por_nombre(cols_origen, cols_destino)
     usuario, sugeridas = usuario or {}, sugeridas or {}
@@ -465,6 +467,13 @@ def parejas_columnas(cols_origen, cols_destino, sugeridas=None, usuario=None):
             parejas[d] = (sugeridas[d], "ia")
         else:
             parejas[d] = (None, "ninguna")
+    # Último recurso: una sola palabra en común. Se le pregunta antes a la IA
+    # (emparejamiento_tablas la manda en «parecidas»), porque puede engañar.
+    pendientes = [d for d in cols_destino if parejas[d] == (None, "ninguna")]
+    ocupadas = {o for o, _ in parejas.values() if o}
+    for d, o in _emparejar_por_nombre(cols_origen, pendientes, debiles=True, ocupadas=ocupadas).items():
+        if o:
+            parejas[d] = (o, "parecido")
     return parejas
 
 
@@ -492,13 +501,15 @@ def _misma_palabra(a, b):
     return len(corta) >= 3 and larga.startswith(corta)
 
 
-def _emparejar_por_nombre(cols_origen, cols_destino):
+def _emparejar_por_nombre(cols_origen, cols_destino, debiles=False, ocupadas=()):
     """
     {columna destino: columna origen o None}, solo cuando el nombre lo deja claro:
-    el mismo nombre, al menos 2 palabras en común, o un nombre de una sola palabra
-    contenida en el otro («Descripción» / «Descripción del bien»). Una palabra suelta
-    compartida entre nombres más largos no basta: esa columna se le pregunta a la IA.
-    Cada columna del origen se usa una sola vez; primero se asignan las más claras.
+    el mismo nombre, al menos 2 palabras en común, o todas las palabras del destino
+    están en el origen («Descripción» / «Descripción del bien», «Cantidad» / «Cant.»).
+    Con `debiles=True` da, en cambio, las de una sola palabra en común entre un nombre
+    de una palabra y otro más largo («Código Producto» / «PRODUCTO»): pueden engañar,
+    así que solo se usan si la IA no sugirió nada. Cada columna del origen se usa una
+    sola vez (y nunca las de `ocupadas`); primero se asignan las más claras.
     """
     candidatas = []
     for col_dest in cols_destino:
@@ -507,11 +518,12 @@ def _emparejar_por_nombre(cols_origen, cols_destino):
             no = _palabras_columna(col_ori)
             exacta = bool(_normalizar(col_dest)) and _normalizar(col_ori) == _normalizar(col_dest)
             comunes = sum(1 for p in nd if any(_misma_palabra(p, q) for q in no))
-            clara = exacta or comunes >= 2 or (comunes >= 1 and min(len(nd), len(no)) == 1)
-            if clara:
+            clara = exacta or comunes >= 2 or (bool(nd) and comunes == len(nd))
+            debil = not clara and comunes >= 1 and min(len(nd), len(no)) == 1
+            if (debil if debiles else clara):
                 candidatas.append(((exacta, comunes, -len(no ^ nd)), col_dest, col_ori))
     mapa = dict.fromkeys(cols_destino)
-    usadas = set()
+    usadas = set(ocupadas)
     for _, col_dest, col_ori in sorted(candidatas, key=lambda c: c[0], reverse=True):
         if mapa[col_dest] is None and col_ori not in usadas:
             mapa[col_dest] = col_ori
@@ -815,6 +827,19 @@ def _volcar_itemizado(ws_destino, datos_origen, calcular_totales=False, valores_
 # BÚSQUEDA DE CASILLA Y ESCRITURA (formularios verticales)
 # ─────────────────────────────────────────────────────────────
 
+def _a_la_derecha(ws, celda):
+    """
+    (fila, columna) de la casilla del valor: la primera celda a la derecha de la
+    etiqueta. Si la etiqueta está en una celda combinada (ej. A5:B5), es la que
+    sigue a la combinación (C5): B5 es parte de la etiqueta y escribir ahí la
+    borraba, porque una celda combinada se escribe en su esquina (A5).
+    """
+    for rango in ws.merged_cells.ranges:
+        if celda.coordinate in rango:
+            return celda.row, rango.max_col + 1
+    return celda.row, celda.column + 1
+
+
 def _buscar_etiqueta(ws, texto):
     RELLENO = {"de", "del", "la", "el", "los", "las", "y", "o", "a"}
 
@@ -837,7 +862,7 @@ def _buscar_etiqueta(ws, texto):
             if not valor_norm:
                 continue
             if valor_norm == objetivo_norm:
-                return celda.row, celda.column + 1
+                return _a_la_derecha(ws, celda)
             valor_clave = palabras_clave(celda.value)
             comunes = objetivo_clave & valor_clave
             # Al menos la mitad de las palabras de la etiqueta: con una sola en
@@ -848,7 +873,7 @@ def _buscar_etiqueta(ws, texto):
                     puntaje += 10
                 if puntaje > mejor_puntaje:
                     mejor_puntaje = puntaje
-                    mejor_pos = (celda.row, celda.column + 1)
+                    mejor_pos = _a_la_derecha(ws, celda)
 
     return mejor_pos
 
@@ -1089,10 +1114,11 @@ def emparejamiento_tablas(ruta_plantilla, ruta_origen, tipos_hoja=None, columnas
                           columnas_usuario=None):
     """
     Qué tan bien se emparejan las columnas de cada tabla de la plantilla con las
-    del origen. Por hoja: {columnas, emparejadas, sin_pareja, vacias_elegidas,
-    por_ia, puntajes}. Cada puntaje es 100 (mismo nombre o elegida por el
-    usuario), 90 (nombre parecido: con _emparejar_por_nombre solo pasa si es
-    claro), la confianza que dio la IA (solo se aceptan las de 50 o más; en la
+    del origen. Por hoja: {columnas, emparejadas, sin_pareja, parecidas,
+    vacias_elegidas, por_ia, puntajes}. `parecidas` son las emparejadas solo por una
+    palabra en común: igual se le preguntan a la IA, que manda si sugiere otra. Cada puntaje es 100 (mismo nombre o elegida por el
+    usuario), 90 (nombre claramente igual), 60 (una sola palabra en común, sin
+    sugerencia de la IA), la confianza que dio la IA (solo se aceptan las de 50 o más; en la
     vista previa van marcadas con ✦ para revisarlas) o 0 (sin pareja). `por_ia` lista las parejas que sugirió la IA:
     [{destino, origen, motivo}]; `vacias_elegidas`, las que el usuario decidió
     dejar vacías (no son un aviso).
@@ -1123,12 +1149,15 @@ def emparejamiento_tablas(ruta_plantilla, ruta_origen, tipos_hoja=None, columnas
                 return 0
             if fuente == "ia":
                 return min(int(sugeridas[c].get("confianza") or 0), 100)
+            if fuente == "parecido":
+                return 60
             return 100 if _normalizar(origen) == _normalizar(c) else 90
 
         resultado[nombre] = {
             "columnas": len(cols),
             "emparejadas": sum(1 for c in cols if parejas[c][0]),
             "sin_pareja": [c for c in cols if parejas[c] == (None, "ninguna")],
+            "parecidas": [c for c in cols if parejas[c][1] == "parecido"],
             "vacias_elegidas": [c for c in cols if parejas[c] == (None, "usuario")],
             "por_ia": [{"destino": c, "origen": parejas[c][0], "motivo": sugeridas[c].get("motivo", "")}
                        for c in cols if parejas[c][1] == "ia"],
