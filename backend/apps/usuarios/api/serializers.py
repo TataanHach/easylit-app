@@ -12,6 +12,7 @@ from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from apps.common.textos import problema_caracteres, problema_correo
 from apps.organizaciones.models import Organizacion
 from apps.usuarios.models import Invitacion, Rol, Usuario, codigo_valido
 from apps.usuarios.validadores import normalizar_rut
@@ -98,8 +99,19 @@ class InvitarUsuarioSerializer(serializers.Serializer):
 
     def validate_email(self, value):
         value = value.lower()
+        # EmailField acepta símbolos raros antes de la @ (# $ " …); aquí no.
+        problema = problema_correo(value)
+        if problema:
+            raise serializers.ValidationError(problema)
         if Usuario.objects.filter(email=value).exists():
             raise serializers.ValidationError("Ya existe un usuario con este correo.")
+        return value
+
+    def validate_nombre_completo(self, value):
+        value = " ".join(value.split())
+        problema = problema_caracteres(value, persona=True)
+        if problema:
+            raise serializers.ValidationError(problema)
         return value
 
     def validate_rut(self, value):

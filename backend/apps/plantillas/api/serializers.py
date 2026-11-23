@@ -8,8 +8,16 @@ llamada, que es lo que necesita el editor de mapeo.
 from rest_framework import serializers
 
 from apps.common.archivos import validar_planilla
-from apps.common.textos import normalizar_mandante
+from apps.common.textos import normalizar_mandante, problema_caracteres
 from apps.plantillas.models import CampoPlantilla, Plantilla
+
+
+def _sin_caracteres_raros(valor):
+    """Rechaza símbolos como " # $ @ en los textos de la plantilla."""
+    problema = problema_caracteres(valor)
+    if problema:
+        raise serializers.ValidationError(problema)
+    return valor
 
 
 class CampoPlantillaSerializer(serializers.ModelSerializer):
@@ -66,6 +74,12 @@ class PlantillaSerializer(serializers.ModelSerializer):
     def validate_archivo(self, archivo):
         return validar_planilla(archivo)
 
+    def validate_nombre(self, nombre):
+        return _sin_caracteres_raros(nombre)
+
+    def validate_sector(self, sector):
+        return _sin_caracteres_raros(sector)
+
     def validate_mandante(self, mandante):
         # Toda plantilla pertenece a un mandante: es lo que agrupa y filtra las plantillas.
         mandante = normalizar_mandante(mandante)
@@ -73,7 +87,7 @@ class PlantillaSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "Falta el mandante. Escribe para quién es este formato (ej. MINEDUC, Codelco)."
             )
-        return mandante
+        return _sin_caracteres_raros(mandante)
 
     def validate(self, attrs):
         # Al crear, el mandante es obligatorio aunque no se haya enviado el campo.

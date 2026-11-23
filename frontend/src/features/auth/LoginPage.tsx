@@ -19,6 +19,7 @@ import { useConfiguracion } from "@/lib/configuracion";
 import { firebaseActivo } from "@/lib/firebase";
 import { describirError } from "@/lib/errores";
 import { problemaCorreo } from "@/lib/validar";
+import { VERSION_TEXTO } from "@/lib/version";
 
 /** Lo que ofrece EasyLit, en el panel azul del login. */
 const PUNTOS = [
@@ -104,7 +105,7 @@ export default function LoginPage() {
           <span className="auth-logo"><img src="/favicon-192.png" alt="" /></span>
           <div>
             <div className="auth-brand-name">EasyLit</div>
-            <div className="auth-brand-sub">v2.5 · Beta</div>
+            <div className="auth-brand-sub">{VERSION_TEXTO}</div>
           </div>
         </div>
         <div className="auth-brand-mid">

@@ -16,6 +16,7 @@ import { limpiarTexto, LIMITES } from "@/lib/limites";
 import { requisitosContrasena } from "@/lib/contrasena";
 import { useConfiguracion } from "@/lib/configuracion";
 import { describirError } from "@/lib/errores";
+import { VERSION_TEXTO } from "@/lib/version";
 
 export default function CrearContrasenaPage() {
   const cfg = useConfiguracion();
@@ -77,7 +78,7 @@ export default function CrearContrasenaPage() {
           <span className="auth-logo"><img src="/favicon-192.png" alt="" /></span>
           <div>
             <div className="auth-brand-name">EasyLit</div>
-            <div className="auth-brand-sub">v2.5 · Beta</div>
+            <div className="auth-brand-sub">{VERSION_TEXTO}</div>
           </div>
         </div>
         <div className="auth-brand-mid">

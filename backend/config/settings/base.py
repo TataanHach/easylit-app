@@ -50,6 +50,8 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    # Errores «no encontrado» en español, sin nombres internos (apps/common/excepciones.py).
+    "EXCEPTION_HANDLER": "apps.common.excepciones.manejar_excepcion",
     # Límites de intentos de los endpoints públicos (apps/usuarios/api/limites.py).
     # Formato "cantidad/periodo" (second, minute, hour, day).
     "DEFAULT_THROTTLE_RATES": {

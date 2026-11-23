@@ -150,6 +150,26 @@ class EquipoTest(TestCase):
         self.assertIn("rut", r.data)
         self.assertFalse(Usuario.objects.filter(email="trab@test.cl").exists())
 
+    def test_simbolos_en_nombre_o_correo_se_rechazan(self):
+        for campo, valor in (
+            ("nombre_completo", "Juan #Pérez"),
+            ("nombre_completo", "Ana 2"),
+            ("email", "ju$an@test.cl"),
+            ("email", '"juan"@test.cl'),
+        ):
+            datos = {"email": "trab@test.cl", "nombre_completo": "Trabajador",
+                     "rut": "11.111.111-1", campo: valor}
+            r = self.c.post("/api/auth/invitar/", datos, format="json")
+            self.assertEqual(r.status_code, 400, valor)
+            self.assertIn(campo, r.data)
+        self.assertFalse(Usuario.objects.filter(email="trab@test.cl").exists())
+
+    def test_nombre_con_tildes_apostrofo_y_guion_se_acepta(self):
+        r = self.c.post("/api/auth/invitar/", {
+            "email": "maria.jose+obra@test.cl", "nombre_completo": "María José O'Ryan Pérez-Cotapos",
+            "rut": "22.222.222-2"}, format="json")
+        self.assertEqual(r.status_code, 201, r.data)
+
     def test_rut_repetido_se_rechaza(self):
         self.assertEqual(self._invitar().status_code, 201)
         r = self._invitar(email="otro@test.cl", rut="11111111-1")

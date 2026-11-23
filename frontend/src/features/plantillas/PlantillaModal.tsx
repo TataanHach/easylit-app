@@ -13,6 +13,7 @@ import { plantillaService } from "./plantillaService";
 import { LIMITES, limpiarTexto } from "@/lib/limites";
 import { ACEPTA_ARCHIVO, problemaArchivo, useArrastrar } from "@/lib/archivos";
 import { describirError } from "@/lib/errores";
+import { problemaCaracteres } from "@/lib/validar";
 import AyudaPlantilla from "./AyudaPlantilla";
 import type { Plantilla } from "@/types";
 
@@ -54,6 +55,11 @@ export default function PlantillaModal({ plantilla, onCerrar, onGuardado }: Prop
     setNombre(datos.nombre); setMandante(datos.mandante); setSector(datos.sector);
     if (!datos.nombre) { setError("Falta el nombre de la plantilla. Escríbelo para poder guardarla."); return; }
     if (!datos.mandante) { setError("Falta el mandante. Escribe para quién es este formato (ej. MINEDUC, Codelco)."); return; }
+    // Sin símbolos como " # $ @ (el backend aplica la misma regla).
+    const conSimbolos = ([["El nombre", datos.nombre], ["El mandante", datos.mandante], ["El sector", datos.sector]] as const)
+      .map(([campo, valor]) => { const p = problemaCaracteres(valor); return p ? `${campo} ${p}` : ""; })
+      .find(Boolean);
+    if (conSimbolos) { setError(conSimbolos); return; }
     if (!esEdicion && !archivo) { setError("Falta el archivo del formato. Sube el Excel del mandante para crear la plantilla."); return; }
     setGuardando(true);
     let creada: Plantilla | undefined;

@@ -1,8 +1,9 @@
 /**
  * Pantalla de historial.
  *
- * Muestra las transformaciones en una tabla, con el filtro Mías / De mi equipo /
- * Todas. Usa React Query para pedir los datos al backend y manejar los estados
+ * Muestra las transformaciones en una tabla. El gerente tiene las pestañas
+ * Propias / Equipo / Todas; el trabajador solo ve las suyas (el backend aplica
+ * la misma regla, así que no depende de esconder botones). Usa React Query para pedir los datos al backend y manejar los estados
  * de carga y error sin código manual. Cada tab cambia el parámetro `alcance` y
  * React Query vuelve a pedir (con caché por alcance).
  */
@@ -30,6 +31,8 @@ const TABS: { clave: Alcance; label: string; icono: string }[] = [
 
 export default function HistorialPage() {
   const { usuario } = useAuth();
+  // Solo el gerente (y el superadmin) ve las transformaciones de otras personas.
+  const veEquipo = usuario?.rol === "GERENTE" || usuario?.rol === "SUPERADMIN";
   const [alcance, setAlcance] = useState<Alcance>("mine");
   const [pagina, setPagina] = useState(1);
 
@@ -107,9 +110,14 @@ export default function HistorialPage() {
     <>
       <div className="page-header">
         <h1>Historial de transformaciones</h1>
-        <p>Licitaciones procesadas con la plataforma. Cada una conserva su bitácora.</p>
+        <p>
+          {veEquipo
+            ? "Licitaciones procesadas por ti y tu equipo. Cada una conserva su bitácora."
+            : "Tus licitaciones procesadas. Cada una conserva su bitácora."}
+        </p>
       </div>
 
+      {veEquipo && (
       <div className="scope-tabs" role="tablist">
         {TABS.map((t) => (
           <button
@@ -121,6 +129,7 @@ export default function HistorialPage() {
           </button>
         ))}
       </div>
+      )}
 
       <div className="panel">
         <div className="panel-head">
@@ -139,6 +148,7 @@ export default function HistorialPage() {
 
         {data && data.length > 0 && (
           <div className="filtros">
+            {veEquipo && (
             <label className="filtro">
               <span>Autor</span>
               <select value={filtroAutor} onChange={(e) => setFiltroAutor(e.target.value)}>
@@ -146,6 +156,7 @@ export default function HistorialPage() {
                 {autores.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
               </select>
             </label>
+            )}
             <label className="filtro">
               <span>Empresa</span>
               <select value={filtroEmpresa} onChange={(e) => setFiltroEmpresa(e.target.value)}>

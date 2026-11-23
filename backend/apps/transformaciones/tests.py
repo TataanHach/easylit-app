@@ -89,6 +89,48 @@ class AlcanceYAislamientoTest(TestCase):
             self.assertNotIn("org_b.xlsx", nombres,
                 f"FUGA DE DATOS: la org A vio datos de la org B con alcance={alcance}")
 
+    def test_trabajador_solo_ve_las_suyas_en_cualquier_pestana(self):
+        self._login("trab_a@a.cl")
+        for alcance in ("mine", "all"):
+            r = self.c.get(f"/api/transformaciones/?alcance={alcance}")
+            self.assertEqual([t["nombre_origen"] for t in r.data], ["trab_a.xlsx"], alcance)
+        r = self.c.get("/api/transformaciones/?alcance=team")
+        self.assertEqual(r.data, [])
+
+    def test_trabajador_no_puede_abrir_ni_tocar_la_de_otro(self):
+        ajena = Transformacion.objects.filter(autor=self.gerente_a).first()
+        self._login("trab_a@a.cl")
+        for metodo, url in (
+            ("get", f"/api/transformaciones/{ajena.id}/"),
+            ("get", f"/api/transformaciones/{ajena.id}/vista_previa/"),
+            ("get", f"/api/transformaciones/{ajena.id}/descargar/"),
+            ("delete", f"/api/transformaciones/{ajena.id}/"),
+        ):
+            r = getattr(self.c, metodo)(url)
+            self.assertEqual(r.status_code, 403, url)
+            self.assertIn("No tienes permiso para ver esta transformación", str(r.data["detail"]))
+        self.assertTrue(Transformacion.objects.filter(id=ajena.id).exists())
+
+    def test_gerente_abre_y_elimina_la_de_su_colaborador(self):
+        de_trabajador = Transformacion.objects.get(autor=self.trab_a)
+        self._login("ger_a@a.cl")
+        r = self.c.get(f"/api/transformaciones/{de_trabajador.id}/")
+        self.assertEqual(r.status_code, 200)
+        r = self.c.delete(f"/api/transformaciones/{de_trabajador.id}/")
+        self.assertEqual(r.status_code, 204)
+
+    def test_otra_organizacion_o_inexistente_da_no_encontrada_en_espanol(self):
+        de_org_b = Transformacion.objects.get(organizacion=self.org_b)
+        self._login("ger_a@a.cl")
+        for pk in (de_org_b.id, "no-es-un-id"):
+            r = self.c.get(f"/api/transformaciones/{pk}/")
+            self.assertEqual(r.status_code, 404)
+            self.assertIn("no existe o ya fue eliminada", str(r.data["detail"]))
+        # Cualquier otro «no encontrado» también sale en español, sin «matches the given query».
+        r = self.c.get(f"/api/plantillas/{self.plant_b.id}/")
+        self.assertEqual(r.status_code, 404)
+        self.assertIn("No se encontró lo que buscas", str(r.data["detail"]))
+
     def test_plantillas_aisladas(self):
         # El gerente A solo ve su plantilla, no la de la org B.
         self._login("ger_a@a.cl")
@@ -233,6 +275,31 @@ class ArchivosYMandanteTest(TestCase):
         r = self._crear(SimpleUploadedFile("f.xlsx", self._xlsx()))
         self.assertEqual(r.status_code, 201, r.data)
         self.assertEqual(Plantilla.objects.get(id=r.data["id"]).mandante, "CODELCO NORTE")
+
+    def test_simbolos_en_nombre_mandante_o_sector_se_rechazan(self):
+        casos = (
+            {"nombre": "Formato #1"},
+            {"mandante": "Codelco $"},
+            {"sector": 'Minería "norte"'},
+            {"nombre": "correo@raro"},
+        )
+        for cambio in casos:
+            datos = {"nombre": "Formato", "mandante": "Codelco", "sector": "Minería",
+                     "archivo": SimpleUploadedFile("f.xlsx", self._xlsx()), **cambio}
+            r = self.c.post("/api/plantillas/", datos, format="multipart")
+            self.assertEqual(r.status_code, 400, cambio)
+            campo = next(iter(cambio))
+            self.assertIn("caracteres que no se aceptan", str(r.data[campo]))
+        self.assertFalse(Plantilla.objects.exists())
+
+    def test_signos_comunes_se_aceptan(self):
+        r = self.c.post("/api/plantillas/", {
+            "nombre": "Formulario N° 2 (oferta económica)",
+            "mandante": "I. Municipalidad de Peñalolén",
+            "sector": "Obras públicas / Vialidad & Riego",
+            "archivo": SimpleUploadedFile("f.xlsx", self._xlsx()),
+        }, format="multipart")
+        self.assertEqual(r.status_code, 201, r.data)
 
     def test_sin_mandante_se_rechaza(self):
         r = self._crear(SimpleUploadedFile("f.xlsx", self._xlsx()), mandante=None)

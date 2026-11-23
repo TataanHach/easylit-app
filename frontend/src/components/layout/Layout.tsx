@@ -9,6 +9,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/features/auth/AuthContext";
 import logo from "@/assets/logo.png";
 import Footer from "./Footer";
+import { VERSION_TEXTO } from "@/lib/version";
 import "./layout.css";
 
 export default function Layout() {
@@ -46,7 +47,7 @@ export default function Layout() {
         <div className="sidebar-logo">
           <div>
             <img className="logo-img" src={logo} alt="EasyLit" width={600} height={162} />
-            <div className="logo-sub">v2.5 · Beta</div>
+            <div className="logo-sub">{VERSION_TEXTO}</div>
           </div>
           {/* Solo en pantalla angosta: el menú tapa el botón ☰, así que lleva su propio cierre. */}
           <button className="nav-cerrar" onClick={cerrarNav} aria-label="Cerrar menú">

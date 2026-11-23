@@ -1,4 +1,4 @@
-# Estructura del proyecto · EasyLit v2.5
+# Estructura del proyecto · EasyLit v2.6
 
 Mapa del repositorio: qué hay en cada carpeta y en qué servicio de Render corre.
 La visión general está en [README.md](README.md) y los pasos para desplegar, en
@@ -12,6 +12,7 @@ easylit-app/
 ├── README.md                      visión general, arquitectura, seguridad
 ├── DESPLIEGUE.md                  guía de despliegue paso a paso
 ├── ESTRUCTURA.md                  este archivo
+├── CAMBIOS.md                     registro de versiones (qué cambió en cada una)
 ├── .github/workflows/ci.yml       pruebas y compilación en cada push a main
 │
 ├── backend/                       Django + DRF + Celery → servicio easylit-api
@@ -65,7 +66,7 @@ easylit-app/
         │   ├── transformaciones/  transformar, revisar el mapeo, vista previa
         │   ├── historial/         tabla con filtros
         │   └── equipo/            invitar colaboradores (solo gerente)
-        ├── lib/                   Firebase, RUT, errores, límites, soporte
+        ├── lib/                   Firebase, RUT, errores, límites, soporte, versión
         ├── types/index.ts         tipos en espejo con la API
         └── styles/                tokens.css y estilos globales
 ```
@@ -104,6 +105,6 @@ GitHub Actions ([ci.yml](.github/workflows/ci.yml)) corre en cada push y pull
 request a `main`:
 
 - **Backend:** revisa que no falten migraciones, ejecuta `manage.py check` y
-  corre las 64 pruebas automáticas. Usa el modo simulado de la IA, así que no
+  corre las 72 pruebas automáticas. Usa el modo simulado de la IA, así que no
   llama a Gemini ni a otros servicios externos.
 - **Frontend:** revisa los tipos de TypeScript y compila la aplicación.

@@ -12,7 +12,8 @@ La IA solo sugiere qué columna del archivo de origen va a cada campo de la
 plantilla. Los datos los lee y limpia **pandas** con reglas fijas y los escribe
 **openpyxl** en la plantilla. Los montos y cantidades nunca se envían a la IA.
 
-Versión **2.5 · Beta**, desplegada en **Render**.
+Versión **2.6 · Beta**, desplegada en **Render**. Los cambios de cada versión
+están en [CAMBIOS.md](CAMBIOS.md).
 
 Proyecto de Título — INACAP, Informática y Telecomunicaciones (TIHI84).
 Equipo: Rocío Muñoz Pérez, Ernesto Quintana Saldías y Sebastián Shepherd Pérez.
@@ -52,7 +53,8 @@ No se publican en este repositorio.
   «Limpiar con IA».
 - **Generar y descargar** el Excel final con el formato del mandante.
 - **Historial:** filtros por empresa, estado y fechas; ver, descargar o eliminar;
-  tiempo de proceso y confianza promedio.
+  tiempo de proceso y confianza promedio. El trabajador ve solo sus
+  transformaciones; el gerente ve también las de sus colaboradores.
 - **Soporte:** una burbuja «¿Necesitas soporte?» en todas las pantallas abre los
   canales de contacto (WhatsApp y correo) con un mensaje inicial ya escrito.
 - **Footer** con los términos y condiciones, accesos a las secciones y el correo
@@ -102,6 +104,7 @@ Navegador ──HTTPS──▶ easylit-web   (React + Vite, sitio estático en R
 easylit-app/
 ├── render.yaml              servicios de Render (Blueprint)
 ├── DESPLIEGUE.md            guía de despliegue paso a paso
+├── CAMBIOS.md               registro de versiones
 ├── .github/workflows/ci.yml integración continua
 ├── backend/
 │   ├── build.sh, start.sh   scripts que usa Render (build y arranque)
@@ -143,15 +146,18 @@ BORRADOR → LIMPIEZA → MAPEO_PROPUESTO → EN_REVISION → APROBADO → GENER
 ## Roles
 
 - **Superadmin:** administra el sistema y las organizaciones (panel `/admin/`).
-- **Gerente:** administra su organización e invita a sus colaboradores.
-- **Trabajador:** crea plantillas y transformaciones, y ve las de su equipo.
+- **Gerente:** administra su organización, invita a sus colaboradores y ve,
+  descarga o elimina las transformaciones de todo su equipo.
+- **Trabajador:** crea plantillas y transformaciones, y solo ve las suyas.
 
 Cada organización solo ve sus propios datos.
 
 ## Seguridad
 
 - Autenticación con Firebase; la API exige sesión en todas las rutas.
-- Control de acceso por rol y por organización: nadie ve datos de otra empresa.
+- Control de acceso por rol y por organización: nadie ve datos de otra empresa,
+  y un trabajador no puede abrir la transformación de otra persona (la API
+  responde «No tienes permiso…», aunque se escriba la dirección a mano).
 - **Códigos de invitación** de 8 caracteres y un solo uso. En la base solo se
   guarda su huella (HMAC-SHA256), nunca el código, y no viajan dentro de enlaces.
 - **Límites de intentos** en los accesos públicos (respuesta 429 con un aviso):
@@ -165,6 +171,9 @@ Cada organización solo ve sus propios datos.
 - Contraseñas con hash (PBKDF2). Ninguna clave ni contraseña está en el código.
 - Validación de archivos por contenido real, no solo por extensión, y límite de
   peso.
+- Validación de textos: el nombre de la plantilla, el mandante, el sector y los
+  datos del colaborador invitado no aceptan símbolos como `" # $ @` (solo el
+  correo lleva @). La regla se aplica en la pantalla y en la API.
 - HTTPS en todos los servicios publicados.
 - Los montos se reemplazan por `<número oculto>` antes de consultar a Gemini.
 - Datos tratados conforme a la Ley N° 19.628; el detalle está en los términos y
@@ -180,7 +189,9 @@ cosas:
 - invitaciones: formato del código, que no quede legible en la base y que sirva
   una sola vez;
 - límites de intentos en crear contraseña, revisar correo y login;
-- aislamiento de datos entre organizaciones;
+- aislamiento de datos entre organizaciones, y que un trabajador no pueda abrir
+  ni borrar la transformación de otra persona;
+- rechazo de símbolos no permitidos en plantillas e invitaciones;
 - rechazo de archivos inválidos o de más de 20 MB;
 - que los montos nunca se envíen a la IA;
 - que la elección del usuario mande sobre la sugerencia de la IA;

@@ -4,17 +4,21 @@ Vistas de transformaciones.
 Dos reglas de oro que se aplican en TODAS las consultas:
 
   1. Aislamiento por organización: un usuario solo ve datos de SU organización.
-  2. Alcance por autor: el parámetro ?alcance= filtra Mías / Equipo / Todas.
+  2. Por rol: el trabajador solo ve las suyas; el gerente, las de toda su
+     organización (ver `transformaciones_visibles`). En la lista del historial,
+     el parámetro ?alcance= filtra además Mías / Equipo / Todas.
 """
 import logging
 from datetime import timedelta
 
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
+from django.http import Http404
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.response import Response
 
 from apps.common.archivos import ruta_local
@@ -40,6 +44,21 @@ ESTADOS_EN_PROCESO = (
     EstadoTransformacion.MAPEO_PROPUESTO,
 )
 MINUTOS_SIN_AVANCE = 20
+
+
+def transformaciones_visibles(usuario):
+    """
+    Transformaciones que el usuario puede ver y abrir:
+      - superadmin: todas;
+      - gerente: todas las de su organización (las suyas y las de sus colaboradores);
+      - trabajador: solo las que creó.
+    """
+    if usuario.es_superadmin:
+        return Transformacion.objects.all()
+    qs = Transformacion.objects.filter(organizacion=usuario.organizacion)
+    if not usuario.es_gerente:
+        qs = qs.filter(autor=usuario)
+    return qs
 
 
 def marcar_colgadas(qs):
@@ -68,27 +87,50 @@ class TransformacionViewSet(viewsets.ModelViewSet):
         return super().list(request, *args, **kwargs)
 
     def retrieve(self, request, *args, **kwargs):
-        marcar_colgadas(self.get_queryset().filter(pk=kwargs.get("pk")))
+        marcar_colgadas(transformaciones_visibles(request.user).filter(pk=self.get_object().pk))
         return super().retrieve(request, *args, **kwargs)
 
     def get_queryset(self):
-        usuario = self.request.user
-        if usuario.es_superadmin:
-            qs = Transformacion.objects.all()
-        else:
-            qs = Transformacion.objects.filter(organizacion=usuario.organizacion)
+        qs = transformaciones_visibles(self.request.user)
 
-        alcance = self.request.query_params.get("alcance", "mine")
-        if alcance == "mine":
-            qs = qs.filter(autor=usuario)
-        elif alcance == "team":
-            qs = qs.exclude(autor=usuario)
+        # Los filtros del historial (pestañas y estado) solo aplican a la lista.
+        # Abrir, revisar, descargar o eliminar una transformación no depende de
+        # la pestaña en que estaba: solo de que el usuario pueda verla.
+        if self.action == "list":
+            usuario = self.request.user
+            alcance = self.request.query_params.get("alcance", "mine")
+            if alcance == "mine":
+                qs = qs.filter(autor=usuario)
+            elif alcance == "team":
+                qs = qs.exclude(autor=usuario)
 
-        estado = self.request.query_params.get("estado")
-        if estado:
-            qs = qs.filter(estado=estado)
+            estado = self.request.query_params.get("estado")
+            if estado:
+                qs = qs.filter(estado=estado)
 
         return qs.select_related("autor", "plantilla")
+
+    def get_object(self):
+        """Como el de DRF, pero dice por qué no se puede abrir: no existe o no es tuya."""
+        try:
+            return super().get_object()
+        except Http404:
+            usuario = self.request.user
+            pk = self.kwargs.get(self.lookup_url_kwarg or self.lookup_field)
+            try:
+                de_su_organizacion = Transformacion.objects.filter(
+                    pk=pk, organizacion=usuario.organizacion,
+                ).exists()
+            except (ValueError, DjangoValidationError):
+                de_su_organizacion = False   # el id ni siquiera tiene formato válido
+            if de_su_organizacion:
+                raise PermissionDenied(
+                    "No tienes permiso para ver esta transformación. Solo pueden abrirla "
+                    "quien la creó y el gerente de tu organización."
+                )
+            raise NotFound(
+                "Esta transformación no existe o ya fue eliminada. Recarga el historial."
+            )
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -736,13 +778,10 @@ class MapeoCampoViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "patch", "head", "options"]
 
     def get_queryset(self):
-        usuario = self.request.user
-        if usuario.es_superadmin:
-            qs = MapeoCampo.objects.all()
-        else:
-            qs = MapeoCampo.objects.filter(
-                transformacion__organizacion=usuario.organizacion
-            )
+        # Mismas reglas que las transformaciones: el trabajador solo toca las suyas.
+        qs = MapeoCampo.objects.filter(
+            transformacion__in=transformaciones_visibles(self.request.user)
+        )
         transformacion_id = self.request.query_params.get("transformacion")
         if transformacion_id:
             qs = qs.filter(transformacion_id=transformacion_id)

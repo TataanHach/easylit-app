@@ -8,6 +8,7 @@ import { equipoService, type CodigoInvitacion } from "./equipoService";
 import { LIMITES, limpiarTexto } from "@/lib/limites";
 import { formatearRut, rutValido } from "@/lib/rut";
 import { describirError } from "@/lib/errores";
+import { problemaCaracteres, problemaCorreoNuevo } from "@/lib/validar";
 
 interface Props {
   onCerrar: () => void;
@@ -31,9 +32,10 @@ export default function InvitarModal({ onCerrar, onInvitado }: Props) {
     };
     setNombre(datos.nombre_completo); setEmail(datos.email);
     if (!datos.nombre_completo) { setError("Falta el nombre. Escribe el nombre y apellido del colaborador."); return; }
-    if (!datos.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(datos.email)) {
-      setError("Falta el correo o no es válido. Escríbelo como nombre@empresa.cl."); return;
-    }
+    const nombreMal = problemaCaracteres(datos.nombre_completo, true);
+    if (nombreMal) { setError(`El nombre ${nombreMal}`); return; }
+    const correoMal = problemaCorreoNuevo(datos.email);
+    if (correoMal) { setError(correoMal); return; }
     if (!datos.rut) { setError("Falta el RUT del colaborador. Escríbelo como 12.345.678-9."); return; }
     if (!rutValido(datos.rut)) { setError("El RUT no es válido: el dígito verificador no corresponde. Revísalo."); return; }
 

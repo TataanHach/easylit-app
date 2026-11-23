@@ -7,6 +7,7 @@ import { NavLink } from "react-router-dom";
 import { useAuth } from "@/features/auth/AuthContext";
 import TerminosModal, { SECCION_TERMINOS } from "@/features/auth/TerminosModal";
 import { SOPORTE_CORREO, enlaceCorreoSoporte } from "@/lib/soporte";
+import { VERSION } from "@/lib/version";
 import logo from "@/assets/logo.png";
 import "./footer.css";
 
@@ -60,7 +61,7 @@ export default function Footer() {
       </div>
 
       <div className="pie-base">
-        © {new Date().getFullYear()} EasyLit | Todos los derechos reservados · Concepción, Chile · v2.5 Beta
+        © {new Date().getFullYear()} EasyLit | Todos los derechos reservados · Concepción, Chile · v{VERSION} Beta
       </div>
 
       {terminos !== undefined && <TerminosModal seccion={terminos} onCerrar={() => setTerminos(undefined)} />}

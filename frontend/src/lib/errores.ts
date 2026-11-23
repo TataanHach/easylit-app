@@ -26,6 +26,7 @@ const CAMPOS: Record<string, string> = {
   sector: "Sector",
   etiqueta_busqueda: "Etiqueta de búsqueda",
   email: "Correo",
+  nombre_completo: "Nombre",
   password: "Contraseña",
   password2: "Confirmar contraseña",
   token: "Código de invitación",
