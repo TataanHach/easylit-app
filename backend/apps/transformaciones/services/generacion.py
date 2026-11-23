@@ -1091,8 +1091,9 @@ def emparejamiento_tablas(ruta_plantilla, ruta_origen, tipos_hoja=None, columnas
     Qué tan bien se emparejan las columnas de cada tabla de la plantilla con las
     del origen. Por hoja: {columnas, emparejadas, sin_pareja, vacias_elegidas,
     por_ia, puntajes}. Cada puntaje es 100 (mismo nombre o elegida por el
-    usuario), 70 (nombre parecido), el de la IA (máximo 60, para que se revise)
-    o 0 (sin pareja). `por_ia` lista las parejas que sugirió la IA:
+    usuario), 90 (nombre parecido: con _emparejar_por_nombre solo pasa si es
+    claro), la confianza que dio la IA (solo se aceptan las de 50 o más; en la
+    vista previa van marcadas con ✦ para revisarlas) o 0 (sin pareja). `por_ia` lista las parejas que sugirió la IA:
     [{destino, origen, motivo}]; `vacias_elegidas`, las que el usuario decidió
     dejar vacías (no son un aviso).
     """
@@ -1121,8 +1122,8 @@ def emparejamiento_tablas(ruta_plantilla, ruta_origen, tipos_hoja=None, columnas
             if not origen:
                 return 0
             if fuente == "ia":
-                return min(int(sugeridas[c].get("confianza") or 0), 60)
-            return 100 if _normalizar(origen) == _normalizar(c) else 70
+                return min(int(sugeridas[c].get("confianza") or 0), 100)
+            return 100 if _normalizar(origen) == _normalizar(c) else 90
 
         resultado[nombre] = {
             "columnas": len(cols),

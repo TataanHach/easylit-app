@@ -280,6 +280,31 @@ class ColumnasConIATest(TestCase):
         usadas = [o for o in mapa.values() if o]
         self.assertEqual(len(usadas), len(set(usadas)))                # ninguna columna del origen se repite
 
+    def test_confianza_de_tablas_usa_la_de_la_ia(self):
+        # Antes la de la IA se cortaba en 60: con todo bien emparejado salía 61%.
+        import os
+        import tempfile
+        from openpyxl import Workbook
+        from apps.transformaciones.services import generacion
+        origen, plantilla = Workbook(), Workbook()
+        origen.active.title = plantilla.active.title = "Tabla"
+        origen.active.append(["Descripción", "Cant.", "Valor unitario", "Proceso al que postula"])
+        origen.active.append(["Guantes", 120, 4850, "LIC-1"])
+        origen.active.append(["Mascarillas", 50, 900, "LIC-1"])
+        plantilla.active.append(["Descripción", "Cantidad", "Precio unitario", "Código de licitación"])
+        rutas = []
+        for wb in (origen, plantilla):
+            fd, ruta = tempfile.mkstemp(suffix=".xlsx")
+            os.close(fd)
+            wb.save(ruta)
+            self.addCleanup(os.remove, ruta)
+            rutas.append(ruta)
+        ia_cols = {"Tabla": {"Precio unitario": {"origen": "Valor unitario", "confianza": 95},
+                             "Código de licitación": {"origen": "Proceso al que postula", "confianza": 85}}}
+        info = generacion.emparejamiento_tablas(rutas[1], rutas[0], None, ia_cols)["Tabla"]
+        # Mismo nombre 100, nombre parecido («Cant.») 90 y la confianza real de la IA.
+        self.assertEqual(info["puntajes"], [100, 90, 95, 85])
+
     def test_lo_que_elige_el_usuario_manda_sobre_nombre_e_ia(self):
         from apps.transformaciones.services import generacion
         parejas = generacion.parejas_columnas(

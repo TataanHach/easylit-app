@@ -38,6 +38,13 @@ anota qué cambió. La versión más nueva va primero.
   columna del origen se usa una sola vez. Lo demás lo sugiere la IA.
 - 2 pruebas automáticas nuevas (80 en total).
 
+**Confianza de las tablas**
+- La confianza de una columna de tabla sugerida por la IA ahora es la que dio la
+  IA (antes se cortaba en 60): con todo bien emparejado salía 61% y ahora sale
+  91%. Una pareja por nombre parecido cuenta 90 (antes 70); igual, 100. Las de la
+  IA siguen marcadas con ✦ en la vista previa para revisarlas.
+- 1 prueba automática nueva (81 en total).
+
 ## v2.7 · 23 de noviembre de 2026
 
 **Aviso de confianza baja al generar**
