@@ -1239,7 +1239,12 @@ def generar_documento(ruta_plantilla, mapeos_con_valor, ruta_origen=None, calcul
             wb_formulas.close()
 
     # openpyxl guarda las fórmulas sin su resultado: que Excel las calcule al
-    # abrir, o se verían vacías hasta editar alguna celda.
+    # abrir, o se verían vacías hasta editar alguna celda. Algunos Excel (hechos
+    # con Google Sheets, LibreOffice u otros programas) no traen la configuración
+    # de cálculo y openpyxl la deja en None: se crea.
+    if wb.calculation is None:
+        from openpyxl.workbook.properties import CalcProperties
+        wb.calculation = CalcProperties()
     wb.calculation.fullCalcOnLoad = True
 
     buffer = io.BytesIO()

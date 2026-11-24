@@ -59,6 +59,13 @@ anota qué cambió. La versión más nueva va primero.
   confianza (60). Las parejas claras por nombre no cambian.
 - 1 prueba automática nueva (83 en total).
 
+**Plantillas sin configuración de cálculo**
+- Generar fallaba con «'NoneType' object has no attribute 'fullCalcOnLoad'»
+  cuando el Excel de la plantilla no traía su configuración de cálculo (pasa con
+  archivos hechos en Google Sheets, LibreOffice u otros programas). Ahora se crea
+  si falta.
+- 1 prueba automática nueva (84 en total).
+
 ## v2.7 · 23 de noviembre de 2026
 
 **Aviso de confianza baja al generar**

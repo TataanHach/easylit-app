@@ -296,6 +296,33 @@ class ColumnasConIATest(TestCase):
         self.assertEqual(con_ia["Nombre Genérico"], ("PRODUCTO", "ia"))
         self.assertEqual(con_ia["Marca Ofertada"], ("MARCA", "parecido"))   # la IA no dijo nada: último recurso
 
+    def test_plantilla_sin_configuracion_de_calculo_se_genera(self):
+        # Caso real (Render): un Excel sin <calcPr> dejaba wb.calculation en None y
+        # la generación fallaba con «'NoneType' object has no attribute 'fullCalcOnLoad'».
+        import io
+        import os
+        import re
+        import tempfile
+        import zipfile
+        from openpyxl import Workbook, load_workbook
+        from apps.transformaciones.services import generacion
+        wb = Workbook()
+        wb.active["A1"] = "RUT"
+        crudo = io.BytesIO()
+        wb.save(crudo)
+        fd, ruta = tempfile.mkstemp(suffix=".xlsx")
+        os.close(fd)
+        self.addCleanup(os.remove, ruta)
+        with zipfile.ZipFile(io.BytesIO(crudo.getvalue())) as src, zipfile.ZipFile(ruta, "w") as dst:
+            for nombre in src.namelist():
+                datos = src.read(nombre)
+                if nombre == "xl/workbook.xml":
+                    datos = re.sub(rb"<calcPr[^>]*/>", b"", datos)
+                dst.writestr(nombre, datos)
+        self.assertIsNone(load_workbook(ruta).calculation)
+        generado = load_workbook(io.BytesIO(generacion.generar_documento(ruta, [])))
+        self.assertTrue(generado.calculation.fullCalcOnLoad)
+
     def test_etiqueta_en_celda_combinada_no_se_sobrescribe(self):
         # Caso real: «ID Licitación» en A5:B5 y la casilla en C5:G5. Antes se
         # escribía en B5, que es parte de la etiqueta, y el valor la borraba.
