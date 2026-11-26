@@ -296,6 +296,86 @@ class ColumnasConIATest(TestCase):
         self.assertEqual(con_ia["Nombre Genérico"], ("PRODUCTO", "ia"))
         self.assertEqual(con_ia["Marca Ofertada"], ("MARCA", "parecido"))   # la IA no dijo nada: último recurso
 
+    def test_ficha_con_etiquetas_sin_valor_se_lee_como_ficha(self):
+        # Caso real: NETO, IVA y TOTAL sin valor (los calcula la plantilla). Con 4
+        # de 8 filas con etiqueta y valor, la hoja pasaba por tabla y no se asignaba nada.
+        from openpyxl import Workbook
+        from apps.transformaciones.services import limpieza
+        ws = Workbook().active
+        ws.append(["CONTROL DE COMPRAS"])
+        ws.append([])
+        for etiqueta, valor in (("ID", "te25000"), ("TIPO", "Insumo"), ("VALOR", 65500), ("cantidad", 25)):
+            ws.append([etiqueta, valor])
+        for etiqueta in ("NETO", "IVA", "TOTAL"):
+            ws.append([etiqueta])
+        self.assertEqual(limpieza._detectar_formato(ws), "vertical")
+        df = limpieza._leer_vertical(ws)
+        self.assertEqual(list(df.columns), ["ID", "TIPO", "VALOR", "cantidad"])
+
+    def test_formula_de_la_plantilla_en_un_campo_se_respeta(self):
+        # Caso real: NETO, IVA y TOTAL tenían fórmula en la plantilla y el valor
+        # del origen la pisaba (y el TOTAL del origen venía mal calculado).
+        import io
+        import os
+        import tempfile
+        from types import SimpleNamespace
+        from openpyxl import Workbook, load_workbook
+        from apps.transformaciones.services import generacion
+        wb = Workbook()
+        ws = wb.active
+        for fila, etiqueta in enumerate(["VALOR", "CANTIDAD", "NETO"], start=1):
+            ws.cell(fila, 1, etiqueta)
+        ws["B3"] = "=B1*B2"
+        fd, ruta = tempfile.mkstemp(suffix=".xlsx")
+        os.close(fd)
+        self.addCleanup(os.remove, ruta)
+        wb.save(ruta)
+        campos = [SimpleNamespace(id=i, nombre=n, etiqueta_busqueda="", celda_destino="", hoja_destino="",
+                                  tipo="NUMERO", formato_numero="NINGUNO")
+                  for i, n in enumerate(["VALOR", "CANTIDAD", "NETO"])]
+        valores = [{"campo": campos[0], "valor": 100}, {"campo": campos[1], "valor": 3},
+                   {"campo": campos[2], "valor": 999}]                     # 999: lo que traía el origen
+        generado = load_workbook(io.BytesIO(generacion.generar_documento(ruta, valores))).active
+        self.assertEqual((generado["B1"].value, generado["B2"].value), (100, 3))
+        self.assertEqual(generado["B3"].value, "=B1*B2")                   # la fórmula se conserva
+        estados = generacion.estado_campos(ruta, campos, {c.id: 1 for c in campos})
+        self.assertEqual([e["formula"] for e in estados], [None, None, "=B1*B2"])
+        # La vista previa muestra el resultado con los datos de la transformación.
+        calculados = generacion.calcular_formulas_campos(ruta, campos, {0: "100", 1: 3})
+        self.assertEqual(calculados, {2: 300.0})
+        # Con «+ IVA» elegido en la vista previa: el resultado y la fórmula del documento.
+        con_iva = generacion.calcular_formulas_campos(ruta, campos, {0: "100", 1: 3}, iva_por_campo={"NETO": "AGREGAR"})
+        self.assertEqual(con_iva, {2: 357.0})                                # 300 × 1,19
+        generado = load_workbook(io.BytesIO(generacion.generar_documento(
+            ruta, valores, campos=campos, iva_por_campo={"NETO": "AGREGAR"}))).active
+        self.assertEqual(generado["B3"].value, "=ROUND((B1*B2)*1.19,0)")
+        # Lo que no se puede calcular aquí (funciones, otras hojas) queda en None.
+        self.assertIsNone(generacion._evaluar_formula("=SUM(B1:B2)", lambda c, p: 1.0))
+        self.assertIsNone(generacion._evaluar_formula("=Hoja2!B1*2", lambda c, p: 1.0))
+
+    def test_titulo_que_termina_en_dos_puntos_no_descarta_la_tabla(self):
+        # Caso real (export de Forms): «…a través de:» hacía que la tabla del origen
+        # no se reconociera y la transformación quedaba en 0%.
+        from openpyxl import Workbook
+        from apps.transformaciones.services import limpieza
+        ws = Workbook().active
+        ws.append(["ID", "Nombre", "Comuna", "Puede acreditar el domicilio a través de:"])
+        ws.append([1, "Ana", "Concepción", "Boleta"])
+        ws.append([2, "Luis", "Penco", "Contrato"])
+        self.assertTrue(limpieza.es_hoja_itemizado(ws))
+        # Aunque la mayoría de los títulos terminen en «:», debajo hay datos: es tabla.
+        varios = Workbook().active
+        varios.append(["Indique su sede:", "Jornada:", "Programa:", "Nombre"])
+        varios.append(["Concepción", "Diurna", "Informática", "Ana"])
+        varios.append(["Talca", "Vespertina", "Construcción", "Luis"])
+        self.assertTrue(limpieza.es_hoja_itemizado(varios))
+        # Una fila de etiquetas de formulario sigue sin ser tabla.
+        form = Workbook().active
+        form.append(["Nombre:", "Ana", "RUT:", "11.111.111-1"])
+        form.append(["Comuna:", "Penco", "Fono:", "+56 9 1234 5678"])
+        form.append(["Correo:", "ana@x.cl", "Edad:", "30"])
+        self.assertFalse(limpieza.es_hoja_itemizado(form))
+
     def test_plantilla_sin_configuracion_de_calculo_se_genera(self):
         # Caso real (Render): un Excel sin <calcPr> dejaba wb.calculation en None y
         # la generación fallaba con «'NoneType' object has no attribute 'fullCalcOnLoad'».

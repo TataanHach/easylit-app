@@ -1,4 +1,4 @@
-# Estructura del proyecto · EasyLit v2.8
+# Estructura del proyecto · EasyLit v3.2
 
 Mapa del repositorio: qué hay en cada carpeta y en qué servicio de Render corre.
 La visión general está en [README.md](README.md) y los pasos para desplegar, en
@@ -105,6 +105,6 @@ GitHub Actions ([ci.yml](.github/workflows/ci.yml)) corre en cada push y pull
 request a `main`:
 
 - **Backend:** revisa que no falten migraciones, ejecuta `manage.py check` y
-  corre las 84 pruebas automáticas. Usa el modo simulado de la IA, así que no
+  corre las 87 pruebas automáticas. Usa el modo simulado de la IA, así que no
   llama a Gemini ni a otros servicios externos.
 - **Frontend:** revisa los tipos de TypeScript y compila la aplicación.

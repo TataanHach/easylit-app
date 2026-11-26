@@ -8,6 +8,7 @@ Maneja DOS tipos de hoja en la plantilla destino:
 
 Preserva el formato del Excel original (colores, títulos, estilos).
 """
+import ast
 import io
 import re
 import unicodedata
@@ -239,6 +240,23 @@ def _tipo_manual(ws):
     return getattr(getattr(ws, "parent", None), "_tipos_hoja", {}).get(ws.title, "")
 
 
+def es_formula(v):
+    """¿El contenido de una celda es una fórmula de Excel («=B5*B6»)?"""
+    return isinstance(v, str) and v.startswith("=")
+
+
+def formula_de_la_casilla(ws, destino):
+    """La fórmula que ya trae la plantilla en esa casilla (o en la esquina de su
+    celda combinada), o None."""
+    if ws is None or destino is None:
+        return None
+    celda = ws.cell(row=destino[0], column=destino[1])
+    if isinstance(celda, MergedCell):
+        rango = next(r for r in ws.merged_cells.ranges if celda.coordinate in r)
+        celda = ws.cell(row=rango.min_row, column=rango.min_col)
+    return celda.value if es_formula(celda.value) else None
+
+
 def _es_dato(v):
     """Números y fechas no pueden ser encabezados de columna."""
     return isinstance(v, (int, float, date, datetime)) and not isinstance(v, bool)
@@ -253,12 +271,25 @@ def _tiene_palabra_tabla(texto):
     return any(w.startswith(p) for w in _normalizar(texto).split() for p in _PALABRAS_TABLA)
 
 
+def _es_etiqueta_de_formulario(filas, i, j):
+    """
+    ¿La celda (i, j) es una etiqueta de formulario? Termina en «:» y debajo, en la
+    misma columna, la mayoría de las celdas con texto también terminan en «:»
+    (Nombre: / Comuna: / Correo:). Bajo un título de tabla hay datos, no etiquetas.
+    """
+    if not _texto(filas[i][j]).endswith(":"):
+        return False
+    debajo = [_texto(f[j]) for f in filas[i + 1:i + 6] if j < len(f) and _texto(f[j])]
+    return bool(debajo) and sum(1 for t in debajo if t.endswith(":")) * 2 >= len(debajo)
+
+
 def _encabezado_por_forma(filas):
     """
     Encabezado reconocido por la FORMA de la tabla, digan lo que digan sus
-    textos: una fila con 3+ títulos distintos (sin números ni «:» de etiqueta)
-    seguida de al menos 2 filas con datos en la mayoría de esas columnas.
-    Solo sirve en el origen, donde la tabla trae filas llenas.
+    textos: una fila con 3+ títulos distintos (sin números ni etiquetas de
+    formulario: ver _es_etiqueta_de_formulario) seguida de al menos 2
+    filas con datos en la mayoría de esas columnas. Solo sirve en el origen,
+    donde la tabla trae filas llenas.
     """
     for i, fila in enumerate(filas):
         celdas = [_texto(c) for c in fila]
@@ -266,8 +297,11 @@ def _encabezado_por_forma(filas):
         if len(cols) < 3:
             continue
         textos = [celdas[j] for j in cols]
+        # Fila de un formulario: tiene etiquetas («Nombre:») con más etiquetas
+        # debajo («Comuna:», «Correo:»). Un título de tabla que termina en «:»
+        # («…a través de:», típico de Forms) tiene datos debajo: no cuenta.
         if (any(_es_dato(fila[j]) for j in cols)
-                or any(t.endswith(":") for t in textos)
+                or any(_es_etiqueta_de_formulario(filas, i, j) for j in cols)
                 or len({_normalizar(t) for t in textos}) < len(textos)):
             continue
         minimo = (len(cols) + 1) // 2
@@ -1028,8 +1062,9 @@ def aviso_tabla_sin_origen(nombre_hoja):
 
 def estado_campos(ruta_plantilla, campos, valores, tipos_hoja=None):
     """
-    Estado de cada campo de formulario en el documento: su hoja y, si quedará
-    vacío, el aviso con el motivo ("" si se llenará). `valores` = {campo_id: valor}
+    Estado de cada campo de formulario en el documento: su hoja, la fórmula si la
+    plantilla ya lo calcula, y si quedará vacío, el aviso con el motivo ("" si se
+    llenará o lo calcula la plantilla). `valores` = {campo_id: valor}
     de los campos que tienen un dato asignado; un campo que no está ahí no
     recibió ningún dato del origen.
     """
@@ -1039,9 +1074,12 @@ def estado_campos(ruta_plantilla, campos, valores, tipos_hoja=None):
     for campo in campos:
         valor = valores.get(campo.id)
         ws = hoja_del_campo(wb, campo)
-        _, motivo = ubicar_campo(ws, campo, tablas.get(ws.title) if ws is not None else None)
+        destino, motivo = ubicar_campo(ws, campo, tablas.get(ws.title) if ws is not None else None)
+        formula = None if motivo else formula_de_la_casilla(ws, destino)
         if motivo:
             aviso = f"«{campo.nombre}» no se escribirá: {motivo}"
+        elif formula:
+            aviso = ""   # la calcula la plantilla: el dato del origen no hace falta
         elif campo.id not in valores:
             aviso = (f"«{campo.nombre}» quedará vacío: no tiene ningún dato del origen "
                      "asignado. Asígnale uno en el mapeo de abajo.")
@@ -1051,9 +1089,144 @@ def estado_campos(ruta_plantilla, campos, valores, tipos_hoja=None):
         else:
             aviso = ""
         hoja = ws.title if ws is not None else campo.hoja_destino
-        estados.append({"campo": campo, "hoja": hoja, "aviso": aviso})
+        estados.append({"campo": campo, "hoja": hoja, "aviso": aviso, "formula": formula})
     wb.close()
     return estados
+
+
+# Referencia a una celda de la misma hoja dentro de una fórmula («B5», «$B$5»).
+_REF_EN_FORMULA = re.compile(r"(?<![A-Za-z_!$])\$?([A-Z]{1,3})\$?([0-9]+)(?![0-9(])")
+_OPERACIONES = {ast.Add: lambda a, b: a + b, ast.Sub: lambda a, b: a - b,
+                ast.Mult: lambda a, b: a * b, ast.Div: lambda a, b: a / b}
+
+
+def _evaluar_formula(formula, valor_de, profundidad=0):
+    """
+    Resultado de una fórmula simple de Excel (sumas, restas, multiplicaciones y
+    divisiones entre números y celdas de la misma hoja), o None si usa algo que
+    no se calcula aquí (funciones como SUMA, otras hojas, textos…). `valor_de`
+    da el valor de una celda: valor_de("B5", profundidad).
+    """
+    expresion = formula[1:]
+    if "!" in expresion or profundidad > 20:
+        return None
+    celdas = {}
+
+    def a_nombre(m):
+        nombre = f"c_{m.group(1)}{m.group(2)}"
+        celdas[nombre] = f"{m.group(1)}{m.group(2)}"
+        return nombre
+
+    try:
+        arbol = ast.parse(_REF_EN_FORMULA.sub(a_nombre, expresion), mode="eval")
+    except SyntaxError:
+        return None
+
+    def calcular(nodo):
+        if isinstance(nodo, ast.Expression):
+            return calcular(nodo.body)
+        if isinstance(nodo, ast.Constant) and isinstance(nodo.value, (int, float)) and not isinstance(nodo.value, bool):
+            return float(nodo.value)
+        if isinstance(nodo, ast.Name) and nodo.id in celdas:
+            valor = valor_de(celdas[nodo.id], profundidad + 1)
+            if valor is None:
+                raise ValueError
+            return valor
+        if isinstance(nodo, ast.UnaryOp) and isinstance(nodo.op, (ast.USub, ast.UAdd)):
+            valor = calcular(nodo.operand)
+            return -valor if isinstance(nodo.op, ast.USub) else valor
+        if isinstance(nodo, ast.BinOp) and type(nodo.op) in _OPERACIONES:
+            return _OPERACIONES[type(nodo.op)](calcular(nodo.left), calcular(nodo.right))
+        raise ValueError
+
+    try:
+        return calcular(arbol)
+    except (ValueError, ZeroDivisionError, TypeError):
+        return None
+
+
+def _tasa_iva():
+    from django.conf import settings
+    return 1 + getattr(settings, "IVA_TASA", 0.19)
+
+
+def formula_con_iva(formula, ajuste):
+    """
+    La fórmula de un campo con el IVA elegido en la vista previa, redondeada a
+    pesos (igual que un dato del origen): «+ IVA» multiplica y «Neto» divide.
+    Así el documento sigue calculando con Excel.
+    """
+    if ajuste not in ("AGREGAR", "QUITAR") or not es_formula(formula):
+        return formula
+    operador = "*" if ajuste == "AGREGAR" else "/"
+    return f"=ROUND(({formula[1:]}){operador}{_tasa_iva()},0)"
+
+
+def _con_iva(numero, ajuste):
+    if numero is None or ajuste not in ("AGREGAR", "QUITAR"):
+        return numero
+    return float(round(numero * _tasa_iva() if ajuste == "AGREGAR" else numero / _tasa_iva()))
+
+
+def calcular_formulas_campos(ruta_plantilla, campos, valores, tipos_hoja=None, iva_por_campo=None):
+    """
+    {campo_id: resultado} de los campos que la plantilla calcula con una fórmula,
+    usando los datos de esta transformación (para la vista previa: el documento
+    lleva la fórmula y Excel la calcula al abrir). None si la fórmula usa algo que
+    no se puede calcular aquí. `valores` = {campo_id: valor} de los campos con dato;
+    `iva_por_campo` = {nombre: ajuste} elegido en la vista previa (como en Excel,
+    las fórmulas que usan esa celda toman el valor ya con el IVA).
+    """
+    iva_por_campo = iva_por_campo or {}
+    wb = abrir_plantilla(ruta_plantilla, tipos_hoja)
+    tablas = {ws.title: _detectar_encabezado_tabla(ws) for ws in wb.worksheets}
+    escritos, con_formula, ajustes = {}, [], {}
+    for campo in campos:
+        ws = hoja_del_campo(wb, campo)
+        if ws is None:
+            continue
+        destino, motivo = ubicar_campo(ws, campo, tablas.get(ws.title))
+        if motivo:
+            continue
+        celda = ws.cell(row=destino[0], column=destino[1])
+        if isinstance(celda, MergedCell):
+            rango = next(r for r in ws.merged_cells.ranges if celda.coordinate in r)
+            celda = ws.cell(row=rango.min_row, column=rango.min_col)
+        if es_formula(celda.value):
+            con_formula.append((campo, ws, celda.value))
+            ajuste = iva_por_campo.get(campo.nombre)
+            if ajuste in ("AGREGAR", "QUITAR"):
+                ajustes[(ws.title, celda.coordinate)] = ajuste
+        elif campo.id in valores:
+            escritos[(ws.title, celda.coordinate)] = valores[campo.id]
+
+    def valor_en(ws):
+        def valor_de(coordenada, profundidad):
+            if (ws.title, coordenada) in escritos:            # lo que se escribe en el documento
+                return _a_numero(escritos[(ws.title, coordenada)])
+            contenido = ws[coordenada].value
+            if es_formula(contenido):
+                return _con_iva(_evaluar_formula(contenido, valor_de, profundidad),
+                                ajustes.get((ws.title, coordenada)))
+            if contenido is None or (isinstance(contenido, str) and not contenido.strip()):
+                return 0.0                                     # Excel cuenta una celda vacía como 0
+            return _a_numero(contenido) if not isinstance(contenido, (date, datetime)) else None
+        return valor_de
+
+    resultados = {campo.id: valor_en(ws)(ws_coord, 0)
+                  for campo, ws, ws_coord in ((c, w, _coordenada_formula(w, c, tablas)) for c, w, _ in con_formula)}
+    wb.close()
+    return resultados
+
+
+def _coordenada_formula(ws, campo, tablas):
+    """Coordenada (esquina, si es combinada) de la casilla de un campo con fórmula."""
+    destino, _ = ubicar_campo(ws, campo, tablas.get(ws.title))
+    celda = ws.cell(row=destino[0], column=destino[1])
+    if isinstance(celda, MergedCell):
+        rango = next(r for r in ws.merged_cells.ranges if celda.coordinate in r)
+        celda = ws.cell(row=rango.min_row, column=rango.min_col)
+    return celda.coordinate
 
 
 def campos_sin_escribir(ruta_plantilla, campos, valores, tipos_hoja=None):
@@ -1170,7 +1343,7 @@ def emparejamiento_tablas(ruta_plantilla, ruta_origen, tipos_hoja=None, columnas
 
 def generar_documento(ruta_plantilla, mapeos_con_valor, ruta_origen=None, calcular_totales=False,
                       valores_ia_tablas=None, avisos=None, tipos_hoja=None, columnas_ia=None,
-                      columnas_usuario=None):
+                      columnas_usuario=None, campos=None, iva_por_campo=None):
     """
     ruta_plantilla: .xlsx de la plantilla destino.
     mapeos_con_valor: lista de {campo, valor} para los campos de FORMULARIO.
@@ -1201,7 +1374,28 @@ def generar_documento(ruta_plantilla, mapeos_con_valor, ruta_origen=None, calcul
             # Casilla combinada: se escribe en su esquina superior izquierda.
             rango = next(r for r in ws.merged_cells.ranges if celda.coordinate in r)
             celda = ws.cell(row=rango.min_row, column=rango.min_col)
+        if es_formula(celda.value):
+            # La plantilla ya calcula esta casilla (ej. NETO =B5*B6): se respeta
+            # su fórmula y no se pisa con el valor del origen.
+            continue
         _escribir_valor(celda, valor, campo)
+
+    # 1b. IVA elegido en la vista previa para los campos que calcula la plantilla:
+    #     se aplica sobre su fórmula (=ROUND((B5*B6)*1.19,0)), no sobre un número.
+    for campo in campos or []:
+        ajuste = (iva_por_campo or {}).get(campo.nombre)
+        if ajuste not in ("AGREGAR", "QUITAR"):
+            continue
+        ws = hoja_del_campo(wb, campo)
+        destino, motivo = ubicar_campo(ws, campo)
+        if destino is None or motivo:
+            continue
+        celda = ws.cell(row=destino[0], column=destino[1])
+        if isinstance(celda, MergedCell):
+            rango = next(r for r in ws.merged_cells.ranges if celda.coordinate in r)
+            celda = ws.cell(row=rango.min_row, column=rango.min_col)
+        if es_formula(celda.value):
+            celda.value = formula_con_iva(celda.value, ajuste)
 
     # 2. Volcar los ITEMIZADOS: para cada hoja del destino que tenga tabla,
     #    buscar en el origen una tabla (preferir la hoja del mismo nombre).

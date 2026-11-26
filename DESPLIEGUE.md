@@ -1,4 +1,4 @@
-# Despliegue en Render · EasyLit v2.8
+# Despliegue en Render · EasyLit v3.2
 
 ```
 Navegador ──▶ easylit-web (Render, React)

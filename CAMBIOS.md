@@ -1,8 +1,46 @@
 # Registro de cambios · EasyLit
 
-Cada cambio en la funcionalidad del sistema sube la versión (2.5 → 2.6 → 2.7…).
+Cada cambio en la funcionalidad del sistema sube la versión (2.5 → 2.6 → … → 3.2).
 El número se cambia en un solo lugar, `frontend/src/lib/version.ts`, y aquí se
 anota qué cambió. La versión más nueva va primero.
+
+## v3.2 · 25 de noviembre de 2026
+
+**Tablas del origen con un título que termina en «:»**
+- Una tabla del origen no se reconocía si uno solo de sus títulos terminaba en
+  «:» (ej. «…a través de:», típico de los Excel de Forms), y la transformación
+  quedaba en 0%. Ahora un texto con «:» solo cuenta como etiqueta de formulario
+  si debajo, en la misma columna, hay más etiquetas con «:» (Nombre: / Comuna: /
+  Correo:). Bajo un título de tabla hay datos, así que la tabla se reconoce
+  aunque varios títulos terminen en «:».
+- 1 prueba automática nueva (85 en total).
+
+**Las fórmulas de la plantilla se conservan también en los campos**
+- Si la casilla de un campo de formulario ya traía una fórmula en la plantilla
+  (ej. NETO =B5*B6, IVA =B7*0.19, TOTAL =B8+B7), el valor del origen la pisaba.
+  Ahora la fórmula se respeta (igual que en las tablas).
+- La vista previa muestra esos campos siempre, con el resultado calculado con los
+  datos de la transformación (ej. «$1.637.500»). Si la fórmula usa algo que
+  EasyLit no calcula (SUMA, otras hojas…), dice «Se calcula al abrir en Excel». En
+  «Mapeo propuesto», esos campos dicen «Fórmula de la plantilla» en vez de
+  «— Sin dato —», y no cuentan como campos sin dato.
+- Si el campo es de pesos o UF, la vista previa también ofrece el IVA. Se aplica
+  sobre la fórmula (ej. «+ IVA» deja NETO como =ROUND((B5*B6)*1.19,0)), y las
+  fórmulas que usan esa celda se recalculan con ese valor, igual que en Excel.
+- 1 prueba automática nueva (86 en total).
+
+**Fichas con etiquetas sin valor**
+- Una hoja tipo ficha (etiqueta en una columna y valor al lado) no se reconocía
+  si varias etiquetas venían sin valor (ej. NETO, IVA y TOTAL vacíos porque los
+  calcula la plantilla): pasaba por tabla y no se asignaba ningún dato. Ahora las
+  filas con solo la etiqueta o el título también cuentan como parte de la ficha.
+- 1 prueba automática nueva (87 en total).
+
+**Vista previa y documento generado**
+- En el selector de IVA, la opción sin ajuste ahora dice «———» (antes «Sin IVA»).
+- Bajo «¡Tu documento está listo!» se avisa que, si en Excel no se ven algunos
+  datos, hay que hacer clic en «Habilitar edición»: en la Vista protegida Excel
+  no calcula las fórmulas.
 
 ## v2.8 · 23 de noviembre de 2026
 

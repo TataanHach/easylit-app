@@ -12,7 +12,7 @@ La IA solo sugiere qué columna del archivo de origen va a cada campo de la
 plantilla. Los datos los lee y limpia **pandas** con reglas fijas y los escribe
 **openpyxl** en la plantilla. Los montos y cantidades nunca se envían a la IA.
 
-Versión **2.8 · Beta**, desplegada en **Render**. Los cambios de cada versión
+Versión **3.2 · Beta**, desplegada en **Render**. Los cambios de cada versión
 están en [CAMBIOS.md](CAMBIOS.md).
 
 Proyecto de Título — INACAP, Informática y Telecomunicaciones (TIHI84).

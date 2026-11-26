@@ -382,12 +382,43 @@ class TransformacionViewSet(viewsets.ModelViewSet):
         except Exception:
             estados = []
         avisos = [e["aviso"] for e in estados if e["aviso"]]
+        # Campos que ya calcula la plantilla con una fórmula: al generar se respeta
+        # la fórmula (no el dato del origen). La vista previa los muestra siempre,
+        # con el resultado calculado con los datos de esta transformación.
+        try:
+            calculados = generacion.calcular_formulas_campos(
+                ruta_local(transformacion.plantilla.archivo),
+                list(transformacion.plantilla.campos.all()), valores_por_campo,
+                transformacion.plantilla.tipos_hoja, iva_por_campo,
+            )
+        except Exception:
+            calculados = {}
+        texto_formula = {}
+        for e in estados:
+            if not e.get("formula"):
+                continue
+            campo = e["campo"]
+            resultado = calculados.get(campo.id)   # ya con el IVA elegido, si tiene
+            texto = (generacion.texto_campo(resultado, campo) if resultado is not None
+                     else "Se calcula al abrir en Excel")
+            texto_formula[campo.id] = texto
+            lista = campos_por_hoja.setdefault(campo.hoja_destino or "General", [])
+            fila = next((c for c in lista if c["campo"] == campo.nombre), None)
+            if fila is None:
+                fila = {"campo": campo.nombre, "limpiado_ia": False}
+                lista.append(fila)
+            formato = getattr(campo, "formato_numero", "") or "NINGUNO"
+            fila.update(valor_final=None if texto is None else str(texto), formula=e["formula"],
+                        # En pesos o UF también se puede elegir el IVA: va sobre la fórmula.
+                        es_moneda=formato in ("PESOS", "PESOS_DEC", "UF"),
+                        ajuste_iva=iva_por_campo.get(campo.nombre, "NINGUNO"))
         # Resumen campo por campo (hoja, valor final y si se llenará), para la
-        # ventana de resultado del frontend.
+        # ventana de resultado del frontend. `formula`: la casilla la calcula la plantilla.
         campos_estado = [
             {"campo": e["campo"].nombre, "hoja": e["hoja"], "ok": not e["aviso"],
-             "valor": "" if e["aviso"] else str(generacion.texto_campo(
-                 valores_por_campo.get(e["campo"].id), e["campo"]))[:60]}
+             "formula": e.get("formula") or "",
+             "valor": "" if e["aviso"] else (texto_formula.get(e["campo"].id) or str(generacion.texto_campo(
+                 valores_por_campo.get(e["campo"].id), e["campo"]))[:60])}
             for e in estados
         ]
 
@@ -676,8 +707,8 @@ class TransformacionViewSet(viewsets.ModelViewSet):
             )
         if ajuste not in ("NINGUNO", "AGREGAR", "QUITAR"):
             return Response(
-                {"detail": f"El ajuste de IVA «{ajuste}» no es válido. Elige Sin IVA, "
-                           "+ IVA o Neto."},
+                {"detail": f"El ajuste de IVA «{ajuste}» no es válido. Elige «+ IVA», "
+                           "«Neto» o déjalo sin ajuste."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

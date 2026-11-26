@@ -289,3 +289,17 @@
 }
 .vista-previa-modal .preview-nav { padding: 12px 12px 14px; }
 .vista-previa-estado { padding: 32px; text-align: center; color: var(--text-3); }
+/* Campo que la plantilla calcula con una fórmula: en vez del selector de dato. */
+.mapeo-formula {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 9px 12px; border-radius: var(--r-md);
+  border: 1px dashed var(--brand-100); background: var(--brand-50);
+  color: var(--brand-700); font-weight: 600; font-size: var(--fs-md);
+}
+.mapeo-formula code { font-family: var(--font-mono, Consolas, monospace); font-weight: 600; }
+/* Aviso bajo «Tu documento está listo»: la Vista protegida de Excel no calcula fórmulas. */
+.exito-caja .aviso-habilitar-edicion {
+  margin: 16px 0 0; font-size: var(--fs-sm); color: var(--text-2);
+  display: flex; align-items: flex-start; justify-content: center; gap: 6px; text-align: left;
+}
+.exito-caja .aviso-habilitar-edicion i { font-size: 16px; color: var(--brand-600); margin-top: 2px; }

@@ -111,7 +111,11 @@ def _detectar_formato(ws):
         return "vacia"
     ancho = max(sum(1 for c in f if _texto(c)) for f in filas)
     filas_par = sum(1 for f in filas if len([c for c in f if _texto(c)]) == 2)
-    if ancho <= 3 and filas_par >= max(3, len(filas) * 0.6):
+    # Filas con un solo texto: el título de la ficha o una etiqueta sin valor
+    # («NETO» vacío porque lo calcula la plantilla). También son parte de una
+    # ficha: antes no contaban y con 3 etiquetas vacías la hoja pasaba por tabla.
+    filas_sueltas = sum(1 for f in filas if len([c for c in f if _texto(c)]) == 1)
+    if ancho <= 3 and filas_par >= 3 and filas_par + filas_sueltas >= len(filas) * 0.6:
         return "vertical"
     return "tabla"
 

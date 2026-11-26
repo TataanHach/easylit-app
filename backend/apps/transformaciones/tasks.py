@@ -300,6 +300,9 @@ def generar_documento_tarea(transformacion_id):
             tipos_hoja=t.plantilla.tipos_hoja,
             columnas_ia=(t.resultado_limpieza or {}).get("columnas_ia"),
             columnas_usuario=(t.resultado_limpieza or {}).get("columnas_usuario"),
+            # El IVA elegido para los campos que calcula la plantilla va sobre su fórmula.
+            campos=list(t.plantilla.campos.all()),
+            iva_por_campo=(t.resultado_limpieza or {}).get("iva_por_campo"),
         )
 
         nombre = f"generado_{t.id}.xlsx"

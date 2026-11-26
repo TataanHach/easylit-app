@@ -23,7 +23,7 @@ function resumir(items: string[], max = 8): string[] {
   return items.length <= max ? items : [...items.slice(0, max), `… y ${items.length - max} más.`];
 }
 
-interface EstadoCampo { campo: string; hoja: string; ok: boolean; valor: string }
+interface EstadoCampo { campo: string; hoja: string; ok: boolean; valor: string; formula?: string }
 
 /** De qué columna del origen sale una columna de tabla, y por qué. */
 interface ParejaColumna {
@@ -84,7 +84,7 @@ const CONFIANZA_MINIMA_GENERAR = 50;
 /** Opciones del control de IVA; el porcentaje lo define el backend (IVA_TASA). */
 function opcionesIVA(porcentaje: number) {
   return [
-    { v: "NINGUNO", t: "Sin IVA" },
+    { v: "NINGUNO", t: "———" },   // sin ajuste: el monto queda tal cual
     { v: "AGREGAR", t: `+ IVA (${porcentaje.toLocaleString("es-CL")}%)` },
     { v: "QUITAR", t: "Neto (−IVA)" },
   ];
@@ -544,6 +544,15 @@ export default function MapeoPage() {
               Ir al historial
             </button>
           </div>
+          {/* Excel abre los archivos descargados en «Vista protegida» y ahí no calcula
+              las fórmulas: esas celdas se ven vacías hasta habilitar la edición. */}
+          <p className="aviso-habilitar-edicion">
+            <i aria-hidden="true" className="ti ti-info-circle" />
+            <span>
+              Si al abrir el documento en Excel no se ven algunos datos, haz clic en{" "}
+              <strong>«Habilitar edición»</strong> en la barra amarilla de arriba.
+            </span>
+          </p>
         </div>
       </div>
     );
@@ -580,12 +589,20 @@ export default function MapeoPage() {
   hojasMapeo.sort((a, b) => posicion(a.nombre) - posicion(b.nombre));
   const indiceMapeo = Math.min(hojaMapeo, Math.max(0, hojasMapeo.length - 1));
   const grupoMapeo = hojasMapeo[indiceMapeo];
-  const conDato = (lista: typeof campos) => lista.filter((c) => mapeos.some((m) => m.destino_campo === c.id)).length;
+  // Campos que la plantilla ya calcula con una fórmula (NETO =B5*B6…): no llevan
+  // dato del Excel. `valor` es el resultado calculado para la vista previa.
+  const formulaDe: Record<string, { formula: string; valor: string }> = Object.fromEntries(
+    ((preview?.campos_estado ?? []) as EstadoCampo[])
+      .filter((e) => e.formula)
+      .map((e) => [e.campo, { formula: e.formula!, valor: e.valor }]),
+  );
+  const conDato = (lista: typeof campos) =>
+    lista.filter((c) => formulaDe[c.nombre] || mapeos.some((m) => m.destino_campo === c.id)).length;
 
   // Datos del origen ordenados alfabéticamente, para el desplegable.
   const datosOrdenados = [...mapeos].sort((a, b) => a.origen_columna.localeCompare(b.origen_columna, "es"));
   const obligatoriosFaltantes = campos.filter(
-    (c) => c.obligatorio && !mapeos.some((m) => m.destino_campo === c.id)
+    (c) => c.obligatorio && !formulaDe[c.nombre] && !mapeos.some((m) => m.destino_campo === c.id)
   );
 
   return (
@@ -817,6 +834,25 @@ export default function MapeoPage() {
             {(grupoMapeo?.campos ?? []).map((c) => {
               const m = mapeos.find((x) => x.destino_campo === c.id);
               const clase = !m ? "" : m.confianza >= 85 ? "alta" : m.confianza >= 60 ? "media" : "baja";
+              const f = formulaDe[c.nombre];
+              if (f) {
+                return (
+                  <div className="mapeo-fila" key={c.id}>
+                    <span className="mapeo-origen mapeo-campo">{c.nombre}</span>
+                    <span className="mapeo-flecha"><i aria-hidden="true" className="ti ti-arrow-left" /></span>
+                    <div className="mapeo-dato">
+                      <span className="mapeo-formula"
+                        title="La plantilla ya calcula esta casilla: en el documento va su fórmula, no un dato del Excel.">
+                        <i aria-hidden="true" className="ti ti-math-function" /> Fórmula de la plantilla <code>{f.formula}</code>
+                      </span>
+                      <span className="mapeo-valor">
+                        Valor: <strong>{f.valor}</strong>
+                      </span>
+                    </div>
+                    <span className="mapeo-conf"><span className="mapeo-manual" title="La calcula la plantilla">Fórmula</span></span>
+                  </div>
+                );
+              }
               return (
                 <div className="mapeo-fila" key={c.id}>
                   <span className="mapeo-origen mapeo-campo">
